@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { queryOne, query } from '../db/pool';
+import { snagSyncService } from '../services/snagSyncService';
 
 const router = Router();
 
@@ -8,11 +9,14 @@ router.get('/:wallet', async (req, res) => {
   const { wallet } = req.params;
 
   try {
-    // 1. Get user stats
-    const user = await queryOne(
-      'SELECT total_xp, claim_multiplier, current_streak FROM users WHERE wallet = $1',
-      [wallet]
-    );
+    // 1. Get user stats & SNAG points in parallel
+    const [user, loyaltyPoints] = await Promise.all([
+      queryOne(
+        'SELECT total_xp, claim_multiplier, current_streak FROM users WHERE wallet = $1',
+        [wallet]
+      ),
+      snagSyncService.getUserPoints(wallet)
+    ]);
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -33,11 +37,12 @@ router.get('/:wallet', async (req, res) => {
     res.json({
       wallet,
       totalXp: Number(user.total_xp),
+      loyaltyPoints: Number(loyaltyPoints),
       claimMultiplier: Number(user.claim_multiplier),
       currentStreak: user.current_streak,
       rank: parseInt(rankResult?.rank || '0', 10),
       activePositions: parseInt(positionsResult?.count || '0', 10),
-      projectedAllocation: 'TBD' // Placeholder for projected allocation hook
+      projectedAllocation: 'TBD'
     });
   } catch (error) {
     console.error('[API] Dashboard fetch error:', error);

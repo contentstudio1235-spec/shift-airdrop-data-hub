@@ -31,3 +31,10 @@
 - [x] **Frontend Dashboard Foundation**: Initialize the Next.js app for `airdrop.shift.xyz`.
 - [x] **Frontend Dashboard Integration**: Connect the dashboard to SNAG (for leaderboards/xp) and our backend (for active positions).
 - [x] **Frontend UI/UX**: Build the actual dashboard UI emphasizing progression and momentum.
+
+# Phase 6: Brand Alignment & Integration
+- [x] **Brand Refresh**: Update dashboard colors and theme to match `shiftrwa.xyz/rewards`.
+- [x] **Card UI Refresh**: Implement horizontal quest-style cards for active positions.
+- [x] **Widget Mode**: Add `?embed=true` support to hide headers and adjust padding for iframe embedding.
+- [/] **Unified Sync**: Fetch total SNAG points in dashboard for a "single source of truth" view.
+- [ ] **Embedding**: Deploy and provide iframe snippets for the main website integration.

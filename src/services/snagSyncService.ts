@@ -277,6 +277,32 @@ export class SnagSyncService {
     );
     return result ? parseInt(result.rank, 10) : null;
   }
+
+  /**
+   * Get total points for a user from SNAG.
+   */
+  async getUserPoints(wallet: string): Promise<number> {
+    if (!config.snagApiKey || !config.snagWebsiteId) return 0;
+
+    try {
+      // Get SNAG user ID first
+      const user = await queryOne<{ snag_user_id: string }>(
+        'SELECT snag_user_id FROM users WHERE wallet = $1',
+        [wallet]
+      );
+
+      if (user?.snag_user_id) {
+        const response = await this.client.get(`/api/loyalty/accounts/${user.snag_user_id}`, {
+          params: { websiteId: config.snagWebsiteId },
+        });
+        return response.data?.points || 0;
+      }
+    } catch (error) {
+      console.error('[SnagSync] Failed to fetch user points from SNAG:', error);
+    }
+
+    return 0;
+  }
 }
 
 export const snagSyncService = new SnagSyncService();
