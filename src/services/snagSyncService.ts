@@ -280,19 +280,45 @@ export class SnagSyncService {
 
   /**
    * Get total points for a user from SNAG.
+   * Searches by walletAddress if snag_user_id is not in local DB.
    */
   async getUserPoints(wallet: string): Promise<number> {
     if (!config.snagApiKey || !config.snagWebsiteId) return 0;
 
     try {
-      // Get SNAG user ID first
-      const user = await queryOne<{ snag_user_id: string }>(
+      // 1. Try to get SNAG user ID from local DB
+      let user = await queryOne<{ snag_user_id: string }>(
         'SELECT snag_user_id FROM users WHERE wallet = $1',
         [wallet]
       );
 
-      if (user?.snag_user_id) {
-        const response = await this.client.get(`/api/loyalty/accounts/${user.snag_user_id}`, {
+      let snagUserId = user?.snag_user_id;
+
+      // 2. If no local ID, search SNAG for the wallet
+      if (!snagUserId) {
+        const searchResponse = await this.client.get('/api/loyalty/accounts', {
+          params: {
+            websiteId: config.snagWebsiteId,
+            walletAddress: wallet,
+            limit: 1
+          }
+        });
+
+        const foundAccount = searchResponse.data?.data?.[0];
+        if (foundAccount) {
+          snagUserId = foundAccount.id;
+          
+          // Save for next time
+          await execute(
+            'UPDATE users SET snag_user_id = $1 WHERE wallet = $2',
+            [snagUserId, wallet]
+          );
+        }
+      }
+
+      // 3. Fetch full account details to get points
+      if (snagUserId) {
+        const response = await this.client.get(`/api/loyalty/accounts/${snagUserId}`, {
           params: { websiteId: config.snagWebsiteId },
         });
         return response.data?.points || 0;

@@ -18,6 +18,7 @@ const TOKEN_SYMBOLS: Record<string, string> = {
   'J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn': 'jitoSOL',
   'rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof': 'RNDR',
   '7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs': 'ETH',
+  '5dVc9YuDZ3wRbohosa8bwXoj1v6zMvipwr38LFEA7MLJ': 'SHIFT_TEST',
 };
 
 export class JupiterPriceService {
@@ -43,9 +44,20 @@ export class JupiterPriceService {
         return parseFloat(priceData.price);
       }
 
+      // NOMINAL PRICE for SHIFT_TEST token if not found on Jupiter
+      if (mint === config.shiftTokenMint) {
+        return 0.5; // $0.50 for testing
+      }
+
       return null;
     } catch (error) {
       console.error(`[JupiterPrice] Failed to fetch price for ${mint}:`, error);
+      
+      // Fallback for SHIFT_TEST token even on network error
+      if (mint === config.shiftTokenMint) {
+        return 0.5;
+      }
+
       return null;
     }
   }

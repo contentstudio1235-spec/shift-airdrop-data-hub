@@ -36,5 +36,6 @@
 - [x] **Brand Refresh**: Update dashboard colors and theme to match `shiftrwa.xyz/rewards`.
 - [x] **Card UI Refresh**: Implement horizontal quest-style cards for active positions.
 - [x] **Widget Mode**: Add `?embed=true` support to hide headers and adjust padding for iframe embedding.
-- [/] **Unified Sync**: Fetch total SNAG points in dashboard for a "single source of truth" view.
-- [ ] **Embedding**: Deploy and provide iframe snippets for the main website integration.
+- [x] **Unified Sync**: Fetch total SNAG points in dashboard for a "single source of truth" view.
+- [x] **Embedding**: Deploy and provide iframe snippets for the main website integration.
+- [ ] **Production Verification**: Confirm all hooks and API points are working in prod.

@@ -44,7 +44,7 @@ export interface Badge {
   earned_at: Date;
 }
 
-export type BadgeName = 'first_trade' | 'diamond_hands' | 'earnings_reactor' | 'fomc_trader';
+export type BadgeName = 'first_trade' | 'diamond_hands' | 'earnings_reactor' | 'fomc_trader' | 'shift_holder';
 
 export interface Event {
   id: string;

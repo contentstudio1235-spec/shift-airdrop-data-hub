@@ -30,6 +30,8 @@ app.use(cors({
   origin: [
     'http://localhost:3000',
     'https://airdrop.shift.xyz',
+    'https://www.shiftrwa.xyz',
+    'https://shiftrwa.xyz',
   ],
   methods: ['GET', 'POST', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],

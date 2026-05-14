@@ -6,6 +6,8 @@ import { query, queryOne, execute } from '../db/pool';
 import { BadgeAward, BadgeName, Position } from '../types';
 import { positionService } from './positionService';
 import { eventService } from './eventService';
+import { holdingService } from './holdingService';
+import { config } from '../config';
 
 export class BadgeService {
   /**
@@ -19,6 +21,7 @@ export class BadgeService {
       this.checkDiamondHands(wallet),
       this.checkEarningsReactor(wallet),
       this.checkFOMCTrader(wallet),
+      this.checkShiftHolder(wallet),
     ]);
 
     for (const award of checks) {
@@ -139,6 +142,21 @@ export class BadgeService {
     return null;
   }
 
+  /**
+   * Badge: SHIFT Holder — holds at least 1 SHIFT test token.
+   */
+  async checkShiftHolder(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'shift_holder')) return null;
+
+    const isHolder = await holdingService.holdsMinimum(wallet, config.shiftTokenMint, 1);
+
+    if (isHolder) {
+      await this.awardBadge(wallet, 'shift_holder');
+      return { badge_name: 'shift_holder', wallet };
+    }
+    return null;
+  }
+
   // ── Helpers ──
 
   /**
@@ -238,6 +256,14 @@ export class BadgeService {
       earned: earnedNames.has('fomc_trader'),
       progress: earnedNames.has('fomc_trader') ? 1 : 0,
       description: earnedNames.has('fomc_trader') ? 'FOMC Trader earned!' : 'Trade during a macro event (FOMC/CPI)',
+    });
+
+    // SHIFT Holder
+    progress.push({
+      badge: 'shift_holder',
+      earned: earnedNames.has('shift_holder'),
+      progress: earnedNames.has('shift_holder') ? 1 : 0,
+      description: earnedNames.has('shift_holder') ? 'Official SHIFT Holder!' : 'Hold at least 1 SHIFT token',
     });
 
     return progress;

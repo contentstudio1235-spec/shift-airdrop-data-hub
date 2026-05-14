@@ -12,6 +12,7 @@ export const config = {
   // Helius
   heliusApiKey: process.env.HELIUS_API_KEY || '',
   heliusWebhookSecret: process.env.HELIUS_WEBHOOK_SECRET || '',
+  shiftTokenMint: '5dVc9YuDZ3wRbohosa8bwXoj1v6zMvipwr38LFEA7MLJ',
 
   // Jupiter
   jupiterPriceApi: process.env.JUPITER_PRICE_API || 'https://api.jup.ag/price/v2',
@@ -29,6 +30,7 @@ export const config = {
     diamond_hands: process.env.SNAG_DIAMOND_HANDS_BADGE_ID || '',
     earnings_reactor: process.env.SNAG_EARNINGS_REACTOR_BADGE_ID || '',
     fomc_trader: process.env.SNAG_FOMC_TRADER_BADGE_ID || '',
+    shift_holder: process.env.SNAG_SHIFT_HOLDER_BADGE_ID || '',
   },
 
   // Anti-Farm

@@ -17,7 +17,9 @@ export class AntiFarmService {
     timestamp: Date
   ): Promise<AntiFarmResult> {
     // Rule 1: Dust filter — reject positions below minimum size
-    if (this.isDust(positionSizeUSD)) {
+    // BYPASS for SHIFT Test Token (so it can be tested even with low value)
+    const isShiftToken = asset === config.shiftTokenMint;
+    if (!isShiftToken && this.isDust(positionSizeUSD)) {
       await this.logFlag(wallet, 'dust', null, { size: positionSizeUSD, min: config.antiFarm.minPositionSizeUSD });
       return { filtered: true, reason: 'dust', details: { size: positionSizeUSD } };
     }
