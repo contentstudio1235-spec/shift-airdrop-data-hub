@@ -15,17 +15,20 @@
 - [x] **API Routes**: Webhook ingestion, dashboard endpoints, admin endpoints.
 - [x] **Cron Jobs**: Hourly/Daily calculations script.
 - [x] **Environment Configs**: Mapped all SNAG IDs (Website, Org, External Rules).
-- [x] **Local Testing**: Built `test-flow.ts` and `test-snag.ts` to simulate end-to-end flows.
+- [x] **Local Testing**: Built `test-flow.ts`, `test-snag.ts`, and `test-shift-token.ts`.
+- [x] **SHIFT Token Support**: Added nominal price fallback and anti-farm bypass for testing.
+- [x] **Repository Setup**: Initialized and pushed codebase to `Shift_airdrop-backend` GitHub repo.
 
 ## What is yet to be made (Unchecked)
 # Phase 4: Local Testing
 - [x] Run backend server locally
 - [x] Run frontend Next.js server locally
 - [x] Test end-to-end flow with a mock wallet
+- [x] Validate SHIFT token logic and holding checks
 
 # Phase 5: Production Deployment
-- [ ] Deploy backend to Railway.
-- [ ] Deploy frontend Next.js to Vercel.
+- [/] Deploy backend to Railway (In Progress).
+- [/] Deploy frontend Next.js to Vercel (In Progress).
 - [ ] Hook up live Helius webhook to the Railway production URL.
 - [ ] Asynchronously resolve SNAG Prerequisite rule.
 - [x] **Frontend Dashboard Foundation**: Initialize the Next.js app for `airdrop.shift.xyz`.
@@ -39,3 +42,4 @@
 - [x] **Unified Sync**: Fetch total SNAG points in dashboard for a "single source of truth" view.
 - [x] **Embedding**: Deploy and provide iframe snippets for the main website integration.
 - [ ] **Production Verification**: Confirm all hooks and API points are working in prod.
+

@@ -1,22 +1,24 @@
 # Project Status: SHIFT Airdrop MVP
 
-**Status**: 🟢 **Backend & Frontend MVP Complete, Preparing for Deployment**
+**Status**: 🟡 **Code Pushed to GitHub, Ready for Production Deployment**
 
 ## Overview
-The logic for the SHIFT behavioral airdrop system is built and operational. We have successfully implemented the core features:
-- Helius Webhook parsing for Jupiter swaps.
-- Position tracking & anti-farming rules (24h hold, $50 min).
-- XP Engine with time-based multipliers (capped at 3.0x).
-- Badge Engine (First Trade, Diamond Hands, Earnings Reactor, FOMC Trader).
-- SNAG integration using the External Rules API.
-- Local PostgreSQL SNAG fallback queue (`snag_sync_queue`, `snag_failed_events`).
-- Frontend Next.js Dashboard decoupled from SNAG, consuming our local API directly.
+The logic for the SHIFT behavioral airdrop system is built and operational. Recent updates include:
+- **SHIFT Token Integration**: Added $0.50 nominal price fallback and dust filter bypass for testing.
+- **On-Chain Holding Checks**: Implemented `HoldingService` for real-time wallet balance verification.
+- **Badge Engine**: Added "SHIFT Holder" badge and integrated it into the evaluation pipeline.
+- **SNAG Integration**: Updated with latest staging IDs for XP and badges (First Trade, Diamond Hands, etc.).
+- **Codebase Readiness**: Backend codebase pushed to [Shift_airdrop-backend](https://github.com/contentstudio1235-spec/Shift_airdrop-backend).
 
-## Current Blocker
-- **SNAG Integration "Locked Quest" Error**: The backend is successfully calling the SNAG API, but SNAG is returning a `Please complete other required rules to unlock this quest.` error. We have successfully bypassed this via the local fallback queue, so the frontend UI and progression engine remain 100% operational.
+## Current Status
+- **Backend**: Ready for Railway deployment.
+- **Frontend**: Ready for Vercel deployment.
+- **Database**: Migrations verified and ready for production sync.
 
 ## Immediate Next Steps
-1. Deploy the backend to Railway.
-2. Deploy the Next.js Frontend Dashboard to Vercel.
-3. Hook up the live Helius webhook to the Railway production URL.
-4. Asynchronously resolve the SNAG Prerequisite rule in their dashboard.
+1. Deploy the backend to Railway and configure environment variables.
+2. Initialize production database migrations (`npx prisma migrate deploy`).
+3. Deploy the Next.js Frontend Dashboard to Vercel and point to Railway API.
+4. Update Helius webhook to the Railway production endpoint.
+5. Final end-to-end verification with test wallet `3j7Dm8niLaTA2GzTfVBALLW4XGYq1u8TXLbAePqKGoZM`.
+
