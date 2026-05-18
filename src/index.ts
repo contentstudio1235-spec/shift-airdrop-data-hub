@@ -33,6 +33,8 @@ app.use(cors({
     'https://airdrop.shift.xyz',
     'https://www.shiftrwa.xyz',
     'https://shiftrwa.xyz',
+    'https://frontend-axelblaze-projects.vercel.app',
+    /\.vercel\.app$/,  // allow all Vercel preview URLs
   ],
   methods: ['GET', 'POST', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
