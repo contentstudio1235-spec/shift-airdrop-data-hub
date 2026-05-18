@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import { config } from './config';
 import { initCronJobs } from './cron/jobs';
+import { pool } from './db/pool';
 
 // Routes
 import webhookRoutes from './routes/webhook';
@@ -105,8 +106,19 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 
 // ── Start Server ──
 
-app.listen(config.port, () => {
-  console.log(`
+async function startServer() {
+  // Test database connection before starting
+  try {
+    const client = await pool.connect();
+    console.log('[Database] ✅ Connected successfully');
+    client.release();
+  } catch (err) {
+    console.error('[Database] ❌ Connection failed:', err);
+    process.exit(1);
+  }
+
+  app.listen(config.port, () => {
+    console.log(`
 ╔══════════════════════════════════════════════╗
 ║     SHIFT AIRDROP MVP — Backend Server       ║
 ╠══════════════════════════════════════════════╣
@@ -118,8 +130,14 @@ app.listen(config.port, () => {
 ╚══════════════════════════════════════════════╝
   `);
 
-  // Initialize cron jobs
-  initCronJobs();
+    // Initialize cron jobs
+    initCronJobs();
+  });
+}
+
+startServer().catch((err) => {
+  console.error('[Startup] Failed to start server:', err);
+  process.exit(1);
 });
 
 export default app;
