@@ -107,14 +107,19 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 // ── Start Server ──
 
 async function startServer() {
-  // Test database connection before starting
+  // Test database connection before starting (with 5 second timeout)
   try {
-    const client = await pool.connect();
+    const connectionPromise = pool.connect();
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Database connection timeout (5s)')), 5000)
+    );
+
+    const client = await Promise.race([connectionPromise, timeoutPromise]) as any;
     console.log('[Database] ✅ Connected successfully');
     client.release();
   } catch (err) {
-    console.error('[Database] ❌ Connection failed:', err);
-    process.exit(1);
+    console.warn('[Database] ⚠️  Connection test failed, but continuing:', err);
+    // Don't exit - let the app start and retry connections on demand
   }
 
   app.listen(config.port, () => {
