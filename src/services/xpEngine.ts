@@ -6,16 +6,20 @@ import { query, execute } from '../db/pool';
 import { Position } from '../types';
 import { positionService } from './positionService';
 import { antiFarmService } from './antiFarmService';
+import { getTokenInfo } from '../config/tokens';
 
 export class XPEngine {
   // ── Core Formulas ──
 
   /**
    * Position multiplier: grows 0.1x per week held, capped at 3.0x.
-   * position_multiplier(t) = min(1.0 + 0.10 × weeks_open, 3.0)
+   * For tracked RWA tokens, applies additional base multiplier.
+   * position_multiplier(t) = base_mult × min(1.0 + 0.10 × weeks_open, 3.0)
    */
-  calculatePositionMultiplier(weeksOpen: number): number {
-    return Math.min(1.0 + 0.10 * weeksOpen, 3.0);
+  calculatePositionMultiplier(weeksOpen: number, assetMint?: string | null): number {
+    const baseMultiplier = assetMint ? (getTokenInfo(assetMint)?.baseMultiplier ?? 1.0) : 1.0;
+    const timeMultiplier = Math.min(1.0 + 0.10 * weeksOpen, 3.0);
+    return baseMultiplier * timeMultiplier;
   }
 
   /**
@@ -71,8 +75,8 @@ export class XPEngine {
       // Calculate age
       const { weeks } = positionService.getPositionAge(position.opened_at, now);
 
-      // Calculate multiplier
-      const multiplier = this.calculatePositionMultiplier(weeks);
+      // Calculate multiplier (with RWA token bonus if applicable)
+      const multiplier = this.calculatePositionMultiplier(weeks, position.asset_mint);
 
       // Calculate hours since last XP calc (or since opened)
       const lastCalc = position.last_xp_calc ? new Date(position.last_xp_calc) : new Date(position.opened_at);
