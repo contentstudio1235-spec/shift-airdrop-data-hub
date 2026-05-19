@@ -11,8 +11,8 @@ let isRunning = false;
  * Initialize all cron jobs.
  */
 export function initCronJobs(): void {
-  // Every hour at :00 — full recalculation + sync
-  cron.schedule('0 * * * *', async () => {
+  // Every 10 minutes — full recalculation + sync (keeps Render free tier container active)
+  cron.schedule('*/10 * * * *', async () => {
     if (isRunning) {
       console.log('[Cron] Previous job still running, skipping...');
       return;
@@ -20,22 +20,22 @@ export function initCronJobs(): void {
 
     isRunning = true;
     const startTime = Date.now();
-    console.log('[Cron] ⏰ Hourly job started');
+    console.log('[Cron] ⏰ Sync job started');
 
     try {
       // Full sync: recalculate XP → evaluate badges → push to SNAG
       await snagSyncService.fullSync();
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`[Cron] ✅ Hourly job complete in ${duration}s`);
+      console.log(`[Cron] ✅ Sync job complete in ${duration}s`);
     } catch (error) {
-      console.error('[Cron] ❌ Hourly job failed:', error);
+      console.error('[Cron] ❌ Sync job failed:', error);
     } finally {
       isRunning = false;
     }
   });
 
-  console.log('[Cron] ✅ Scheduled: full sync every hour at :00');
+  console.log('[Cron] ✅ Scheduled: full sync every 10 minutes');
 }
 
 /**
