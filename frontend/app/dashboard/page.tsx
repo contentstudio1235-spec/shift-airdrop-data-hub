@@ -23,8 +23,13 @@ export default function Dashboard() {
       const dashData = await fetchDashboard(wallet);
       setData(dashData);
 
-      const posData = await fetchPositions(wallet);
-      setPositions(posData.positions || []);
+      try {
+        const posData = await fetchPositions(wallet);
+        setPositions(posData.positions || []);
+      } catch {
+        // Positions endpoint optional for dashboard display
+        setPositions([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard');
     } finally {
@@ -63,33 +68,33 @@ export default function Dashboard() {
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
               <p className="text-sm text-slate-400">Total XP</p>
-              <p className="text-3xl font-bold">{data.total_xp?.toFixed(2) || '0'}</p>
+              <p className="text-3xl font-bold">{data.totalXp?.toFixed(2) || '0'}</p>
             </div>
             <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
               <p className="text-sm text-slate-400">Claim Multiplier</p>
-              <p className="text-3xl font-bold">{data.claim_multiplier?.toFixed(2) || '1.0'}x</p>
+              <p className="text-3xl font-bold">{data.claimMultiplier?.toFixed(2) || '1.0'}x</p>
             </div>
             <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
               <p className="text-sm text-slate-400">Active Positions</p>
-              <p className="text-3xl font-bold">{positions.filter(p => p.status === 'open').length}</p>
+              <p className="text-3xl font-bold">{data.activePositions || '0'}</p>
             </div>
           </div>
 
           <div className="rounded-lg border border-slate-800 bg-slate-900 p-6">
             <h3 className="mb-4 text-lg font-semibold">Active Positions</h3>
-            {positions.filter(p => p.status === 'open').length === 0 ? (
+            {positions.length === 0 ? (
               <p className="text-sm text-slate-400">No active positions</p>
             ) : (
               <div className="space-y-3">
-                {positions.filter(p => p.status === 'open').map((pos: any) => (
+                {positions.map((pos: any) => (
                   <div key={pos.id} className="flex items-between justify-between rounded border border-slate-700 p-3">
                     <div>
                       <p className="font-semibold">{pos.asset}</p>
-                      <p className="text-sm text-slate-400">${pos.position_size_usd?.toFixed(2)}</p>
+                      <p className="text-sm text-slate-400">${pos.positionSizeUsd?.toFixed(2)}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold">{pos.xp_generated?.toFixed(2)} XP</p>
-                      <p className="text-sm text-slate-400">{pos.current_multiplier?.toFixed(2)}x</p>
+                      <p className="font-semibold">{pos.xpPerWeek?.toFixed(2)} XP/week</p>
+                      <p className="text-sm text-slate-400">{pos.currentMultiplier?.toFixed(2)}x</p>
                     </div>
                   </div>
                 ))}

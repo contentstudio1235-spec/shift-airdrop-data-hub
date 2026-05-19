@@ -7,7 +7,7 @@ export async function fetchDashboard(wallet: string) {
 }
 
 export async function fetchPositions(wallet: string) {
-  const res = await fetch(`${API_URL}/api/positions/${wallet}`);
+  const res = await fetch(`${API_URL}/api/positions/${wallet}/active`);
   if (!res.ok) throw new Error('Failed to fetch positions');
   return res.json();
 }

@@ -41,16 +41,16 @@ export default function Leaderboard() {
           <div className="grid grid-cols-4 gap-4 border-b border-slate-800 bg-slate-800 p-4 font-semibold">
             <div>Rank</div>
             <div>Wallet</div>
-            <div>XP</div>
-            <div>Positions</div>
+            <div>Total XP</div>
+            <div>Badges</div>
           </div>
           <div className="divide-y divide-slate-800">
             {leaderboard.map((entry: any, idx: number) => (
               <div key={entry.wallet} className="grid grid-cols-4 gap-4 p-4 text-sm">
-                <div className="font-semibold">#{idx + 1}</div>
+                <div className="font-semibold">#{entry.rank || idx + 1}</div>
                 <div className="truncate text-slate-300">{entry.wallet.substring(0, 10)}...</div>
-                <div className="font-semibold">{entry.total_xp?.toFixed(2) || '0'}</div>
-                <div>{entry.position_count || '0'}</div>
+                <div className="font-semibold">{entry.totalXP?.toFixed(2) || '0'}</div>
+                <div>{entry.badgeCount || '0'}</div>
               </div>
             ))}
           </div>
