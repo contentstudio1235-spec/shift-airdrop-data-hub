@@ -1,53 +1,54 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
+import type { Metadata } from 'next';
+import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google';
+import './globals.css';
+import { WalletProvider } from '@/components/WalletContext';
+import { ToastProvider } from '@/components/ToastContext';
+import NavBar from '@/components/NavBar';
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  weight: ['600', '700'],
+  variable: '--font-space-grotesk',
+  display: 'swap',
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-inter-var',
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-jetbrains',
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
-  title: "SHIFT Airdrop",
-  description: "SHIFT Behavioral Airdrop - Earn XP by trading",
+  title: 'SHIFT Airdrop — Earn XP Through Trading',
+  description: 'Trade RWA tokens on Jupiter and earn XP. Hold longer for multiplier bonuses. Compete for the SHIFT airdrop.',
+  openGraph: {
+    title: 'SHIFT Airdrop',
+    description: 'Earn XP by trading real-world asset tokens on Solana',
+    images: ['/og.png'],
+  },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
-      <body className="min-h-full flex flex-col bg-slate-950 text-white">
-        <header className="border-b border-slate-800 bg-slate-900 py-4 sticky top-0 z-50">
-          <div className="mx-auto max-w-7xl px-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold">SHIFT Airdrop</h1>
-                <p className="text-xs text-slate-400">Earn XP through trading</p>
-              </div>
-              <nav className="flex gap-4 text-sm">
-                <a href="/" className="hover:text-blue-400">Home</a>
-                <a href="/dashboard" className="hover:text-blue-400">Dashboard</a>
-                <a href="/leaderboard" className="hover:text-blue-400">Leaderboard</a>
-              </nav>
-            </div>
-          </div>
-        </header>
-        <main className="flex-1">
-          <div className="mx-auto max-w-7xl px-4 py-8">
-            {children}
-          </div>
-        </main>
+      <body>
+        <WalletProvider>
+          <ToastProvider>
+            <NavBar />
+            <main>{children}</main>
+          </ToastProvider>
+        </WalletProvider>
       </body>
     </html>
   );
