@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useWallet } from './WalletContext';
@@ -30,20 +31,16 @@ export default function NavBar() {
     <>
       <header className="nav-root">
         {/* Logo */}
-        <Link href="/register" className="nav-logo">
-          {/* SHIFT mark */}
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <rect width="28" height="28" rx="7" fill="url(#shiftGrad)" />
-            <path d="M8 11.5c0-1.4 1.1-2.5 2.5-2.5h4c.8 0 1.5.7 1.5 1.5S15.3 12 14.5 12h-3c-1.4 0-2.5 1.1-2.5 2.5S10.1 17 11.5 17h5.5v-1.5H11.5c-.6 0-1-.4-1-1s.4-1 1-1h3c1.4 0 2.5-1.1 2.5-2.5S15.9 9 14.5 9h-4C8.8 9 7 10.8 7 13h1z" fill="white" />
-            <defs>
-              <linearGradient id="shiftGrad" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
-                <stop stopColor="#26C8B8" />
-                <stop offset="1" stopColor="#07638C" />
-              </linearGradient>
-            </defs>
-          </svg>
-          <span>SHIFT</span>
-          <span style={{ color: 'var(--text-mute)', fontWeight: 400, fontSize: 12, marginLeft: -4 }}>airdrop</span>
+        <Link href="/register" className="nav-logo" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Image
+            src="/shift-logo.svg"
+            alt="SHIFT"
+            width={120}
+            height={27}
+            priority
+            style={{ height: 'auto', width: 'auto', maxWidth: 120, maxHeight: 27 }}
+          />
+          <span style={{ color: 'var(--text-mute)', fontWeight: 400, fontSize: 12 }}>airdrop</span>
         </Link>
 
         {/* Desktop nav tabs */}
