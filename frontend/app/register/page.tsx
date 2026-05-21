@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import ShiftIdCard from '@/components/ShiftIdCard';
 import ProgressBar from '@/components/ProgressBar';
 import Icon from '@/components/Icon';
@@ -24,19 +25,69 @@ interface AirdropUser {
   totalMembers: number;
   totalXp: number;
   loyaltyPoints: number;
+  permanentMultiplier: number;
+  dynamicMultiplier: number;
   referralLink: string;
+  referralCode: string;
   registeredAt: string;
+}
+
+interface ReferralBonusInfo {
+  code: string;
+  displayName: string | null;
+  isKol: boolean;
+  multiplierBonus: number;
+  multiplierType: 'dynamic' | 'permanent' | 'none';
 }
 
 export default function RegisterPage() {
   const { wallet } = useWallet();
   const toast = useToast();
+  const searchParams = useSearchParams();
 
   // Real-time state
   const [userData, setUserData] = useState<AirdropUser | null>(null);
   const [tasks, setTasks] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [showWalletModal, setShowWalletModal] = useState(false);
+
+  // Referral state
+  const [refCode, setRefCode] = useState<string | null>(null);
+  const [refBonus, setRefBonus] = useState<ReferralBonusInfo | null>(null);
+  const [refLoading, setRefLoading] = useState(false);
+
+  // ── Resolve referral code from URL on mount ──
+  useEffect(() => {
+    const code = searchParams?.get('ref');
+    if (code) {
+      setRefCode(code);
+      resolveRefCode(code);
+    }
+  }, [searchParams]);
+
+  // ── Resolve referral code via API ──
+  const resolveRefCode = async (code: string) => {
+    if (!code || code.length < 4) {
+      setRefBonus(null);
+      return;
+    }
+
+    try {
+      setRefLoading(true);
+      const res = await fetch(`/api/airdrop/ref/${code}`);
+      if (!res.ok) {
+        setRefBonus(null);
+        return;
+      }
+      const data: ReferralBonusInfo = await res.json();
+      setRefBonus(data);
+    } catch (error) {
+      console.error('[Register] Failed to resolve ref code:', error);
+      setRefBonus(null);
+    } finally {
+      setRefLoading(false);
+    }
+  };
 
   // ── Fetch user airdrop data ──
   useEffect(() => {
@@ -48,7 +99,23 @@ export default function RegisterPage() {
     const fetchUserData = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`/api/airdrop/user/${wallet}`);
+        let res = await fetch(`/api/airdrop/user/${wallet}`);
+
+        // If user doesn't exist, register them first
+        if (res.status === 404) {
+          const registerRes = await fetch('/api/airdrop/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              wallet,
+              refCode: refCode || undefined,
+            }),
+          });
+          if (!registerRes.ok) throw new Error('Failed to register');
+          // Continue to fetch user data
+          res = await fetch(`/api/airdrop/user/${wallet}`);
+        }
+
         if (!res.ok) throw new Error('Failed to fetch user data');
         const data: AirdropUser = await res.json();
         setUserData(data);
@@ -78,7 +145,7 @@ export default function RegisterPage() {
     };
 
     fetchUserData();
-  }, [wallet, toast]);
+  }, [wallet, refCode, toast]);
 
   // ── Calculate totals ──
   const totalPts = Object.entries(tasks)
@@ -145,6 +212,33 @@ export default function RegisterPage() {
   return (
     <>
       <div className="page fade-in" style={{ maxWidth: 640, margin: '0 auto' }}>
+        {/* Referral Bonus Banner */}
+        {refBonus && refBonus.multiplierType !== 'none' && (
+          <div
+            style={{
+              background: 'linear-gradient(135deg, rgba(34,197,94,0.1), rgba(16,185,129,0.05))',
+              border: '1px solid rgba(34,197,94,0.3)',
+              borderRadius: 12,
+              padding: '16px 20px',
+              marginBottom: 24,
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: 12, color: 'var(--mint)', fontWeight: 600, letterSpacing: '0.08em', marginBottom: 4 }}>
+              ✨ SPECIAL INVITE
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
+              {refBonus.displayName || 'A KOL'} invited you!
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-mute)', marginBottom: 8 }}>
+              Get a {Math.round((refBonus.multiplierBonus - 1) * 100)}% bonus multiplier on {refBonus.multiplierType === 'permanent' ? 'all' : 'new'} XP
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>
+              Code: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{refBonus.code}</span>
+            </div>
+          </div>
+        )}
+
         {/* Queue Hero */}
         <div className="card" style={{ textAlign: 'center', padding: '40px 24px 32px', marginBottom: 24 }}>
           <div style={{ fontSize: 11, color: 'var(--text-mute)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
@@ -171,6 +265,26 @@ export default function RegisterPage() {
           <div style={{ fontSize: 12, color: 'var(--text-mute)', marginTop: 4 }}>
             Out of {userData.totalMembers.toLocaleString()} registered members
           </div>
+
+          {/* Multiplier indicators */}
+          {(userData.permanentMultiplier > 1 || userData.dynamicMultiplier > 1) && (
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 20, fontSize: 12 }}>
+                {userData.permanentMultiplier > 1 && (
+                  <div>
+                    <div style={{ color: 'var(--text-mute)' }}>Permanent</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--mint)' }}>{userData.permanentMultiplier.toFixed(2)}x</div>
+                  </div>
+                )}
+                {userData.dynamicMultiplier > 1 && (
+                  <div>
+                    <div style={{ color: 'var(--text-mute)' }}>Dynamic</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--cyan)' }}>{userData.dynamicMultiplier.toFixed(2)}x</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* SHIFT ID Card */}

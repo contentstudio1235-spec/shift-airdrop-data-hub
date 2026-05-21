@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.snagsolutions.io)",
+      "Read(//c/Users/Axel/Shift_Backend_Logic/**)",
+      "Bash(npm run *)",
+      "Bash(curl -s \"https://shift-airdrop-backend.onrender.com/api/dashboard/2ASop4tRtRPYkw3b9XZQLka4RY8TLXtesEa3GfQJZZcn\")",
+      "Bash(curl -X POST https://shift-airdrop-backend.onrender.com/api/admin/sync -H 'x-admin-key: 5ef511c54ec2670c1b0e3d336e7555261e7567117f77d30c6ca5b199e96f6c08' -H 'Content-Type: application/json')"
+    ]
+  }
+}
