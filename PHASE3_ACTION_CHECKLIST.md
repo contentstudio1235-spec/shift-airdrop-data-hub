@@ -6,15 +6,25 @@
 
 ## ⚡ Quick Setup (5 minutes)
 
-### 1. Database Migration (1 min)
+### 1. Database Migration (1 min) — Node.js Runner
+
+**Option A: Automated** (Recommended)
 ```bash
-psql $DATABASE_URL -f src/db/migrations/004_snag_referral_integration.sql
+npm run migrate
+```
+
+**Option B: On Render Deploy**
+Update Render Build Command:
+```bash
+npm install && npm run build && npm run migrate
 ```
 
 **Verify:**
-```sql
-\d snag_referral_events    -- Should exist (new table)
-\d users                    -- Should have snag_default_referral_link column
+```bash
+# Should see in logs:
+✅ Base schema applied successfully
+✅ 004_snag_referral_integration.sql completed
+✅ All migrations completed!
 ```
 
 ### 2. Backend & Frontend Auto-Deploy (2 min)

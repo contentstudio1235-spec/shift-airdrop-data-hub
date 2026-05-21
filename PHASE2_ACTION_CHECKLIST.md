@@ -4,12 +4,21 @@
 
 ## ⚡ Immediate Actions (Before Go-Live)
 
-### 1. Backend Database Setup (5 min)
-- [ ] Apply migration to production Postgres:
+### 1. Backend Database Setup (5 min) — Node.js Migration
+
+**Option A: Automated (Recommended)**
+- [ ] Update Render Build Command to include migration:
   ```bash
-  psql $DATABASE_URL -f src/db/migrations/002_snag_rebuild.sql
+  npm install && npm run build && npm run migrate
   ```
-- [ ] Verify: `SELECT COUNT(*) FROM snag_completed_tasks;` (returns 0 initially)
+  Then Render auto-runs migrations on each deploy!
+
+**Option B: Manual**
+- [ ] Run migration locally or from Render Shell:
+  ```bash
+  npm run migrate
+  ```
+- [ ] Verify: Should see `✅ All migrations completed!`
 
 ### 2. Render Environment Variables (5 min)
 Go to **Render.com** → **Shift Airdrop Backend** → **Environment**
