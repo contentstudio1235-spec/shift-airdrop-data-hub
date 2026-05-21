@@ -10,12 +10,12 @@ import LivePill from './LivePill';
 import Icon from './Icon';
 
 const NAV_ITEMS = [
-  { label: 'Register', href: '/register', soon: false },
-  { label: 'Trade', href: '/trade', soon: false },
-  { label: 'Airdrop', href: '/airdrop', soon: false },
-  { label: 'Leaderboard', href: '/leaderboard', soon: false },
-  { label: 'Equities Score', href: '/equities', soon: true },
-  { label: 'Certificates', href: '/certificates', soon: true },
+  { label: 'Register', href: '/register', soon: false, external: false },
+  { label: 'Trade', href: 'https://app.shiftrwa.xyz/coming-soon', soon: false, external: true },
+  { label: 'Airdrop', href: '/airdrop', soon: false, external: false },
+  { label: 'Leaderboard', href: '/leaderboard', soon: false, external: false },
+  { label: 'Equities Score', href: '/equities', soon: true, external: false },
+  { label: 'Certificates', href: '/certificates', soon: true, external: false },
 ];
 
 export default function NavBar() {
@@ -55,6 +55,16 @@ export default function NavBar() {
                 {item.label}
                 <span className="badge amber" style={{ fontSize: 9, padding: '2px 5px' }}>SOON</span>
               </span>
+            ) : item.external ? (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="nav-tab"
+              >
+                {item.label}
+              </a>
             ) : (
               <Link
                 key={item.href}
@@ -73,7 +83,12 @@ export default function NavBar() {
           value={activeHref}
           onChange={(e) => {
             const item = NAV_ITEMS.find((n) => n.href === e.target.value);
-            if (item && !item.soon) router.push(item.href);
+            if (!item || item.soon) return;
+            if (item.external) {
+              window.open(item.href, '_blank');
+            } else {
+              router.push(item.href);
+            }
           }}
         >
           {NAV_ITEMS.map((item) => (

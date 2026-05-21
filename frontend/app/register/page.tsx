@@ -7,6 +7,7 @@ import ProgressBar from '@/components/ProgressBar';
 import Icon from '@/components/Icon';
 import { useWallet } from '@/components/WalletContext';
 import { useToast } from '@/components/ToastContext';
+import { fetchSnagTasks } from '@/lib/api';
 
 const REFERRAL_LINK = 'https://shiftrwa.xyz?ref=SHIFT-004271';
 const QUEUE_POSITION = 1247;
@@ -23,7 +24,7 @@ const TASKS = [
   { id: 'discord', icon: '💬', label: 'Join the SHIFT Discord', pts: 150, cta: 'Join', href: 'https://discord.gg/shiftrwa' },
   { id: 'telegram', icon: '✈️', label: 'Join SHIFT Telegram', pts: 100, cta: 'Join', href: 'https://t.me/shiftrwa' },
   { id: 'wallet', icon: '👛', label: 'Connect your wallet', pts: 200, cta: 'Connect' },
-  { id: 'first_trade', icon: '⚡', label: 'Complete your first trade', pts: 300, cta: 'Trade', href: '/trade' },
+  { id: 'first_trade', icon: '⚡', label: 'Complete your first trade', pts: 300, cta: 'Trade', href: 'https://app.shiftrwa.xyz/coming-soon' },
 ];
 
 export default function RegisterPage() {
@@ -32,10 +33,24 @@ export default function RegisterPage() {
   const [tasks, setTasks] = useState<Record<string, boolean>>({});
   const [showWalletModal, setShowWalletModal] = useState(false);
 
-  // Auto-check wallet task when connected
+  // Auto-check wallet task when connected + verify SNAG social tasks
   useEffect(() => {
     if (wallet) {
       setTasks((prev) => ({ ...prev, wallet: true }));
+      // Check which social tasks user has already completed via SNAG
+      fetchSnagTasks(wallet).then((completedIds) => {
+        if (completedIds && completedIds.length > 0) {
+          const updates: Record<string, boolean> = {};
+          for (const id of completedIds) {
+            if (TASKS.find((t) => t.id === id)) updates[id] = true;
+          }
+          if (Object.keys(updates).length > 0) {
+            setTasks((prev) => ({ ...prev, ...updates }));
+          }
+        }
+      }).catch(() => {
+        // SNAG unavailable — no-op, tasks will be manually checkable
+      });
     }
   }, [wallet]);
 

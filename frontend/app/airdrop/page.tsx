@@ -230,7 +230,7 @@ export default function AirdropPage() {
                     <Icon name="bolt" size={32} color="var(--text-mute)" />
                     <p>No active positions yet</p>
                     <p className="hint">Trade SHIFT tokens on Jupiter to start earning XP</p>
-                    <button className="btn primary sm" onClick={() => router.push('/trade')}>
+                    <button className="btn primary sm" onClick={() => window.open('https://app.shiftrwa.xyz/coming-soon', '_blank')}>
                       Go to Trade →
                     </button>
                   </div>
@@ -331,7 +331,7 @@ export default function AirdropPage() {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {events.map((ev) => (
-                      <EventCard key={ev.id} event={ev} onTrade={() => router.push('/trade')} />
+                      <EventCard key={ev.id} event={ev} onTrade={() => window.open('https://app.shiftrwa.xyz/coming-soon', '_blank')} />
                     ))}
                   </div>
                 )}
@@ -377,10 +377,18 @@ export default function AirdropPage() {
                   <span className="k">Referral XP</span>
                   <span className="v" style={{ color: 'var(--amber)' }}>900</span>
                 </div>
-                <div className="kv" style={{ padding: '5px 0', borderBottom: 'none' }}>
+                <div className="kv" style={{ padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
                   <span className="k">Pending unlock</span>
                   <span className="v" style={{ color: 'var(--text-dim)' }}>—</span>
                 </div>
+                {dashboard?.loyaltyPoints != null && dashboard.loyaltyPoints > 0 && (
+                  <div className="kv" style={{ padding: '5px 0', borderBottom: 'none' }}>
+                    <span className="k">SNAG Loyalty PTS</span>
+                    <span className="v" style={{ color: 'var(--amber)' }}>
+                      {dashboard.loyaltyPoints.toLocaleString()}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Multiplier bar */}

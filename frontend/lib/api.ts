@@ -70,3 +70,15 @@ export async function fetchLeaderboard(limit = 50): Promise<LeaderboardResponse 
 export async function fetchEvents(): Promise<EventsResponse | null> {
   return apiFetch<EventsResponse>('/api/events');
 }
+
+export async function fetchSnagTasks(wallet: string): Promise<string[] | null> {
+  if (!wallet) return null;
+  const data = await apiFetch<{ wallet: string; completedTasks: string[] }>(`/api/snag/tasks/${wallet}`);
+  return data?.completedTasks ?? null;
+}
+
+export async function fetchSnagPoints(wallet: string): Promise<number | null> {
+  if (!wallet) return null;
+  const data = await apiFetch<{ wallet: string; loyaltyPoints: number }>(`/api/snag/points/${wallet}`);
+  return data?.loyaltyPoints ?? null;
+}

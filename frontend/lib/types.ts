@@ -103,6 +103,13 @@ export interface TokenDefinition {
   mint: string;
   baseMultiplier: number;
   description: string;
+  // Official CSV data
+  imageUrl: string;
+  alpacaSymbol: string;
+  underlyingEtf: string;
+  isin: string;
+  solscanUrl: string;
+  explorerUrl: string;
 }
 
 export interface HealthResponse {

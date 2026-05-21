@@ -23,6 +23,12 @@ export const config = {
   snagWebsiteId: process.env.SNAG_WEBSITE_ID || '',
   snagBaseUrl: process.env.SNAG_BASE_URL || 'https://admin.snagsolutions.io',
 
+  // SNAG Loyalty Currency (for batched transaction endpoint)
+  snagLoyaltyCurrencyId: process.env.SNAG_LOYALTY_CURRENCY_ID || '',
+
+  // SNAG inbound webhook secret (Stratus HMAC-SHA256)
+  snagWebhookSecret: process.env.SNAG_WEBHOOK_SECRET || '',
+
   // SNAG Rule/Badge IDs (configured in SNAG dashboard)
   snagXpRuleId: process.env.SNAG_XP_RULE_ID || '',
   snagBadgeIds: {
@@ -31,6 +37,15 @@ export const config = {
     earnings_reactor: process.env.SNAG_EARNINGS_REACTOR_BADGE_ID || '',
     fomc_trader: process.env.SNAG_FOMC_TRADER_BADGE_ID || '',
     shift_holder: process.env.SNAG_SHIFT_HOLDER_BADGE_ID || '',
+  },
+
+  // SNAG Social Task Rule IDs (for inbound webhook task mapping)
+  snagSocialRuleIds: {
+    follow_x:       process.env.SNAG_FOLLOW_X_RULE_ID || '',
+    join_discord:   process.env.SNAG_JOIN_DISCORD_RULE_ID || '',
+    join_telegram:  process.env.SNAG_JOIN_TELEGRAM_RULE_ID || '',
+    connect_wallet: process.env.SNAG_CONNECT_WALLET_RULE_ID || '',
+    first_trade:    process.env.SNAG_FIRST_TRADE_RULE_ID || '',
   },
 
   // Anti-Farm

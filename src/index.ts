@@ -18,6 +18,7 @@ import positionsRoutes from './routes/positions';
 import leaderboardRoutes from './routes/leaderboard';
 import badgesRoutes from './routes/badges';
 import eventsRoutes from './routes/events';
+import snagRoutes from './routes/snag';
 
 const app = express();
 
@@ -31,6 +32,8 @@ app.use(cors({
   origin: [
     'http://localhost:3000',
     'https://airdrop.shift.xyz',
+    'https://app.shiftrwa.xyz',         // official SHIFT app
+    'https://airdrop.shiftrwa.xyz',     // airdrop subdomain
     'https://www.shiftrwa.xyz',
     'https://shiftrwa.xyz',
     'https://frontend-axelblaze-projects.vercel.app',
@@ -62,6 +65,7 @@ app.use('/api/positions', positionsRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/badges', badgesRoutes);
 app.use('/api/events', eventsRoutes);
+app.use('/api/snag', snagRoutes);
 
 // ── Health Check ──
 

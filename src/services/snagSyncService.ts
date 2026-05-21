@@ -1,5 +1,6 @@
 // ============================================================
-// SNAG Sync Service — Bridge between backend calculations & SNAG
+// SNAG Sync Service — Batched transactions, circuit breaker,
+// multiplier sync, and exponential backoff retry queue
 // ============================================================
 
 import axios, { AxiosInstance } from 'axios';
@@ -10,8 +11,17 @@ import { badgeService } from './badgeService';
 import { multiplierService } from './multiplierService';
 import { BadgeName, LeaderboardEntry, User } from '../types';
 
+const BATCH_SIZE = 100;  // SNAG accepts up to 100 entries per transaction
+const CIRCUIT_THRESHOLD = 5;
+const CIRCUIT_PAUSE_MS = 5 * 60 * 1000;  // 5 minutes
+
 export class SnagSyncService {
   private client: AxiosInstance;
+
+  // ── Circuit Breaker State ──
+  private circuitFailures = 0;
+  private circuitOpen = false;
+  private circuitOpenUntil: number | null = null;
 
   constructor() {
     this.client = axios.create({
@@ -20,15 +30,74 @@ export class SnagSyncService {
         'x-api-key': config.snagApiKey,
         'Content-Type': 'application/json',
       },
-      timeout: 10000,
+      timeout: 15000,
     });
+  }
+
+  // ── Circuit Breaker Helpers ──
+
+  private checkCircuit(): boolean {
+    if (!this.circuitOpen) return true;
+    if (this.circuitOpenUntil && Date.now() > this.circuitOpenUntil) {
+      this.circuitOpen = false;
+      this.circuitFailures = 0;
+      this.circuitOpenUntil = null;
+      console.log('[SnagSync] 🟢 Circuit breaker CLOSED — resuming SNAG calls');
+      return true;
+    }
+    return false;
+  }
+
+  private recordFailure(): void {
+    this.circuitFailures++;
+    if (this.circuitFailures >= CIRCUIT_THRESHOLD && !this.circuitOpen) {
+      this.circuitOpen = true;
+      this.circuitOpenUntil = Date.now() + CIRCUIT_PAUSE_MS;
+      console.error(
+        `[SnagSync] 🔴 CIRCUIT BREAKER OPEN — SNAG failed ${this.circuitFailures}× ` +
+        `in a row. Pausing all SNAG calls for 5 minutes.`
+      );
+    }
+  }
+
+  private recordSuccess(): void {
+    if (this.circuitFailures > 0) {
+      this.circuitFailures = 0;
+    }
+  }
+
+  // ── Queue Helpers ──
+
+  private backoffMs(attempts: number): number {
+    const base = Math.min(1000 * Math.pow(2, attempts), 30 * 60 * 1000); // max 30 min
+    const jitter = Math.random() * 1000;
+    return base + jitter;
+  }
+
+  private async queueFailedEntries(
+    entries: Array<{ wallet: string; [key: string]: any }>,
+    syncType: string,
+    errorMessage: string,
+    batchId: string
+  ): Promise<void> {
+    const backoffUntil = new Date(Date.now() + this.backoffMs(this.circuitFailures));
+    for (const entry of entries) {
+      try {
+        await execute(
+          `INSERT INTO snag_sync_queue
+             (wallet, sync_type, payload, status, last_attempt_at, attempts, batch_id, backoff_until, error_message)
+           VALUES ($1, $2, $3, 'failed', NOW(), 1, $4, $5, $6)
+           ON CONFLICT DO NOTHING`,
+          [entry.wallet, syncType, JSON.stringify(entry), batchId, backoffUntil, errorMessage.slice(0, 512)]
+        );
+      } catch (dbErr) {
+        console.error('[SnagSync] Failed to write to retry queue:', dbErr);
+      }
+    }
   }
 
   // ── Master Sync (called by cron) ──
 
-  /**
-   * Full sync: recalculate everything, then push to SNAG.
-   */
   async fullSync(): Promise<void> {
     if (!config.snagApiKey) {
       console.log('[SnagSync] ⏭️  No SNAG API key configured, skipping sync');
@@ -39,7 +108,7 @@ export class SnagSyncService {
 
     try {
       // 1. Recalculate XP
-      const xpResult = await xpEngine.recalculateAllXP();
+      await xpEngine.recalculateAllXP();
 
       // 2. Recalculate claim multipliers
       await multiplierService.recalculateAllMultipliers();
@@ -47,7 +116,7 @@ export class SnagSyncService {
       // 3. Evaluate badges for all users
       const newBadges = await badgeService.evaluateAllUsers();
 
-      // 4. Sync XP deltas to SNAG
+      // 4. Sync XP deltas to SNAG (batched)
       await this.syncAllXP();
 
       // 5. Push new badges to SNAG
@@ -55,144 +124,336 @@ export class SnagSyncService {
         await this.awardBadgeInSnag(award.wallet, award.badge_name);
       }
 
-      console.log(`[SnagSync] ✅ Full sync complete`);
+      // 6. Sync multiplier changes to SNAG
+      await this.syncMultipliers();
+
+      console.log('[SnagSync] ✅ Full sync complete');
     } catch (error) {
       console.error('[SnagSync] ❌ Full sync failed:', error);
     }
   }
 
-  // ── XP Sync ──
+  // ── XP Sync (Batched) ──
 
-  /**
-   * Sync XP for all users that have accumulated new XP since last sync.
-   */
   async syncAllXP(): Promise<void> {
     const users = await query<User & { last_synced_xp?: number }>(
-      `SELECT u.wallet, u.total_xp, u.snag_user_id, 
+      `SELECT u.wallet, u.total_xp, u.snag_user_id,
               COALESCE(s.last_synced_xp, 0) as last_synced_xp
-       FROM users u 
+       FROM users u
        LEFT JOIN xp_sync_log s ON u.wallet = s.wallet`
     );
 
-    for (const user of users) {
-      const currentXP = Number(user.total_xp);
-      const lastSynced = Number(user.last_synced_xp || 0);
-      const xpDelta = currentXP - lastSynced;
+    const entriesToSync = users
+      .map(u => ({
+        wallet: u.wallet,
+        xpDelta: Number(u.total_xp) - Number(u.last_synced_xp || 0),
+        currentXP: Number(u.total_xp),
+      }))
+      .filter(e => e.xpDelta > 0);
 
-      if (xpDelta <= 0) continue;
-
-      try {
-        await this.pushXPToSnag(user.wallet, xpDelta);
-
-        // Update sync log
-        await execute(
-          `INSERT INTO xp_sync_log (wallet, last_synced_xp, last_synced_at) 
-           VALUES ($1, $2, NOW()) 
-           ON CONFLICT (wallet) DO UPDATE SET last_synced_xp = $2, last_synced_at = NOW()`,
-          [user.wallet, currentXP]
-        );
-      } catch (error) {
-        console.error(`[SnagSync] Failed to sync XP for ${user.wallet.slice(0, 8)}...:`, error);
-      }
-    }
-  }
-
-  /**
-   * Push XP to SNAG via External Rule completion.
-   */
-  private async pushXPToSnag(wallet: string, xpAmount: number): Promise<void> {
-    if (!config.snagXpRuleId) {
-      console.log(`[SnagSync] No XP rule ID configured, skipping XP push`);
+    if (entriesToSync.length === 0) {
+      console.log('[SnagSync] No XP deltas to sync');
       return;
     }
 
-    try {
-      await this.client.post(`/api/loyalty/rules/${config.snagXpRuleId}/complete`, {
-        walletAddress: wallet,
-        amount: Math.floor(xpAmount), // SNAG uses integers
-        idempotencyKey: `xp-${wallet}-${Date.now()}`,
-      });
+    console.log(`[SnagSync] Syncing XP for ${entriesToSync.length} users...`);
+    const { succeeded } = await this.batchPushXP(entriesToSync);
 
-      console.log(`[SnagSync] 📊 Pushed ${Math.floor(xpAmount)} XP for ${wallet.slice(0, 8)}...`);
-    } catch (error: any) {
-      const errorMsg = error?.response?.data ? JSON.stringify(error.response.data) : error.message;
-      console.error(`[SnagSync] XP push failed, queueing locally:`, errorMsg);
-      
+    // Update sync log only for wallets that succeeded
+    for (const wallet of succeeded) {
+      const entry = entriesToSync.find(e => e.wallet === wallet)!;
       try {
-        const payload = JSON.stringify({
-          walletAddress: wallet,
-          amount: Math.floor(xpAmount),
-          idempotencyKey: `xp-${wallet}-${Date.now()}`
-        });
-        
         await execute(
-          `INSERT INTO snag_sync_queue (wallet, sync_type, payload, status, last_attempt_at, attempts)
-           VALUES ($1, $2, $3, 'failed', NOW(), 1)`,
-          [wallet, 'xp', payload]
+          `INSERT INTO xp_sync_log (wallet, last_synced_xp, last_synced_at)
+           VALUES ($1, $2, NOW())
+           ON CONFLICT (wallet) DO UPDATE SET last_synced_xp = $2, last_synced_at = NOW()`,
+          [wallet, entry.currentXP]
         );
-      } catch (dbError) {
-        console.error(`[SnagSync] Failed to insert to queue:`, dbError);
+      } catch (err) {
+        console.error('[SnagSync] Failed to update xp_sync_log:', err);
       }
+    }
+
+    console.log(`[SnagSync] XP sync: ${succeeded.length}/${entriesToSync.length} succeeded`);
+  }
+
+  /**
+   * Push XP entries to SNAG in batches via POST /api/loyalty/transactions.
+   * Uses idempotency keys to prevent double-crediting on retry.
+   */
+  async batchPushXP(
+    entries: Array<{ wallet: string; xpDelta: number }>
+  ): Promise<{ succeeded: string[]; failed: string[] }> {
+    if (!this.checkCircuit()) {
+      const minutesLeft = this.circuitOpenUntil
+        ? Math.ceil((this.circuitOpenUntil - Date.now()) / 60000)
+        : 5;
+      console.warn(`[SnagSync] Circuit open — skipping batch (${minutesLeft}min remaining)`);
+      return { succeeded: [], failed: entries.map(e => e.wallet) };
+    }
+
+    if (!config.snagLoyaltyCurrencyId && !config.snagXpRuleId) {
+      // Fall back to rule-based if currency ID not set
+      console.log('[SnagSync] No loyalty currency ID, using rule-based XP push');
+      const succeeded: string[] = [];
+      const failed: string[] = [];
+      for (const entry of entries) {
+        try {
+          await this.pushXPViaRule(entry.wallet, entry.xpDelta);
+          succeeded.push(entry.wallet);
+        } catch {
+          failed.push(entry.wallet);
+        }
+      }
+      return { succeeded, failed };
+    }
+
+    const batchId = `xp-${Date.now()}`;
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+
+    for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+      const chunk = entries.slice(i, i + BATCH_SIZE);
+
+      try {
+        await this.client.post('/api/loyalty/transactions', {
+          websiteId: config.snagWebsiteId,
+          description: `SHIFT Airdrop XP sync — batch ${batchId}`,
+          entries: chunk.map((e, idx) => ({
+            walletAddress: e.wallet,
+            loyaltyCurrencyId: config.snagLoyaltyCurrencyId,
+            direction: 'credit',
+            amount: Math.floor(e.xpDelta),
+            idempotencyKey: `${batchId}-${i + idx}`.slice(0, 32),
+          })),
+        });
+
+        this.recordSuccess();
+        succeeded.push(...chunk.map(e => e.wallet));
+        console.log(`[SnagSync] 📊 Batch pushed ${chunk.length} XP entries (chunk ${i / BATCH_SIZE + 1})`);
+      } catch (error: any) {
+        this.recordFailure();
+        const errMsg = error?.response?.data ? JSON.stringify(error.response.data) : error.message;
+        console.error(`[SnagSync] ❌ XP batch failed (chunk ${i / BATCH_SIZE + 1}):`, errMsg);
+        failed.push(...chunk.map(e => e.wallet));
+        await this.queueFailedEntries(chunk, 'xp', errMsg, batchId);
+      }
+    }
+
+    return { succeeded, failed };
+  }
+
+  /**
+   * Fallback: push XP via External Rule (used when SNAG_LOYALTY_CURRENCY_ID is not set).
+   */
+  private async pushXPViaRule(wallet: string, xpAmount: number): Promise<void> {
+    if (!config.snagXpRuleId) return;
+    await this.client.post(`/api/loyalty/rules/${config.snagXpRuleId}/complete`, {
+      walletAddress: wallet,
+      amount: Math.floor(xpAmount),
+      idempotencyKey: `xp-${wallet}-${Date.now()}`.slice(0, 32),
+    });
+  }
+
+  // ── Multiplier Sync ──
+
+  /**
+   * Push claim_multiplier changes to SNAG.
+   * Called as step 6 of fullSync. Tracks snag_multiplier_id per user.
+   */
+  async syncMultipliers(): Promise<void> {
+    if (!this.checkCircuit() || !config.snagWebsiteId) return;
+
+    const users = await query<{ wallet: string; claim_multiplier: number; snag_multiplier_id: string | null }>(
+      `SELECT wallet, claim_multiplier, snag_multiplier_id
+       FROM users
+       WHERE updated_at > NOW() - INTERVAL '15 minutes'
+         AND claim_multiplier > 1.0`
+    );
+
+    if (users.length === 0) return;
+
+    console.log(`[SnagSync] Syncing multipliers for ${users.length} users...`);
+    let synced = 0;
+
+    for (const user of users) {
+      try {
+        const multiplierValue = Number(user.claim_multiplier);
+
+        if (user.snag_multiplier_id) {
+          // Update existing multiplier
+          await this.client.patch(`/api/loyalty/multipliers/${user.snag_multiplier_id}`, {
+            value: multiplierValue,
+          });
+        } else {
+          // Create new multiplier
+          const result = await this.client.post('/api/loyalty/multipliers', {
+            websiteId: config.snagWebsiteId,
+            walletAddress: user.wallet,
+            loyaltyCurrencyId: config.snagLoyaltyCurrencyId || undefined,
+            value: multiplierValue,
+            title: 'SHIFT Airdrop Claim Multiplier',
+            description: `Earned through holding and trading SHIFT RWA tokens`,
+            externalIdentifier: `shift-mult-${user.wallet.slice(0, 8)}`,
+          });
+
+          const multiplierIdCreated = result.data?.id;
+          if (multiplierIdCreated) {
+            await execute(
+              'UPDATE users SET snag_multiplier_id = $1 WHERE wallet = $2',
+              [multiplierIdCreated, user.wallet]
+            );
+          }
+        }
+
+        this.recordSuccess();
+        synced++;
+      } catch (error: any) {
+        this.recordFailure();
+        const errMsg = error?.response?.data ? JSON.stringify(error.response.data) : error.message;
+        console.error(`[SnagSync] Multiplier sync failed for ${user.wallet.slice(0, 8)}:`, errMsg);
+      }
+    }
+
+    if (synced > 0) {
+      console.log(`[SnagSync] 🎯 Multiplier sync: ${synced}/${users.length} succeeded`);
     }
   }
 
   // ── Badge Sync ──
 
-  /**
-   * Award a badge in SNAG.
-   */
   async awardBadgeInSnag(wallet: string, badgeName: BadgeName): Promise<void> {
     const snagBadgeId = config.snagBadgeIds[badgeName];
-    if (!snagBadgeId) {
-      console.log(`[SnagSync] No SNAG badge ID for "${badgeName}", skipping`);
+    if (!snagBadgeId || !this.checkCircuit()) {
+      if (!snagBadgeId) {
+        console.log(`[SnagSync] No SNAG badge ID for "${badgeName}", skipping`);
+      }
       return;
     }
 
     try {
-      // Since these are configured as External Rules in the dashboard
-      await this.client.post(`/api/loyalty/rules/${snagBadgeId}/complete`, {
-        walletAddress: wallet,
-        amount: 1, // Trigger the rule once
-        idempotencyKey: `badge-${badgeName}-${wallet}`,
-      });
+      // Try transaction endpoint first if currency ID is set
+      if (config.snagLoyaltyCurrencyId) {
+        await this.client.post('/api/loyalty/transactions', {
+          websiteId: config.snagWebsiteId,
+          description: `SHIFT badge earned: ${badgeName}`,
+          entries: [{
+            walletAddress: wallet,
+            loyaltyCurrencyId: config.snagLoyaltyCurrencyId,
+            direction: 'credit',
+            amount: 1,
+            idempotencyKey: `badge-${badgeName}-${wallet}`.slice(0, 32),
+            metadata: { badge_name: badgeName, rule_id: snagBadgeId },
+          }],
+        });
+      } else {
+        // Fallback: rule completion
+        await this.client.post(`/api/loyalty/rules/${snagBadgeId}/complete`, {
+          walletAddress: wallet,
+          amount: 1,
+          idempotencyKey: `badge-${badgeName}-${wallet}`.slice(0, 32),
+        });
+      }
 
-      // Update local badge record with SNAG ID
       await execute(
         'UPDATE badges SET snag_badge_id = $1 WHERE wallet = $2 AND badge_name = $3',
         [snagBadgeId, wallet, badgeName]
       );
 
-      console.log(`[SnagSync] 🏆 Badge "${badgeName}" synced to SNAG Rule for ${wallet.slice(0, 8)}...`);
+      this.recordSuccess();
+      console.log(`[SnagSync] 🏆 Badge "${badgeName}" synced for ${wallet.slice(0, 8)}...`);
     } catch (error: any) {
-      const errorMsg = error?.response?.data ? JSON.stringify(error.response.data) : error.message;
-      console.error(`[SnagSync] Badge/Rule push failed, queueing locally:`, errorMsg);
-      
+      this.recordFailure();
+      const errMsg = error?.response?.data ? JSON.stringify(error.response.data) : error.message;
+      console.error(`[SnagSync] Badge push failed, queueing:`, errMsg);
+      await this.queueFailedEntries([{ wallet, badge_name: badgeName }], 'badge', errMsg, `badge-${badgeName}`);
+    }
+  }
+
+  // ── Queue Retry ──
+
+  /**
+   * Process pending items in the retry queue.
+   * Called by the 2-minute cron worker.
+   */
+  async processRetryQueue(): Promise<void> {
+    if (!this.checkCircuit()) return;
+
+    const items = await query<{
+      id: string;
+      wallet: string;
+      sync_type: string;
+      payload: string;
+      attempts: number;
+    }>(
+      `SELECT id, wallet, sync_type, payload, attempts
+       FROM snag_sync_queue
+       WHERE status = 'failed'
+         AND attempts < 10
+         AND (backoff_until IS NULL OR backoff_until <= NOW())
+       ORDER BY created_at ASC
+       LIMIT 50`
+    );
+
+    if (items.length === 0) return;
+
+    console.log(`[SnagSync] Processing ${items.length} queued retry items...`);
+
+    const xpItems = items.filter(i => i.sync_type === 'xp');
+    const badgeItems = items.filter(i => i.sync_type === 'badge');
+
+    // Batch-retry XP items
+    if (xpItems.length > 0) {
+      const entries = xpItems.map(i => {
+        const p = JSON.parse(i.payload);
+        return { wallet: i.wallet, xpDelta: p.xpDelta || p.amount || 0, queueId: i.id, attempts: i.attempts };
+      });
+
+      const { succeeded } = await this.batchPushXP(entries);
+      const succeededSet = new Set(succeeded);
+
+      for (const entry of entries) {
+        if (succeededSet.has(entry.wallet)) {
+          await execute(
+            `UPDATE snag_sync_queue SET status = 'completed', last_attempt_at = NOW() WHERE id = $1`,
+            [entry.queueId]
+          );
+        } else {
+          const nextBackoff = new Date(Date.now() + this.backoffMs(entry.attempts));
+          await execute(
+            `UPDATE snag_sync_queue
+             SET attempts = attempts + 1, last_attempt_at = NOW(), backoff_until = $1
+             WHERE id = $2`,
+            [nextBackoff, entry.queueId]
+          );
+        }
+      }
+    }
+
+    // Retry badge items individually
+    for (const item of badgeItems) {
       try {
-        const payload = JSON.stringify({
-          walletAddress: wallet,
-          amount: 1,
-          idempotencyKey: `badge-${badgeName}-${wallet}`
-        });
-        
+        const p = JSON.parse(item.payload);
+        await this.awardBadgeInSnag(item.wallet, p.badge_name as BadgeName);
         await execute(
-          `INSERT INTO snag_sync_queue (wallet, sync_type, payload, status, last_attempt_at, attempts)
-           VALUES ($1, $2, $3, 'failed', NOW(), 1)`,
-          [wallet, 'badge', payload]
+          `UPDATE snag_sync_queue SET status = 'completed', last_attempt_at = NOW() WHERE id = $1`,
+          [item.id]
         );
-      } catch (dbError) {
-        console.error(`[SnagSync] Failed to insert to queue:`, dbError);
+      } catch {
+        const nextBackoff = new Date(Date.now() + this.backoffMs(item.attempts));
+        await execute(
+          `UPDATE snag_sync_queue
+           SET attempts = attempts + 1, last_attempt_at = NOW(), backoff_until = $1
+           WHERE id = $2`,
+          [nextBackoff, item.id]
+        );
       }
     }
   }
 
   // ── Leaderboard ──
 
-  /**
-   * Get leaderboard from SNAG.
-   * Falls back to local DB if SNAG is not configured.
-   */
   async getLeaderboard(limit: number = 50): Promise<LeaderboardEntry[]> {
-    // Try SNAG first
     if (config.snagApiKey) {
       try {
         const response = await this.client.get('/api/loyalty/accounts', {
@@ -219,13 +480,9 @@ export class SnagSyncService {
       }
     }
 
-    // Fallback: local leaderboard
     return this.getLocalLeaderboard(limit);
   }
 
-  /**
-   * Local leaderboard from PostgreSQL.
-   */
   private async getLocalLeaderboard(limit: number): Promise<LeaderboardEntry[]> {
     const rows = await query<any>(
       `SELECT u.wallet, u.total_xp, u.claim_multiplier,
@@ -247,13 +504,9 @@ export class SnagSyncService {
     }));
   }
 
-  /**
-   * Get a user's rank (from SNAG or local).
-   */
   async getUserRank(wallet: string): Promise<number | null> {
     if (config.snagApiKey && config.snagWebsiteId) {
       try {
-        // Get SNAG user ID first
         const user = await queryOne<{ snag_user_id: string }>(
           'SELECT snag_user_id FROM users WHERE wallet = $1',
           [wallet]
@@ -270,7 +523,6 @@ export class SnagSyncService {
       }
     }
 
-    // Fallback: local rank
     const result = await queryOne<{ rank: string }>(
       `SELECT COUNT(*) + 1 as rank FROM users WHERE total_xp > (SELECT total_xp FROM users WHERE wallet = $1)`,
       [wallet]
@@ -278,15 +530,10 @@ export class SnagSyncService {
     return result ? parseInt(result.rank, 10) : null;
   }
 
-  /**
-   * Get total points for a user from SNAG.
-   * Searches by walletAddress if snag_user_id is not in local DB.
-   */
   async getUserPoints(wallet: string): Promise<number> {
     if (!config.snagApiKey || !config.snagWebsiteId) return 0;
 
     try {
-      // 1. Try to get SNAG user ID from local DB
       let user = await queryOne<{ snag_user_id: string }>(
         'SELECT snag_user_id FROM users WHERE wallet = $1',
         [wallet]
@@ -294,21 +541,18 @@ export class SnagSyncService {
 
       let snagUserId = user?.snag_user_id;
 
-      // 2. If no local ID, search SNAG for the wallet
       if (!snagUserId) {
         const searchResponse = await this.client.get('/api/loyalty/accounts', {
           params: {
             websiteId: config.snagWebsiteId,
             walletAddress: wallet,
-            limit: 1
-          }
+            limit: 1,
+          },
         });
 
         const foundAccount = searchResponse.data?.data?.[0];
         if (foundAccount) {
           snagUserId = foundAccount.id;
-          
-          // Save for next time
           await execute(
             'UPDATE users SET snag_user_id = $1 WHERE wallet = $2',
             [snagUserId, wallet]
@@ -316,7 +560,6 @@ export class SnagSyncService {
         }
       }
 
-      // 3. Fetch full account details to get points
       if (snagUserId) {
         const response = await this.client.get(`/api/loyalty/accounts/${snagUserId}`, {
           params: { websiteId: config.snagWebsiteId },

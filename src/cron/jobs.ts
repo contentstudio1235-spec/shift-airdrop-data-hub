@@ -1,41 +1,56 @@
 // ============================================================
-// Cron Jobs — Scheduled tasks (hourly)
+// Cron Jobs — Full sync every 10 min + queue retry every 2 min
 // ============================================================
 
 import cron from 'node-cron';
 import { snagSyncService } from '../services/snagSyncService';
 
 let isRunning = false;
+let isQueueRunning = false;
 
 /**
  * Initialize all cron jobs.
  */
 export function initCronJobs(): void {
-  // Every 10 minutes — full recalculation + sync (keeps Render free tier container active)
+  // ── Full sync every 10 minutes ──
+  // Keeps Render free-tier container active and recalculates all XP/badges/multipliers
   cron.schedule('*/10 * * * *', async () => {
     if (isRunning) {
-      console.log('[Cron] Previous job still running, skipping...');
+      console.log('[Cron] Previous sync job still running, skipping...');
       return;
     }
 
     isRunning = true;
     const startTime = Date.now();
-    console.log('[Cron] ⏰ Sync job started');
+    console.log('[Cron] ⏰ Full sync job started');
 
     try {
-      // Full sync: recalculate XP → evaluate badges → push to SNAG
       await snagSyncService.fullSync();
-
       const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-      console.log(`[Cron] ✅ Sync job complete in ${duration}s`);
+      console.log(`[Cron] ✅ Full sync complete in ${duration}s`);
     } catch (error) {
-      console.error('[Cron] ❌ Sync job failed:', error);
+      console.error('[Cron] ❌ Full sync failed:', error);
     } finally {
       isRunning = false;
     }
   });
 
-  console.log('[Cron] ✅ Scheduled: full sync every 10 minutes');
+  // ── SNAG retry queue worker every 2 minutes ──
+  // Retries failed SNAG push attempts with exponential backoff
+  cron.schedule('*/2 * * * *', async () => {
+    if (isQueueRunning) return;
+
+    isQueueRunning = true;
+    try {
+      await snagSyncService.processRetryQueue();
+    } catch (error) {
+      console.error('[Cron] ❌ Queue retry failed:', error);
+    } finally {
+      isQueueRunning = false;
+    }
+  });
+
+  console.log('[Cron] ✅ Scheduled: full sync every 10 minutes, queue retry every 2 minutes');
 }
 
 /**
