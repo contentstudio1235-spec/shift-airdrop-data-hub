@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react';
 import { useToast } from '@/components/ToastContext';
 import Icon from '@/components/Icon';
 
+// ── API Configuration ──
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://shift-airdrop-backend.onrender.com';
+
 interface KolEntry {
   wallet: string;
   customCode: string;
@@ -54,7 +57,7 @@ export default function AdminKolPage() {
   const loadKols = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/admin/kol', {
+      const res = await fetch(`${API_URL}/api/admin/kol`, {
         headers: { 'x-admin-key': adminKey },
       });
       if (!res.ok) {
@@ -96,7 +99,7 @@ export default function AdminKolPage() {
 
     setSubmitting(true);
     try {
-      const res = await fetch('/api/admin/kol', {
+      const res = await fetch(`${API_URL}/api/admin/kol`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

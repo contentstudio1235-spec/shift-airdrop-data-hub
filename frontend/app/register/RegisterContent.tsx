@@ -10,6 +10,9 @@ import { useWallet } from '@/components/WalletContext';
 import { useToast } from '@/components/ToastContext';
 import { fetchSnagTasks } from '@/lib/api';
 
+// ── API Configuration ──
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://shift-airdrop-backend.onrender.com';
+
 // ── Task definitions ──
 const TASK_TEMPLATES = [
   { id: 'x_follow', icon: '𝕏', label: 'Follow @ShiftRWA on X', pts: 100, cta: 'Follow', href: 'https://twitter.com/ShiftRWA' },
@@ -74,7 +77,7 @@ export default function RegisterContent() {
 
     try {
       setRefLoading(true);
-      const res = await fetch(`/api/airdrop/ref/${code}`);
+      const res = await fetch(`${API_URL}/api/airdrop/ref/${code}`);
       if (!res.ok) {
         setRefBonus(null);
         return;
@@ -99,11 +102,11 @@ export default function RegisterContent() {
     const fetchUserData = async () => {
       try {
         setLoading(true);
-        let res = await fetch(`/api/airdrop/user/${wallet}`);
+        let res = await fetch(`${API_URL}/api/airdrop/user/${wallet}`);
 
         // If user doesn't exist, register them first
         if (res.status === 404) {
-          const registerRes = await fetch('/api/airdrop/register', {
+          const registerRes = await fetch(`${API_URL}/api/airdrop/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -113,7 +116,7 @@ export default function RegisterContent() {
           });
           if (!registerRes.ok) throw new Error('Failed to register');
           // Continue to fetch user data
-          res = await fetch(`/api/airdrop/user/${wallet}`);
+          res = await fetch(`${API_URL}/api/airdrop/user/${wallet}`);
         }
 
         if (!res.ok) throw new Error('Failed to fetch user data');
