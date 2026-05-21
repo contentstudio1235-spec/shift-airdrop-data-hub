@@ -1,81 +1,107 @@
 // ============================================================
-// Admin Routes — Event management + manual sync
+// Admin Routes — Manual sync triggers (via Stratus Function)
 // ============================================================
 
-import { Router } from 'express';
-import { eventService } from '../services/eventService';
-import { runManualSync } from '../cron/jobs';
-import { CreateEventRequest } from '../types';
+import express from 'express';
+import { snagSyncService } from '../services/snagSyncService';
 
-const router = Router();
+const router = express.Router();
 
 /**
- * POST /api/admin/events
- * Create a new market event (FOMC, CPI, earnings).
+ * Middleware: Verify admin secret header
+ * Protects the sync endpoint from unauthorized triggers
  */
-router.post('/events', async (req, res) => {
-  try {
-    const data: CreateEventRequest = req.body;
+const verifyAdminSecret = (
+  req: express.Request,
+  res: express.Response,
+  next: express.NextFunction
+) => {
+  const secret = req.headers['x-admin-key'] as string | undefined;
+  const expectedSecret = process.env.ADMIN_SECRET;
 
-    // Basic validation
-    if (!data.event_name || !data.event_type || !data.start_time || !data.end_time) {
-      res.status(400).json({ error: 'Missing required fields: event_name, event_type, start_time, end_time' });
-      return;
-    }
-
-    if (!['macro', 'earnings'].includes(data.event_type)) {
-      res.status(400).json({ error: 'event_type must be "macro" or "earnings"' });
-      return;
-    }
-
-    const event = await eventService.createEvent(data);
-    res.status(201).json(event);
-  } catch (error) {
-    console.error('[Admin] Create event error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  if (!expectedSecret) {
+    console.warn('[Admin] ADMIN_SECRET not configured');
+    return res.status(500).json({ error: 'Server not configured' });
   }
-});
 
-/**
- * GET /api/admin/events
- * List all events.
- */
-router.get('/events', async (_req, res) => {
-  try {
-    const events = await eventService.getAllEvents();
-    res.json(events);
-  } catch (error) {
-    console.error('[Admin] List events error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  if (!secret || secret !== expectedSecret) {
+    console.warn('[Admin] Invalid admin secret');
+    return res.status(401).json({ error: 'Unauthorized' });
   }
-});
 
-/**
- * PATCH /api/admin/events/:id/deactivate
- * Deactivate an event.
- */
-router.patch('/events/:id/deactivate', async (req, res) => {
-  try {
-    await eventService.deactivateEvent(req.params.id);
-    res.json({ status: 'deactivated' });
-  } catch (error) {
-    console.error('[Admin] Deactivate event error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  next();
+};
 
 /**
  * POST /api/admin/sync
- * Trigger a manual full sync (recalc XP + push to SNAG).
+ * Trigger a full XP recalculation + badge evaluation + SNAG sync
+ * Called by SNAG Stratus scheduled function every 10 minutes
  */
-router.post('/sync', async (_req, res) => {
+router.post('/sync', verifyAdminSecret, async (req, res) => {
   try {
-    await runManualSync();
-    res.json({ status: 'sync_complete' });
-  } catch (error: any) {
-    console.error('[Admin] Manual sync error:', error);
-    res.status(409).json({ error: error.message || 'Sync failed' });
+    console.log('[Admin] Manual full sync triggered');
+    const startTime = Date.now();
+
+    await snagSyncService.fullSync();
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[Admin] Full sync completed in ${duration}s`);
+
+    res.json({
+      success: true,
+      message: 'Full sync completed',
+      duration: `${duration}s`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[Admin] Sync failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Sync failed',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
+});
+
+/**
+ * POST /api/admin/queue-retry
+ * Manually trigger SNAG sync queue retry worker
+ */
+router.post('/queue-retry', verifyAdminSecret, async (req, res) => {
+  try {
+    console.log('[Admin] Manual queue retry triggered');
+    const startTime = Date.now();
+
+    await snagSyncService.processRetryQueue();
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[Admin] Queue retry completed in ${duration}s`);
+
+    res.json({
+      success: true,
+      message: 'Queue retry completed',
+      duration: `${duration}s`,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('[Admin] Queue retry failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Queue retry failed',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/admin/health
+ * Check admin endpoint is working
+ */
+router.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 export default router;
