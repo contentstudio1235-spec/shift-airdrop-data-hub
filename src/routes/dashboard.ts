@@ -3,6 +3,10 @@ import { queryOne, query } from '../db/pool';
 import { snagSyncService } from '../services/snagSyncService';
 import { dailyCheckinService } from '../services/dailyCheckinService';
 import { leaderboardService } from '../services/leaderboardService';
+import { activityFeedService } from '../services/activityFeedService';
+import { missionsService } from '../services/missionsService';
+import { badgeGalleryService } from '../services/badgeGalleryService';
+import { referralTrackingService } from '../services/referralTrackingService';
 import { getUserLevelInfo } from '../utils/levelSystem';
 
 const router = Router();
@@ -151,6 +155,130 @@ router.get('/:wallet/level', async (req, res) => {
     res.json(levelInfo);
   } catch (error) {
     console.error('[API] Level info error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Sprint 2: Activity Feed, Missions, Badges, Referrals ──
+
+// Get activity feed
+router.get('/:wallet/activity', async (req, res) => {
+  const { wallet } = req.params;
+  const limit = parseInt(req.query.limit as string) || 10;
+
+  try {
+    const activity = await activityFeedService.getUserActivity(wallet, limit);
+    res.json({
+      count: activity.length,
+      events: activity
+    });
+  } catch (error) {
+    console.error('[API] Activity feed error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get global activity feed
+router.get('/activity/global', async (req, res) => {
+  const limit = parseInt(req.query.limit as string) || 50;
+
+  try {
+    const activity = await activityFeedService.getGlobalActivity(limit);
+    res.json({
+      count: activity.length,
+      events: activity
+    });
+  } catch (error) {
+    console.error('[API] Global activity error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get weekly missions
+router.get('/:wallet/missions', async (req, res) => {
+  const { wallet } = req.params;
+
+  try {
+    const [missions, progress] = await Promise.all([
+      missionsService.getWeeklyMissions(),
+      missionsService.getUserMissionProgress(wallet)
+    ]);
+
+    const totalWeeklyXp = await missionsService.getWeeklyMissionXp(wallet);
+
+    res.json({
+      missions,
+      progress,
+      totalWeeklyXp
+    });
+  } catch (error) {
+    console.error('[API] Missions error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Claim mission reward
+router.post('/:wallet/missions/:missionId/claim', async (req, res) => {
+  const { wallet, missionId } = req.params;
+
+  try {
+    const xpAwarded = await missionsService.claimMissionReward(wallet, missionId);
+    res.json({
+      success: true,
+      xpAwarded,
+      message: `+${xpAwarded} XP claimed!`
+    });
+  } catch (error) {
+    console.error('[API] Mission claim error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get badge gallery
+router.get('/:wallet/badges/gallery', async (req, res) => {
+  const { wallet } = req.params;
+
+  try {
+    const [badges, breakdown, count] = await Promise.all([
+      badgeGalleryService.getUserBadges(wallet),
+      badgeGalleryService.getRarityBreakdown(wallet),
+      badgeGalleryService.getEarnedBadgeCount(wallet)
+    ]);
+
+    res.json({
+      badges,
+      breakdown,
+      earnedCount: count,
+      totalCount: badges.length
+    });
+  } catch (error) {
+    console.error('[API] Badge gallery error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get referral stats
+router.get('/:wallet/referrals/stats', async (req, res) => {
+  const { wallet } = req.params;
+
+  try {
+    const [stats, referred, referrer, networkXp, leaderboard] = await Promise.all([
+      referralTrackingService.getReferrerStats(wallet),
+      referralTrackingService.getReferredUsers(wallet, 10),
+      referralTrackingService.getMyReferrer(wallet),
+      referralTrackingService.getNetworkXp(wallet),
+      referralTrackingService.getReferralLeaderboard(50)
+    ]);
+
+    res.json({
+      myStats: stats,
+      referredUsers: referred,
+      myReferrer: referrer,
+      networkXp,
+      leaderboard
+    });
+  } catch (error) {
+    console.error('[API] Referral stats error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
