@@ -10,6 +10,12 @@ import type {
   EventsResponse,
   HealthResponse,
 } from './types';
+import type {
+  LevelInfo,
+  StreakInfo,
+  UserRankInfo,
+  LeaderboardEntry,
+} from './gamification';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -120,4 +126,65 @@ export async function setCustomReferralCode(
     console.error('Failed to set custom referral code:', error);
     return null;
   }
+}
+
+// ── Gamification API ───────────────────────────────────────
+
+export async function processDailyCheckin(wallet: string): Promise<{
+  streakCount: number;
+  xpAwarded: number;
+  isNewStreak: boolean;
+  message: string;
+} | null> {
+  if (!wallet) return null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${API_URL}/api/dashboard/${wallet}/checkin`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) return null;
+    return (await res.json()) as any;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchStreakInfo(wallet: string): Promise<StreakInfo | null> {
+  if (!wallet) return null;
+  return apiFetch<StreakInfo>(`/api/dashboard/${wallet}/streak`);
+}
+
+export async function fetchUserLevel(wallet: string): Promise<LevelInfo | null> {
+  if (!wallet) return null;
+  return apiFetch<LevelInfo>(`/api/dashboard/${wallet}/level`);
+}
+
+export async function fetchUserRank(wallet: string): Promise<UserRankInfo | null> {
+  if (!wallet) return null;
+  return apiFetch<UserRankInfo>(`/api/dashboard/${wallet}/rank`);
+}
+
+export async function fetchTopLeaderboard(limit = 100): Promise<{
+  count: number;
+  entries: LeaderboardEntry[];
+} | null> {
+  return apiFetch<{ count: number; entries: LeaderboardEntry[] }>(
+    `/api/dashboard/leaderboard/top?limit=${limit}`
+  );
+}
+
+export async function fetchLeaderboardContext(
+  wallet: string,
+  context = 5
+): Promise<{ count: number; entries: LeaderboardEntry[] } | null> {
+  if (!wallet) return null;
+  return apiFetch<{ count: number; entries: LeaderboardEntry[] }>(
+    `/api/dashboard/${wallet}/leaderboard-context?context=${context}`
+  );
 }
