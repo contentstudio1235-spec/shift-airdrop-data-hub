@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useWallet } from './WalletContext';
 
 interface ConnectWalletModalProps {
@@ -152,10 +153,19 @@ function WalletBtn({
 export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps) {
   const { connectPhantom, connectBackpack, connectSolflare, connectMetaMask, connecting } = useWallet();
 
-  const hasPhantom = typeof window !== 'undefined' && !!window.solana?.isPhantom;
-  const hasBackpack = typeof window !== 'undefined' && !!window.backpack?.solana;
-  const hasSolflare = typeof window !== 'undefined' && !!window.solflare?.isSolflare;
-  const hasMetaMask = typeof window !== 'undefined' && !!window.ethereum?.isMetaMask;
+  // Detect wallet extensions after mount (window not available during SSR)
+  const [hasPhantom, setHasPhantom] = useState(false);
+  const [hasBackpack, setHasBackpack] = useState(false);
+  const [hasSolflare, setHasSolflare] = useState(false);
+  const [hasMetaMask, setHasMetaMask] = useState(false);
+
+  useEffect(() => {
+    // Check both new (window.phantom.solana) and legacy (window.solana) APIs
+    setHasPhantom(!!(window.phantom?.solana?.isPhantom || window.solana?.isPhantom));
+    setHasBackpack(!!window.backpack?.solana);
+    setHasSolflare(!!window.solflare?.isSolflare);
+    setHasMetaMask(!!window.ethereum?.isMetaMask);
+  }, []);
 
   const wrap = (fn: () => Promise<void>) => async () => {
     await fn();

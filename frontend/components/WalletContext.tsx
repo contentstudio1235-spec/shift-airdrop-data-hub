@@ -13,7 +13,16 @@ import type { WalletChain, WalletContextValue, WalletType } from '@/lib/types';
 
 declare global {
   interface Window {
-    // Phantom (Solana)
+    // Phantom — new API (window.phantom.solana) + legacy (window.solana)
+    phantom?: {
+      solana?: {
+        isPhantom?: boolean;
+        connect: (opts?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: { toString: () => string } }>;
+        disconnect: () => Promise<void>;
+        on: (event: string, handler: (...args: unknown[]) => void) => void;
+        off: (event: string, handler: (...args: unknown[]) => void) => void;
+      };
+    };
     solana?: {
       isPhantom?: boolean;
       connect: (opts?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: { toString: () => string } }>;
@@ -110,8 +119,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       try {
-        if (savedType === 'phantom' && window.solana?.isPhantom) {
-          const resp = await window.solana.connect({ onlyIfTrusted: true });
+        if (savedType === 'phantom') {
+          const provider = window.phantom?.solana ?? window.solana;
+          if (!provider?.isPhantom) return;
+          const resp = await provider.connect({ onlyIfTrusted: true });
           const addr = resp.publicKey.toString();
           setWallet(addr);
           setWalletType('phantom');
@@ -158,9 +169,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       clear();
     };
 
-    if (walletType === 'phantom' && window.solana) {
-      window.solana.on('disconnect', handleAccountChanged);
-      return () => window.solana!.off('disconnect', handleAccountChanged);
+    if (walletType === 'phantom') {
+      const provider = window.phantom?.solana ?? window.solana;
+      if (provider) {
+        provider.on('disconnect', handleAccountChanged);
+        return () => provider.off('disconnect', handleAccountChanged);
+      }
     }
     if (walletType === 'backpack' && window.backpack?.solana) {
       window.backpack.solana.on('disconnect', handleAccountChanged);
@@ -187,13 +201,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const connectPhantom = useCallback(async () => {
     if (typeof window === 'undefined') return;
-    if (!window.solana?.isPhantom) {
+    // Support both new (window.phantom.solana) and legacy (window.solana) Phantom API
+    const provider = window.phantom?.solana ?? window.solana;
+    if (!provider?.isPhantom) {
       window.open('https://phantom.app/', '_blank');
       return;
     }
     setConnecting(true);
     try {
-      const resp = await window.solana.connect();
+      const resp = await provider.connect();
       const addr = resp.publicKey.toString();
       setWallet(addr);
       setWalletType('phantom');
@@ -280,8 +296,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setWalletType(null);
     clear();
     if (typeof window === 'undefined') return;
-    if (walletType === 'phantom' && window.solana) {
-      window.solana.disconnect().catch(() => {});
+    if (walletType === 'phantom') {
+      const provider = window.phantom?.solana ?? window.solana;
+      provider?.disconnect().catch(() => {});
     } else if (walletType === 'backpack' && window.backpack?.solana) {
       window.backpack.solana.disconnect().catch(() => {});
     } else if (walletType === 'solflare' && window.solflare) {
