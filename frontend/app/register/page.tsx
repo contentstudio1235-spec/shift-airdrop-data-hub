@@ -7,19 +7,10 @@ import ProgressBar from '@/components/ProgressBar';
 import Icon from '@/components/Icon';
 import { useWallet } from '@/components/WalletContext';
 import { useToast } from '@/components/ToastContext';
-import { fetchSnagTasks } from '@/lib/api';
+import { fetchSnagTasks, fetchSnagPoints } from '@/lib/api';
 
-const REFERRAL_LINK = 'https://shiftrwa.xyz?ref=SHIFT-004271';
-const QUEUE_POSITION = 1247;
-const TOTAL_MEMBERS = 8429;
-
-const REFERRALS = [
-  { handle: 'SHIFT-004272', color: '#26C8B8', ago: '2h ago' },
-  { handle: 'SHIFT-004273', color: '#9d6cf5', ago: '5h ago' },
-  { handle: 'SHIFT-004298', color: '#f7a23b', ago: '1d ago' },
-];
-
-const TASKS = [
+// ── Task definitions (dynamic but template) ──
+const TASK_TEMPLATES = [
   { id: 'x_follow', icon: '𝕏', label: 'Follow @ShiftRWA on X', pts: 100, cta: 'Follow', href: 'https://twitter.com/ShiftRWA' },
   { id: 'discord', icon: '💬', label: 'Join the SHIFT Discord', pts: 150, cta: 'Join', href: 'https://discord.gg/shiftrwa' },
   { id: 'telegram', icon: '✈️', label: 'Join SHIFT Telegram', pts: 100, cta: 'Join', href: 'https://t.me/shiftrwa' },
@@ -27,40 +18,81 @@ const TASKS = [
   { id: 'first_trade', icon: '⚡', label: 'Complete your first trade', pts: 300, cta: 'Trade', href: 'https://app.shiftrwa.xyz/coming-soon' },
 ];
 
+interface AirdropUser {
+  wallet: string;
+  queuePosition: number;
+  totalMembers: number;
+  totalXp: number;
+  loyaltyPoints: number;
+  referralLink: string;
+  registeredAt: string;
+}
+
 export default function RegisterPage() {
   const { wallet } = useWallet();
   const toast = useToast();
+
+  // Real-time state
+  const [userData, setUserData] = useState<AirdropUser | null>(null);
   const [tasks, setTasks] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
   const [showWalletModal, setShowWalletModal] = useState(false);
 
-  // Auto-check wallet task when connected + verify SNAG social tasks
+  // ── Fetch user airdrop data ──
   useEffect(() => {
-    if (wallet) {
-      setTasks((prev) => ({ ...prev, wallet: true }));
-      // Check which social tasks user has already completed via SNAG
-      fetchSnagTasks(wallet).then((completedIds) => {
-        if (completedIds && completedIds.length > 0) {
+    if (!wallet) {
+      setLoading(false);
+      return;
+    }
+
+    const fetchUserData = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch(`/api/airdrop/user/${wallet}`);
+        if (!res.ok) throw new Error('Failed to fetch user data');
+        const data: AirdropUser = await res.json();
+        setUserData(data);
+
+        // Auto-check wallet task
+        setTasks((prev) => ({ ...prev, wallet: true }));
+
+        // Fetch SNAG completed tasks
+        const snagTaskIds = await fetchSnagTasks(wallet);
+        if (snagTaskIds && snagTaskIds.length > 0) {
           const updates: Record<string, boolean> = {};
-          for (const id of completedIds) {
-            if (TASKS.find((t) => t.id === id)) updates[id] = true;
+          for (const id of snagTaskIds) {
+            if (TASK_TEMPLATES.find((t) => t.id === id)) {
+              updates[id] = true;
+            }
           }
           if (Object.keys(updates).length > 0) {
             setTasks((prev) => ({ ...prev, ...updates }));
           }
         }
-      }).catch(() => {
-        // SNAG unavailable — no-op, tasks will be manually checkable
-      });
-    }
-  }, [wallet]);
+      } catch (error) {
+        console.error('[Register] Failed to fetch user data:', error);
+        toast('Failed to load airdrop data. Please refresh.');
+      } finally {
+        setLoading(false);
+      }
+    };
 
+    fetchUserData();
+  }, [wallet, toast]);
+
+  // ── Calculate totals ──
   const totalPts = Object.entries(tasks)
     .filter(([, done]) => done)
     .reduce((sum, [id]) => {
-      const task = TASKS.find((t) => t.id === id);
+      const task = TASK_TEMPLATES.find((t) => t.id === id);
       return sum + (task?.pts ?? 0);
     }, 0);
 
+  // ── Progress to tier 2 ──
+  const progressPct = userData ? Math.round((userData.queuePosition / userData.totalMembers) * 100) : 0;
+  const placesToTier2 = userData ? Math.max(0, Math.round(userData.totalMembers * 0.05) - userData.queuePosition) : 0;
+
+  // ── Handlers ──
   const handleTask = (taskId: string, href?: string) => {
     if (taskId === 'wallet') {
       setShowWalletModal(true);
@@ -70,24 +102,45 @@ export default function RegisterPage() {
       window.open(href, '_blank');
     }
     setTasks((prev) => ({ ...prev, [taskId]: true }));
-    const task = TASKS.find((t) => t.id === taskId);
+    const task = TASK_TEMPLATES.find((t) => t.id === taskId);
     if (task) toast(`+${task.pts} PTS — Task completed!`);
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(REFERRAL_LINK);
+    if (!userData) return;
+    navigator.clipboard.writeText(userData.referralLink);
     toast('Referral link copied!');
   };
 
   const handleShareX = () => {
+    if (!userData) return;
     const text = encodeURIComponent(
-      `I just joined the @ShiftRWA airdrop — queue position #${QUEUE_POSITION}! 🚀\n\nTrade RWA tokens on Solana and earn XP. Join via my link:`
+      `I just joined the @ShiftRWA airdrop — queue position #${userData.queuePosition}! 🚀\n\nTrade RWA tokens on Solana and earn XP. Join via my link:`
     );
-    window.open(`https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(REFERRAL_LINK)}`, '_blank');
+    window.open(
+      `https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(userData.referralLink)}`,
+      '_blank'
+    );
   };
 
-  const progressPct = Math.round((QUEUE_POSITION / TOTAL_MEMBERS) * 100);
-  const placesToTier2 = 430;
+  // ── Render ──
+  if (!wallet) {
+    return (
+      <div className="page fade-in" style={{ maxWidth: 640, margin: '0 auto', textAlign: 'center', padding: '60px 24px' }}>
+        <p style={{ fontSize: 16, color: 'var(--text-mute)', marginBottom: 24 }}>
+          Connect your Solana wallet to join the SHIFT airdrop
+        </p>
+      </div>
+    );
+  }
+
+  if (loading || !userData) {
+    return (
+      <div className="page fade-in" style={{ maxWidth: 640, margin: '0 auto', textAlign: 'center', padding: '60px 24px' }}>
+        <p style={{ fontSize: 14, color: 'var(--text-mute)' }}>Loading your airdrop data...</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -107,7 +160,7 @@ export default function RegisterPage() {
               marginBottom: 12,
             }}
           >
-            #{QUEUE_POSITION.toLocaleString()}
+            #{userData.queuePosition.toLocaleString()}
           </div>
           <span className="badge mint" style={{ fontSize: 11, marginBottom: 16 }}>
             ✦ FOUNDING MEMBER
@@ -116,16 +169,16 @@ export default function RegisterPage() {
             {totalPts.toLocaleString()} PTS earned
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-mute)', marginTop: 4 }}>
-            Out of {TOTAL_MEMBERS.toLocaleString()} registered members
+            Out of {userData.totalMembers.toLocaleString()} registered members
           </div>
         </div>
 
         {/* SHIFT ID Card */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
           <ShiftIdCard
-            handle="SHIFT-004271"
+            handle={userData.wallet.slice(0, 6).toUpperCase()}
             ticker="SHIFT"
-            rank={QUEUE_POSITION}
+            rank={userData.queuePosition}
             points={totalPts}
             status="FOUNDING MEMBER"
           />
@@ -164,7 +217,7 @@ export default function RegisterPage() {
           </div>
           <ProgressBar value={progressPct} />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-            <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>#{QUEUE_POSITION}</span>
+            <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>#{userData.queuePosition}</span>
             <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>{progressPct}%</span>
           </div>
         </div>
@@ -177,7 +230,7 @@ export default function RegisterPage() {
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
             <input
               readOnly
-              value={REFERRAL_LINK}
+              value={userData.referralLink}
               className="input"
               style={{ flex: 1, fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)' }}
             />
@@ -195,7 +248,7 @@ export default function RegisterPage() {
             <button
               className="btn ghost sm"
               onClick={() =>
-                window.open(`https://t.me/share/url?url=${encodeURIComponent(REFERRAL_LINK)}&text=Join+SHIFT+Airdrop`, '_blank')
+                window.open(`https://t.me/share/url?url=${encodeURIComponent(userData.referralLink)}&text=Join+SHIFT+Airdrop`, '_blank')
               }
             >
               <Icon name="telegram" size={13} />
@@ -204,7 +257,7 @@ export default function RegisterPage() {
             <button
               className="btn ghost sm"
               onClick={() =>
-                window.open(`https://wa.me/?text=${encodeURIComponent('Join SHIFT Airdrop: ' + REFERRAL_LINK)}`, '_blank')
+                window.open(`https://wa.me/?text=${encodeURIComponent('Join SHIFT Airdrop: ' + userData.referralLink)}`, '_blank')
               }
             >
               <span style={{ fontSize: 13 }}>🟢</span>
@@ -212,41 +265,16 @@ export default function RegisterPage() {
             </button>
             <button className="btn ghost sm" onClick={handleCopy}>
               <Icon name="copy" size={13} />
-              Copy Tweet
+              Copy Link
             </button>
           </div>
 
           {/* Referral list */}
-          <div className="section-title" style={{ marginBottom: 10 }}>Your Referrals ({REFERRALS.length})</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {REFERRALS.map((ref) => (
-              <div
-                key={ref.handle}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '8px 12px',
-                  background: 'var(--panel)',
-                  borderRadius: 8,
-                  border: '1px solid var(--border)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: ref.color,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)' }}>{ref.handle}</span>
-                </div>
-                <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>{ref.ago}</span>
-              </div>
-            ))}
+          <div className="section-title" style={{ marginBottom: 10 }}>
+            Your Referrals (0)
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-mute)', padding: '16px', textAlign: 'center', background: 'var(--panel)', borderRadius: 8 }}>
+            Refer friends to earn bonus XP and climb the queue
           </div>
         </div>
 
@@ -254,7 +282,7 @@ export default function RegisterPage() {
         <div className="card" style={{ marginBottom: 24 }}>
           <div className="section-title">Complete Tasks to Earn PTS</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {TASKS.map((task) => {
+            {TASK_TEMPLATES.map((task) => {
               const done = tasks[task.id] ?? false;
               return (
                 <div
@@ -302,7 +330,7 @@ export default function RegisterPage() {
             View Your Airdrop Dashboard →
           </Link>
           <div style={{ fontSize: 12, color: 'var(--text-mute)', marginTop: 10 }}>
-            {TOTAL_MEMBERS.toLocaleString()} members registered
+            {userData.totalMembers.toLocaleString()} members registered
           </div>
         </div>
       </div>
