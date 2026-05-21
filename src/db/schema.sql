@@ -121,22 +121,3 @@ CREATE INDEX IF NOT EXISTS idx_badges_wallet ON badges(wallet);
 CREATE INDEX IF NOT EXISTS idx_anti_farm_wallet ON anti_farm_log(wallet);
 CREATE INDEX IF NOT EXISTS idx_claim_mult_wallet ON claim_multiplier_log(wallet);
 CREATE INDEX IF NOT EXISTS idx_snag_queue_status ON snag_sync_queue(status);
-
-
--- ── Added by migration 002 ──
-
--- snag_multiplier_id tracks the SNAG multiplier record ID per user
--- (Added via ALTER in migration 002_snag_rebuild.sql)
-
--- SNAG completed social tasks (populated from inbound SNAG webhooks)
-CREATE TABLE IF NOT EXISTS snag_completed_tasks (
-  wallet       VARCHAR(64)  NOT NULL REFERENCES users(wallet) ON DELETE CASCADE,
-  task_id      VARCHAR(64)  NOT NULL,
-  completed_at TIMESTAMP    DEFAULT NOW(),
-  PRIMARY KEY (wallet, task_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_snag_completed_tasks_wallet
-  ON snag_completed_tasks(wallet);
-CREATE INDEX IF NOT EXISTS idx_snag_queue_status_backoff
-  ON snag_sync_queue(status, backoff_until);
