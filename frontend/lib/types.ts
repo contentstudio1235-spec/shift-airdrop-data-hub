@@ -81,13 +81,17 @@ export interface EventsResponse {
   events: ShiftEvent[];
 }
 
-export type WalletType = 'phantom' | 'metamask' | null;
+export type WalletType = 'phantom' | 'backpack' | 'solflare' | 'metamask' | null;
+export type WalletChain = 'solana' | 'evm' | null;
 
 export interface WalletContextValue {
   wallet: string | null;
   walletType: WalletType;
+  walletChain: WalletChain;
   connecting: boolean;
   connectPhantom: () => Promise<void>;
+  connectBackpack: () => Promise<void>;
+  connectSolflare: () => Promise<void>;
   connectMetaMask: () => Promise<void>;
   disconnect: () => void;
   shortWallet: (addr: string) => string;
