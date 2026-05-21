@@ -417,25 +417,77 @@ export default function AirdropPage() {
 
             {/* Referral card */}
             <div className="card">
-              <div className="section-title">Referral Link</div>
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div className="section-title">Refer to Move Up</div>
+
+              {/* Referral link */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                 <input
                   readOnly
                   value={REFERRAL_LINK}
                   className="input"
-                  style={{ flex: 1, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)' }}
+                  style={{ flex: 1, fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)' }}
                 />
                 <button
-                  className="btn mint"
+                  className="btn ghost"
+                  onClick={() => {
+                    navigator.clipboard.writeText(REFERRAL_LINK);
+                    toast('Referral link copied!');
+                  }}
+                  style={{ flexShrink: 0 }}
+                >
+                  <Icon name="copy" size={13} />
+                </button>
+              </div>
+
+              {/* Share buttons */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
+                <button
+                  className="btn ghost sm"
+                  onClick={() => {
+                    const text = encodeURIComponent(
+                      `I just joined the @ShiftRWA airdrop! 🚀\n\nTrade RWA tokens on Solana and earn XP. Join via my link:`
+                    );
+                    window.open(
+                      `https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(REFERRAL_LINK)}`,
+                      '_blank'
+                    );
+                  }}
+                >
+                  <Icon name="twitter" size={13} />
+                  Share on X
+                </button>
+                <button
+                  className="btn ghost sm"
+                  onClick={() =>
+                    window.open(`https://t.me/share/url?url=${encodeURIComponent(REFERRAL_LINK)}&text=Join+SHIFT+Airdrop`, '_blank')
+                  }
+                >
+                  <Icon name="telegram" size={13} />
+                  Telegram
+                </button>
+                <button
+                  className="btn ghost sm"
+                  onClick={() =>
+                    window.open(`https://wa.me/?text=${encodeURIComponent('Join SHIFT Airdrop: ' + REFERRAL_LINK)}`, '_blank')
+                  }
+                >
+                  <span style={{ fontSize: 13 }}>🟢</span>
+                  WhatsApp
+                </button>
+                <button
+                  className="btn ghost sm"
                   onClick={() => {
                     navigator.clipboard.writeText(REFERRAL_LINK);
                     toast('Referral link copied!');
                   }}
                 >
                   <Icon name="copy" size={13} />
+                  Copy Link
                 </button>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 8 }}>
+
+              {/* Info */}
+              <div style={{ fontSize: 11, color: 'var(--text-mute)', padding: '12px 14px', background: 'var(--panel)', borderRadius: 8, textAlign: 'center' }}>
                 Each referral earns you 300 bonus XP
               </div>
             </div>
