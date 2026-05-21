@@ -16,7 +16,7 @@ router.get('/:wallet/active', async (req, res) => {
       const { weeks, days, hours } = positionService.getPositionAge(pos.opened_at);
 
       // Base multiplier from token configuration (e.g., SOX3L = 1.25x)
-      const baseMultiplier = getTokenInfo(pos.asset_mint)?.baseMultiplier ?? 1.0;
+      const baseMultiplier = pos.asset_mint ? (getTokenInfo(pos.asset_mint)?.baseMultiplier ?? 1.0) : 1.0;
 
       // Time multiplier increases by 0.1 every 7 days (1 week). Capped at 3.0.
       const timeMultiplier = Math.min(1.0 + (weeks * 0.10), 3.0);
