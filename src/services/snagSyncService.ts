@@ -572,6 +572,129 @@ export class SnagSyncService {
 
     return 0;
   }
+
+  // ── Referral Links ──
+
+  /**
+   * Fetch user's referral links from SNAG (default + custom).
+   */
+  async getUserReferralLinks(wallet: string): Promise<{
+    defaultLink: string;
+    customLink: string | null;
+  }> {
+    if (!config.snagApiKey || !config.snagWebsiteId) {
+      return { defaultLink: '', customLink: null };
+    }
+
+    try {
+      let user = await queryOne<{ snag_user_id: string }>(
+        'SELECT snag_user_id FROM users WHERE wallet = $1',
+        [wallet]
+      );
+
+      let snagUserId = user?.snag_user_id;
+
+      // If no snag_user_id, search SNAG for the user
+      if (!snagUserId) {
+        const searchResponse = await this.client.get('/api/loyalty/accounts', {
+          params: {
+            websiteId: config.snagWebsiteId,
+            walletAddress: wallet,
+            limit: 1,
+          },
+        });
+
+        const foundAccount = searchResponse.data?.data?.[0];
+        if (foundAccount) {
+          snagUserId = foundAccount.id;
+          await execute(
+            'UPDATE users SET snag_user_id = $1 WHERE wallet = $2',
+            [snagUserId, wallet]
+          );
+        }
+      }
+
+      if (!snagUserId) {
+        console.log(`[SnagSync] User ${wallet.slice(0, 8)} not found in SNAG`);
+        return { defaultLink: '', customLink: null };
+      }
+
+      // Fetch referral links from SNAG
+      const response = await this.client.get(
+        `/api/loyalty/accounts/${snagUserId}/referral-links`,
+        { params: { websiteId: config.snagWebsiteId } }
+      );
+
+      const defaultLink = response.data?.defaultLink || '';
+      const customLink = response.data?.customLink || null;
+
+      // Cache in local DB
+      await execute(
+        `UPDATE users
+         SET snag_default_referral_link = $1,
+             snag_custom_referral_code = $2,
+             referral_link_synced_at = NOW()
+         WHERE wallet = $3`,
+        [defaultLink, customLink, wallet]
+      );
+
+      this.recordSuccess();
+      console.log(`[SnagSync] 🔗 Fetched referral links for ${wallet.slice(0, 8)}...`);
+
+      return { defaultLink, customLink };
+    } catch (error: any) {
+      this.recordFailure();
+      console.error('[SnagSync] Failed to fetch referral links:', error?.message);
+      return { defaultLink: '', customLink: null };
+    }
+  }
+
+  /**
+   * Set a custom referral code for the user in SNAG.
+   */
+  async setCustomReferralLink(wallet: string, customCode: string): Promise<void> {
+    if (!config.snagApiKey || !config.snagWebsiteId) {
+      throw new Error('SNAG not configured');
+    }
+
+    if (!customCode || customCode.length < 4 || customCode.length > 64) {
+      throw new Error('Custom code must be 4-64 characters');
+    }
+
+    try {
+      const user = await queryOne<{ snag_user_id: string }>(
+        'SELECT snag_user_id FROM users WHERE wallet = $1',
+        [wallet]
+      );
+
+      if (!user?.snag_user_id) {
+        throw new Error('User not found in SNAG');
+      }
+
+      // Update custom code in SNAG
+      await this.client.patch(
+        `/api/loyalty/accounts/${user.snag_user_id}/referral-links`,
+        { customCode },
+        { params: { websiteId: config.snagWebsiteId } }
+      );
+
+      // Cache in local DB
+      await execute(
+        `UPDATE users
+         SET snag_custom_referral_code = $1
+         WHERE wallet = $2`,
+        [customCode, wallet]
+      );
+
+      this.recordSuccess();
+      console.log(`[SnagSync] ✅ Custom referral code "${customCode}" set for ${wallet.slice(0, 8)}...`);
+    } catch (error: any) {
+      this.recordFailure();
+      const errMsg = error?.response?.data ? JSON.stringify(error.response.data) : error.message;
+      console.error('[SnagSync] Failed to set custom referral code:', errMsg);
+      throw new Error(`Failed to set custom referral code: ${errMsg}`);
+    }
+  }
 }
 
 export const snagSyncService = new SnagSyncService();

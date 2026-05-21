@@ -82,3 +82,42 @@ export async function fetchSnagPoints(wallet: string): Promise<number | null> {
   const data = await apiFetch<{ wallet: string; loyaltyPoints: number }>(`/api/snag/points/${wallet}`);
   return data?.loyaltyPoints ?? null;
 }
+
+export async function fetchReferralLinks(wallet: string): Promise<{
+  defaultLink: string;
+  customLink: string | null;
+} | null> {
+  if (!wallet) return null;
+  return apiFetch<{ wallet: string; defaultLink: string; customLink: string | null }>(
+    `/api/snag/referral/${wallet}`
+  ).then(data => data ? { defaultLink: data.defaultLink, customLink: data.customLink } : null);
+}
+
+export async function setCustomReferralCode(
+  wallet: string,
+  customCode: string
+): Promise<{ success: boolean; customLink: string } | null> {
+  if (!wallet || !customCode) return null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${API_URL}/api/snag/referral/${wallet}/custom`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customCode: customCode.toUpperCase() }),
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to set custom code');
+    }
+
+    return (await res.json()) as { success: boolean; customLink: string };
+  } catch (error) {
+    console.error('Failed to set custom referral code:', error);
+    return null;
+  }
+}

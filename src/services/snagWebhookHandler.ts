@@ -67,6 +67,11 @@ export class SnagWebhookHandler {
       return;
     }
 
+    if (effectiveType === 'referral.created' || effectiveType === 'loyalty.referral.created') {
+      await this.handleReferralCreated(data || event);
+      return;
+    }
+
     // Log unhandled events for debugging
     console.log(`[SnagWebhook] Unhandled event type: ${effectiveType}`);
   }
@@ -113,6 +118,54 @@ export class SnagWebhookHandler {
     );
 
     console.log(`[SnagWebhook] ✅ Task "${taskId}" completed for ${walletAddress.slice(0, 8)}...`);
+  }
+
+  private async handleReferralCreated(data: any): Promise<void> {
+    const referrerWallet = data?.referrerWalletAddress || data?.referrer_wallet_address;
+    const referredWallet = data?.referredWalletAddress || data?.referred_wallet_address;
+    const customCode = data?.customCode || data?.custom_code;
+
+    if (!referrerWallet || !referredWallet) {
+      console.warn('[SnagWebhook] Missing referrer or referred wallet in referral event');
+      return;
+    }
+
+    try {
+      // Ensure both users exist
+      await execute(
+        `INSERT INTO users (wallet) VALUES ($1) ON CONFLICT (wallet) DO NOTHING`,
+        [referrerWallet]
+      );
+      await execute(
+        `INSERT INTO users (wallet) VALUES ($1) ON CONFLICT (wallet) DO NOTHING`,
+        [referredWallet]
+      );
+
+      // Record referral in DB
+      await execute(
+        `INSERT INTO snag_referral_events (referrer_wallet, referred_wallet, referral_code_used, processed_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (referrer_wallet, referred_wallet) DO NOTHING`,
+        [referrerWallet, referredWallet, customCode || 'default']
+      );
+
+      // Update main referrals table if it exists
+      await execute(
+        `INSERT INTO referrals (referrer_wallet, referred_wallet, referral_code, snag_synced_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (referrer_wallet, referred_wallet) DO UPDATE SET snag_synced_at = NOW()`,
+        [referrerWallet, referredWallet, customCode || 'default']
+      ).catch(() => {
+        // Table may not have all columns, continue anyway
+      });
+
+      console.log(
+        `[SnagWebhook] ✅ Referral: ${referrerWallet.slice(0, 8)}... → ${referredWallet.slice(0, 8)}... ` +
+        `(code: ${customCode || 'default'})`
+      );
+    } catch (err) {
+      console.error('[SnagWebhook] Error processing referral event:', err);
+    }
   }
 }
 

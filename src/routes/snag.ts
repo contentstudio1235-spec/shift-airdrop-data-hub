@@ -58,4 +58,62 @@ router.get('/tasks/:wallet', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/snag/referral/:wallet
+ * Returns user's referral links from SNAG (default + custom).
+ */
+router.get('/referral/:wallet', async (req, res) => {
+  const { wallet } = req.params;
+
+  if (!wallet || wallet.length < 32) {
+    res.status(400).json({ error: 'Invalid wallet address' });
+    return;
+  }
+
+  try {
+    const referralLinks = await snagSyncService.getUserReferralLinks(wallet);
+    res.json({
+      wallet,
+      defaultLink: referralLinks.defaultLink,
+      customLink: referralLinks.customLink,
+    });
+  } catch (error) {
+    console.error('[SNAG] Failed to fetch referral links:', error);
+    res.status(500).json({ error: 'Failed to fetch referral links' });
+  }
+});
+
+/**
+ * POST /api/snag/referral/:wallet/custom
+ * Set a custom referral code for the user.
+ */
+router.post('/referral/:wallet/custom', async (req, res) => {
+  const { wallet } = req.params;
+  const { customCode } = req.body;
+
+  if (!wallet || wallet.length < 32) {
+    res.status(400).json({ error: 'Invalid wallet address' });
+    return;
+  }
+
+  if (!customCode || customCode.length < 4 || customCode.length > 64) {
+    res.status(400).json({ error: 'Custom code must be 4-64 characters' });
+    return;
+  }
+
+  try {
+    await snagSyncService.setCustomReferralLink(wallet, customCode.toUpperCase());
+    res.json({
+      success: true,
+      wallet,
+      customLink: customCode.toUpperCase(),
+    });
+  } catch (error: any) {
+    console.error('[SNAG] Failed to set custom referral code:', error);
+    res.status(500).json({
+      error: error.message || 'Failed to set custom referral code',
+    });
+  }
+});
+
 export default router;

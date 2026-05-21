@@ -11,7 +11,7 @@ import ProgressBar from '@/components/ProgressBar';
 import Icon from '@/components/Icon';
 import { useWallet } from '@/components/WalletContext';
 import { useToast } from '@/components/ToastContext';
-import { fetchDashboard, fetchPositions, fetchBadges, fetchEvents } from '@/lib/api';
+import { fetchDashboard, fetchPositions, fetchBadges, fetchEvents, fetchReferralLinks, setCustomReferralCode } from '@/lib/api';
 import { mergeBadges } from '@/lib/badges';
 import type { DashboardResponse, Position, ShiftEvent } from '@/lib/types';
 
@@ -45,6 +45,15 @@ export default function AirdropPage() {
   const [events, setEvents] = useState<ShiftEvent[]>([]);
   const [earnedBadges, setEarnedBadges] = useState<{ id?: string; name?: string; badge_name?: string; earned_at?: string }[]>([]);
 
+  // Referral links from SNAG
+  const [referralLinks, setReferralLinks] = useState<{
+    defaultLink: string;
+    customLink: string | null;
+  } | null>(null);
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [customCode, setCustomCode] = useState('');
+  const [savingCustomCode, setSavingCustomCode] = useState(false);
+
   const { activity: activityBadges, events: eventBadges } = mergeBadges(earnedBadges);
 
   // Fetch events once on mount
@@ -53,6 +62,25 @@ export default function AirdropPage() {
       if (res?.events) setEvents(res.events);
     });
   }, []);
+
+  // Fetch referral links when wallet connects
+  useEffect(() => {
+    if (!wallet) {
+      setReferralLinks(null);
+      return;
+    }
+
+    (async () => {
+      try {
+        const links = await fetchReferralLinks(wallet);
+        if (links) {
+          setReferralLinks(links);
+        }
+      } catch (error) {
+        console.error('Failed to fetch referral links:', error);
+      }
+    })();
+  }, [wallet]);
 
   // Fetch user data when wallet changes
   const loadUserData = useCallback(
@@ -91,7 +119,30 @@ export default function AirdropPage() {
     (b) => !badgeSearch || b.name.toLowerCase().includes(badgeSearch.toLowerCase())
   );
 
-  const REFERRAL_LINK = 'https://shiftrwa.xyz?ref=SHIFT-004271';
+  // Handle save custom referral code
+  const handleSaveCustomCode = async () => {
+    if (!wallet || !customCode || customCode.length < 4) {
+      toast('Code must be at least 4 characters');
+      return;
+    }
+
+    setSavingCustomCode(true);
+    try {
+      const result = await setCustomReferralCode(wallet, customCode);
+      if (result?.success) {
+        setReferralLinks((prev) =>
+          prev ? { ...prev, customLink: customCode } : null
+        );
+        toast('Custom code saved!');
+        setShowCustomModal(false);
+        setCustomCode('');
+      } else {
+        toast('Failed to save custom code');
+      }
+    } finally {
+      setSavingCustomCode(false);
+    }
+  };
 
   return (
     <>
@@ -419,78 +470,224 @@ export default function AirdropPage() {
             <div className="card">
               <div className="section-title">Refer to Move Up</div>
 
-              {/* Referral link */}
-              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                <input
-                  readOnly
-                  value={REFERRAL_LINK}
-                  className="input"
-                  style={{ flex: 1, fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)' }}
-                />
-                <button
-                  className="btn ghost"
-                  onClick={() => {
-                    navigator.clipboard.writeText(REFERRAL_LINK);
-                    toast('Referral link copied!');
-                  }}
-                  style={{ flexShrink: 0 }}
-                >
-                  <Icon name="copy" size={13} />
-                </button>
-              </div>
+              {!wallet ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-mute)', padding: '20px' }}>
+                  <p style={{ fontSize: 13, marginBottom: 12 }}>Connect your wallet to get your referral link</p>
+                  <button
+                    className="btn primary sm"
+                    onClick={() => setShowConnectPrompt(true)}
+                  >
+                    Connect Wallet
+                  </button>
+                </div>
+              ) : referralLinks?.defaultLink ? (
+                <>
+                  {/* Default SNAG Referral Link */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-mute)', marginBottom: 6, fontWeight: 600 }}>
+                      Your SNAG Referral Link
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        readOnly
+                        value={referralLinks.defaultLink}
+                        className="input"
+                        style={{ flex: 1, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)' }}
+                      />
+                      <button
+                        className="btn ghost"
+                        onClick={() => {
+                          navigator.clipboard.writeText(referralLinks.defaultLink);
+                          toast('Referral link copied!');
+                        }}
+                        style={{ flexShrink: 0 }}
+                      >
+                        <Icon name="copy" size={13} />
+                      </button>
+                    </div>
+                  </div>
 
-              {/* Share buttons */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
-                <button
-                  className="btn ghost sm"
-                  onClick={() => {
-                    const text = encodeURIComponent(
-                      `I just joined the @ShiftRWA airdrop! 🚀\n\nTrade RWA tokens on Solana and earn XP. Join via my link:`
-                    );
-                    window.open(
-                      `https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(REFERRAL_LINK)}`,
-                      '_blank'
-                    );
-                  }}
-                >
-                  <Icon name="twitter" size={13} />
-                  Share on X
-                </button>
-                <button
-                  className="btn ghost sm"
-                  onClick={() =>
-                    window.open(`https://t.me/share/url?url=${encodeURIComponent(REFERRAL_LINK)}&text=Join+SHIFT+Airdrop`, '_blank')
-                  }
-                >
-                  <Icon name="telegram" size={13} />
-                  Telegram
-                </button>
-                <button
-                  className="btn ghost sm"
-                  onClick={() =>
-                    window.open(`https://wa.me/?text=${encodeURIComponent('Join SHIFT Airdrop: ' + REFERRAL_LINK)}`, '_blank')
-                  }
-                >
-                  <span style={{ fontSize: 13 }}>🟢</span>
-                  WhatsApp
-                </button>
-                <button
-                  className="btn ghost sm"
-                  onClick={() => {
-                    navigator.clipboard.writeText(REFERRAL_LINK);
-                    toast('Referral link copied!');
-                  }}
-                >
-                  <Icon name="copy" size={13} />
-                  Copy Link
-                </button>
-              </div>
+                  {/* Custom Code Display */}
+                  {referralLinks.customLink && (
+                    <div style={{ marginBottom: 12, padding: '10px 12px', background: 'var(--mint-soft)', borderRadius: 8 }}>
+                      <div style={{ fontSize: 11, color: 'var(--mint)', fontWeight: 600, marginBottom: 4 }}>
+                        Your Custom Code
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-space)', color: 'var(--mint)' }}>
+                        {referralLinks.customLink}
+                      </div>
+                    </div>
+                  )}
 
-              {/* Info */}
-              <div style={{ fontSize: 11, color: 'var(--text-mute)', padding: '12px 14px', background: 'var(--panel)', borderRadius: 8, textAlign: 'center' }}>
-                Each referral earns you 300 bonus XP
-              </div>
+                  {/* Custom Code Button */}
+                  <button
+                    className="btn ghost sm"
+                    onClick={() => setShowCustomModal(true)}
+                    style={{ marginBottom: 16, width: '100%' }}
+                  >
+                    {referralLinks.customLink ? 'Edit Custom Code' : 'Create Custom Code'}
+                  </button>
+
+                  {/* Share buttons */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
+                    <button
+                      className="btn ghost sm"
+                      onClick={() => {
+                        const text = encodeURIComponent(
+                          `I just joined the @ShiftRWA airdrop! 🚀\n\nTrade RWA tokens on Solana and earn XP. Join via my link:`
+                        );
+                        window.open(
+                          `https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(referralLinks.defaultLink)}`,
+                          '_blank'
+                        );
+                      }}
+                    >
+                      <Icon name="twitter" size={13} />
+                      Share on X
+                    </button>
+                    <button
+                      className="btn ghost sm"
+                      onClick={() =>
+                        window.open(
+                          `https://t.me/share/url?url=${encodeURIComponent(referralLinks.defaultLink)}&text=Join+SHIFT+Airdrop`,
+                          '_blank'
+                        )
+                      }
+                    >
+                      <Icon name="telegram" size={13} />
+                      Telegram
+                    </button>
+                    <button
+                      className="btn ghost sm"
+                      onClick={() =>
+                        window.open(
+                          `https://wa.me/?text=${encodeURIComponent('Join SHIFT Airdrop: ' + referralLinks.defaultLink)}`,
+                          '_blank'
+                        )
+                      }
+                    >
+                      <span style={{ fontSize: 13 }}>🟢</span>
+                      WhatsApp
+                    </button>
+                    <button
+                      className="btn ghost sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(referralLinks.defaultLink);
+                        toast('Referral link copied!');
+                      }}
+                    >
+                      <Icon name="copy" size={13} />
+                      Copy Link
+                    </button>
+                  </div>
+
+                  {/* Info */}
+                  <div style={{ fontSize: 11, color: 'var(--text-mute)', padding: '12px 14px', background: 'var(--panel)', borderRadius: 8, textAlign: 'center' }}>
+                    Each referral earns you rewards through SNAG Loyalty
+                  </div>
+                </>
+              ) : (
+                <div style={{ textAlign: 'center', color: 'var(--text-mute)', padding: '20px' }}>
+                  <p style={{ fontSize: 12 }}>Loading referral link...</p>
+                </div>
+              )}
             </div>
+
+            {/* Custom Code Modal */}
+            {showCustomModal && (
+              <div
+                className="modal-backdrop"
+                onClick={() => setShowCustomModal(false)}
+                style={{ position: 'fixed', inset: 0, zIndex: 300 }}
+              >
+                <div
+                  className="card fade-in"
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    maxWidth: 420,
+                    zIndex: 301,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>
+                      {referralLinks?.customLink ? 'Edit Custom Code' : 'Create Custom Code'}
+                    </h3>
+                    <button
+                      onClick={() => setShowCustomModal(false)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        fontSize: 20,
+                        cursor: 'pointer',
+                        color: 'var(--text-mute)',
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <div style={{ marginBottom: 6 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-mute)', display: 'block', marginBottom: 6 }}>
+                      Custom Code (4-64 characters, uppercase)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g., GOGO or SHIFT-AXEL"
+                      value={customCode}
+                      onChange={(e) => setCustomCode(e.target.value.toUpperCase())}
+                      className="input"
+                      style={{ marginBottom: 12, fontSize: 14 }}
+                    />
+                    <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>
+                      Characters: {customCode.length}/64
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+                    <button
+                      className="btn ghost"
+                      onClick={() => setShowCustomModal(false)}
+                      disabled={savingCustomCode}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="btn primary"
+                      onClick={async () => {
+                        if (!customCode || customCode.length < 4) {
+                          toast('Code must be at least 4 characters');
+                          return;
+                        }
+
+                        setSavingCustomCode(true);
+                        try {
+                          const result = await setCustomReferralCode(wallet!, customCode);
+                          if (result?.success) {
+                            setReferralLinks((prev) =>
+                              prev ? { ...prev, customLink: customCode } : null
+                            );
+                            toast('Custom code saved!');
+                            setShowCustomModal(false);
+                            setCustomCode('');
+                          } else {
+                            toast('Failed to save custom code');
+                          }
+                        } finally {
+                          setSavingCustomCode(false);
+                        }
+                      }}
+                      disabled={savingCustomCode || customCode.length < 4}
+                    >
+                      {savingCustomCode ? 'Saving...' : 'Save Code'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
