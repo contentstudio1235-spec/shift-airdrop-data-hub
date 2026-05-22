@@ -237,11 +237,25 @@ export class SnagSyncService {
         succeeded.push(...chunk.map(e => e.wallet));
         console.log(`[SnagSync] 📊 Batch pushed ${chunk.length} XP entries (chunk ${i / BATCH_SIZE + 1})`);
       } catch (error: any) {
-        this.recordFailure();
-        const errMsg = error?.response?.data ? JSON.stringify(error.response.data) : error.message;
-        console.error(`[SnagSync] ❌ XP batch failed (chunk ${i / BATCH_SIZE + 1}):`, errMsg);
-        failed.push(...chunk.map(e => e.wallet));
-        await this.queueFailedEntries(chunk, 'xp', errMsg, batchId);
+        const errData = error?.response?.data;
+        const errMsg = errData ? JSON.stringify(errData) : error.message;
+        const isConfigError = errMsg?.includes('Loyalty currency not configured') ||
+                              errMsg?.includes('not configured') ||
+                              errMsg?.includes('not found');
+
+        if (isConfigError) {
+          // Config-level error — do NOT trigger circuit breaker or queue retry
+          console.warn(`[SnagSync] ⚠️  SNAG config issue (chunk ${i / BATCH_SIZE + 1}): ${errMsg}`);
+          console.warn(`[SnagSync] ⚠️  Check SNAG_LOYALTY_CURRENCY_ID is correct in SNAG admin dashboard`);
+          failed.push(...chunk.map(e => e.wallet));
+          // Do NOT call recordFailure() — this is not a transient failure
+        } else {
+          // Transient error — count against circuit breaker and queue retry
+          this.recordFailure();
+          console.error(`[SnagSync] ❌ XP batch failed (chunk ${i / BATCH_SIZE + 1}):`, errMsg);
+          failed.push(...chunk.map(e => e.wallet));
+          await this.queueFailedEntries(chunk, 'xp', errMsg, batchId);
+        }
       }
     }
 
@@ -290,18 +304,23 @@ export class SnagSyncService {
       try {
         const multiplierValue = Number(user.claim_multiplier);
 
+        if (!multiplierValue || isNaN(multiplierValue)) {
+          console.warn(`[SnagSync] Skipping multiplier sync for ${user.wallet.slice(0, 8)}: invalid value (${user.claim_multiplier})`);
+          continue;
+        }
+
         if (user.snag_multiplier_id) {
           // Update existing multiplier
           await this.client.patch(`/api/loyalty/multipliers/${user.snag_multiplier_id}`, {
-            value: multiplierValue,
+            multiplier: multiplierValue,
           });
         } else {
           // Create new multiplier
           const result = await this.client.post('/api/loyalty/multipliers', {
             websiteId: config.snagWebsiteId,
             walletAddress: user.wallet,
-            loyaltyCurrencyId: config.snagLoyaltyCurrencyId || undefined,
-            value: multiplierValue,
+            loyaltyCurrencyId: config.snagLoyaltyCurrencyId,
+            multiplier: multiplierValue,
             title: 'SHIFT Airdrop Claim Multiplier',
             description: `Earned through holding and trading SHIFT RWA tokens`,
             externalIdentifier: `shift-mult-${user.wallet.slice(0, 8)}`,
@@ -403,6 +422,14 @@ export class SnagSyncService {
          AND (backoff_until IS NULL OR backoff_until <= NOW())
        ORDER BY created_at ASC
        LIMIT 50`
+    );
+
+    // Clear out items stuck with config errors — these will never succeed without SNAG admin fix
+    await execute(
+      `UPDATE snag_sync_queue SET status = 'abandoned', attempts = 10
+       WHERE status = 'failed'
+         AND (error_message ILIKE '%loyalty currency not configured%'
+           OR error_message ILIKE '%not configured%')`
     );
 
     if (items.length === 0) return;
