@@ -90,7 +90,9 @@ export function LeaderboardTable({ wallet, limit = 100 }: Props) {
 
               <div className="col-level">
                 <div className="level-badge">
-                  <span className="level-icon">{entry.currentLevel?.icon || '🌱'}</span>
+                  <span className="level-icon">
+                    {(['🌱', '💎', '📈', '🐋', '👑'] as const)[Math.min(entry.level - 1, 4)] || '🌱'}
+                  </span>
                   <span className="level-name">{entry.levelName}</span>
                 </div>
               </div>

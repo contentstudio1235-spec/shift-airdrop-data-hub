@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS activity_feed (
 CREATE INDEX IF NOT EXISTS idx_activity_feed_wallet
   ON activity_feed(wallet, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_activity_feed_recent
-  ON activity_feed(created_at DESC) WHERE created_at > NOW() - INTERVAL '7 days';
+CREATE INDEX IF NOT EXISTS idx_activity_feed_created_at
+  ON activity_feed(created_at DESC);
 
 -- 2. Weekly missions (dynamic quest system)
 CREATE TABLE IF NOT EXISTS missions (
