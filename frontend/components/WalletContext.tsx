@@ -204,6 +204,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     // Support both new (window.phantom.solana) and legacy (window.solana) Phantom API
     const provider = window.phantom?.solana ?? window.solana;
     if (!provider?.isPhantom) {
+      console.log('[Wallet] Phantom not installed, opening phantom.app');
       window.open('https://phantom.app/', '_blank');
       return;
     }
@@ -211,11 +212,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     try {
       const resp = await provider.connect();
       const addr = resp.publicKey.toString();
+      console.log('[Wallet] Phantom connected:', addr.slice(0, 8) + '...');
       setWallet(addr);
       setWalletType('phantom');
       persist(addr, 'phantom');
-    } catch {
-      // user rejected
+    } catch (err) {
+      console.log('[Wallet] Phantom connection rejected or failed');
     } finally {
       setConnecting(false);
     }
@@ -270,6 +272,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const connectMetaMask = useCallback(async () => {
     if (typeof window === 'undefined') return;
     if (!window.ethereum) {
+      console.log('[Wallet] MetaMask not installed, opening metamask.io');
       window.open('https://metamask.io/', '_blank');
       return;
     }
@@ -278,12 +281,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' }) as string[];
       const addr = accounts[0];
       if (addr) {
+        console.log('[Wallet] MetaMask connected:', addr.slice(0, 8) + '...');
         setWallet(addr);
         setWalletType('metamask');
         persist(addr, 'metamask');
       }
-    } catch {
-      // user rejected
+    } catch (err) {
+      console.log('[Wallet] MetaMask connection rejected or failed');
     } finally {
       setConnecting(false);
     }
@@ -296,6 +300,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     // Disconnect the wallet before clearing state (capture walletType first)
     const currentType = walletType;
+    console.log('[Wallet] Disconnecting wallet type:', currentType);
 
     if (currentType === 'phantom') {
       const provider = window.phantom?.solana ?? window.solana;
@@ -307,12 +312,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     } else if (currentType === 'metamask' && window.ethereum) {
       // MetaMask doesn't have a disconnect method; the state clearing below is sufficient.
       // The wallet session persists in MetaMask but our app forgets it.
+      console.log('[Wallet] MetaMask disconnected (session cleared locally)');
     }
 
     // Clear local state and storage
     setWallet(null);
     setWalletType(null);
     clear();
+    console.log('[Wallet] Wallet state cleared from localStorage');
   }, [walletType, clear]);
 
   // ── Utility ───────────────────────────────────────────────────────────────
