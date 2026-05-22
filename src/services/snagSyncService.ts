@@ -223,6 +223,7 @@ export class SnagSyncService {
       try {
         await this.client.post('/api/loyalty/transactions', {
           websiteId: config.snagWebsiteId,
+          organizationId: config.snagOrganizationId, // Some SNAG versions require this
           description: `SHIFT Airdrop XP sync — batch ${batchId}`,
           entries: chunk.map((e, idx) => ({
             walletAddress: e.wallet,
@@ -318,12 +319,13 @@ export class SnagSyncService {
           // Create new multiplier
           const result = await this.client.post('/api/loyalty/multipliers', {
             websiteId: config.snagWebsiteId,
-            walletAddress: user.wallet,
+            organizationId: config.snagOrganizationId,
             loyaltyCurrencyId: config.snagLoyaltyCurrencyId,
             multiplier: multiplierValue,
             title: 'SHIFT Airdrop Claim Multiplier',
             description: `Earned through holding and trading SHIFT RWA tokens`,
             externalIdentifier: `shift-mult-${user.wallet.slice(0, 8)}`,
+            walletAddress: user.wallet,
           });
 
           const multiplierIdCreated = result.data?.id;
