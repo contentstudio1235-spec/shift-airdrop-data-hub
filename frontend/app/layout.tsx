@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google';
+import { Analytics } from '@vercel/analytics/react';
 import './globals.css';
 import { WalletProvider } from '@/components/WalletContext';
 import { ToastProvider } from '@/components/ToastContext';
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ToastProvider>
             <NavBar />
             <main>{children}</main>
+            <Analytics />
           </ToastProvider>
         </WalletProvider>
       </body>
