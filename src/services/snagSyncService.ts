@@ -405,7 +405,7 @@ export class SnagSyncService {
     // Batch-retry XP items
     if (xpItems.length > 0) {
       const entries = xpItems.map(i => {
-        const p = JSON.parse(i.payload);
+        const p = typeof i.payload === 'string' ? JSON.parse(i.payload) : i.payload;
         return { wallet: i.wallet, xpDelta: p.xpDelta || p.amount || 0, queueId: i.id, attempts: i.attempts };
       });
 
@@ -433,7 +433,7 @@ export class SnagSyncService {
     // Retry badge items individually
     for (const item of badgeItems) {
       try {
-        const p = JSON.parse(item.payload);
+        const p = typeof item.payload === 'string' ? JSON.parse(item.payload) : item.payload;
         await this.awardBadgeInSnag(item.wallet, p.badge_name as BadgeName);
         await execute(
           `UPDATE snag_sync_queue SET status = 'completed', last_attempt_at = NOW() WHERE id = $1`,
