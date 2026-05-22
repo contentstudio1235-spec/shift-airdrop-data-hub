@@ -220,23 +220,31 @@ export class SnagSyncService {
     for (let i = 0; i < entries.length; i += BATCH_SIZE) {
       const chunk = entries.slice(i, i + BATCH_SIZE);
 
+      // Filter out zero/negative XP amounts — SNAG requires amount > 0
+      const validEntries = chunk.filter(e => e.xpDelta > 0);
+
+      if (validEntries.length === 0) {
+        console.log(`[SnagSync] ⏭️  Skipping chunk ${i / BATCH_SIZE + 1} — no entries with XP > 0`);
+        continue;
+      }
+
       try {
         await this.client.post('/api/loyalty/transactions', {
           websiteId: config.snagWebsiteId,
           organizationId: config.snagOrganizationId, // Some SNAG versions require this
           description: `SHIFT Airdrop XP sync — batch ${batchId}`,
-          entries: chunk.map((e, idx) => ({
+          entries: validEntries.map((e, idx) => ({
             walletAddress: e.wallet,
             loyaltyCurrencyId: config.snagLoyaltyCurrencyId,
             direction: 'credit',
-            amount: Math.floor(e.xpDelta),
+            amount: Math.ceil(e.xpDelta), // Use ceil to avoid rounding down to 0
             idempotencyKey: `${batchId}-${i + idx}`.slice(0, 32),
           })),
         });
 
         this.recordSuccess();
-        succeeded.push(...chunk.map(e => e.wallet));
-        console.log(`[SnagSync] 📊 Batch pushed ${chunk.length} XP entries (chunk ${i / BATCH_SIZE + 1})`);
+        succeeded.push(...validEntries.map(e => e.wallet));
+        console.log(`[SnagSync] 📊 Batch pushed ${validEntries.length}/${chunk.length} XP entries (chunk ${i / BATCH_SIZE + 1})`);
       } catch (error: any) {
         const errData = error?.response?.data;
         const errMsg = errData ? JSON.stringify(errData) : error.message;
@@ -248,14 +256,14 @@ export class SnagSyncService {
           // Config-level error — do NOT trigger circuit breaker or queue retry
           console.warn(`[SnagSync] ⚠️  SNAG config issue (chunk ${i / BATCH_SIZE + 1}): ${errMsg}`);
           console.warn(`[SnagSync] ⚠️  Check SNAG_LOYALTY_CURRENCY_ID is correct in SNAG admin dashboard`);
-          failed.push(...chunk.map(e => e.wallet));
+          failed.push(...validEntries.map(e => e.wallet));
           // Do NOT call recordFailure() — this is not a transient failure
         } else {
           // Transient error — count against circuit breaker and queue retry
           this.recordFailure();
           console.error(`[SnagSync] ❌ XP batch failed (chunk ${i / BATCH_SIZE + 1}):`, errMsg);
-          failed.push(...chunk.map(e => e.wallet));
-          await this.queueFailedEntries(chunk, 'xp', errMsg, batchId);
+          failed.push(...validEntries.map(e => e.wallet));
+          await this.queueFailedEntries(validEntries, 'xp', errMsg, batchId);
         }
       }
     }
