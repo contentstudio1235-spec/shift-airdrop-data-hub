@@ -192,7 +192,12 @@ export class SnagSyncService {
       return { succeeded: [], failed: entries.map(e => e.wallet) };
     }
 
-    if (!config.snagLoyaltyCurrencyId && !config.snagXpRuleId) {
+    if (!config.snagLoyaltyCurrencyId) {
+      // No loyalty currency configured — skip XP sync
+      if (!config.snagXpRuleId) {
+        console.log('[SnagSync] ⚠️  No loyalty currency ID or XP rule ID configured — skipping XP sync');
+        return { succeeded: [], failed: entries.map(e => e.wallet) };
+      }
       // Fall back to rule-based if currency ID not set
       console.log('[SnagSync] No loyalty currency ID, using rule-based XP push');
       const succeeded: string[] = [];
@@ -262,7 +267,12 @@ export class SnagSyncService {
    * Called as step 6 of fullSync. Tracks snag_multiplier_id per user.
    */
   async syncMultipliers(): Promise<void> {
-    if (!this.checkCircuit() || !config.snagWebsiteId) return;
+    if (!this.checkCircuit() || !config.snagWebsiteId || !config.snagLoyaltyCurrencyId) {
+      if (!config.snagLoyaltyCurrencyId) {
+        console.log('[SnagSync] Multiplier sync skipped: SNAG_LOYALTY_CURRENCY_ID not configured');
+      }
+      return;
+    }
 
     const users = await query<{ wallet: string; claim_multiplier: number; snag_multiplier_id: string | null }>(
       `SELECT wallet, claim_multiplier, snag_multiplier_id
