@@ -292,18 +292,27 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   // ── Disconnect ────────────────────────────────────────────────────────────
 
   const disconnect = useCallback(() => {
+    if (typeof window === 'undefined') return;
+
+    // Disconnect the wallet before clearing state (capture walletType first)
+    const currentType = walletType;
+
+    if (currentType === 'phantom') {
+      const provider = window.phantom?.solana ?? window.solana;
+      provider?.disconnect().catch(() => {});
+    } else if (currentType === 'backpack' && window.backpack?.solana) {
+      window.backpack.solana.disconnect().catch(() => {});
+    } else if (currentType === 'solflare' && window.solflare) {
+      window.solflare.disconnect().catch(() => {});
+    } else if (currentType === 'metamask' && window.ethereum) {
+      // MetaMask doesn't have a disconnect method; the state clearing below is sufficient.
+      // The wallet session persists in MetaMask but our app forgets it.
+    }
+
+    // Clear local state and storage
     setWallet(null);
     setWalletType(null);
     clear();
-    if (typeof window === 'undefined') return;
-    if (walletType === 'phantom') {
-      const provider = window.phantom?.solana ?? window.solana;
-      provider?.disconnect().catch(() => {});
-    } else if (walletType === 'backpack' && window.backpack?.solana) {
-      window.backpack.solana.disconnect().catch(() => {});
-    } else if (walletType === 'solflare' && window.solflare) {
-      window.solflare.disconnect().catch(() => {});
-    }
   }, [walletType, clear]);
 
   // ── Utility ───────────────────────────────────────────────────────────────

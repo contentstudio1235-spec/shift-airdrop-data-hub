@@ -6,8 +6,8 @@ import posthog from 'posthog-js';
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Initialize PostHog
-    posthog.init('phc_YOUR_POSTHOG_KEY_HERE', {
-      api_host: 'https://us.i.posthog.com',
+    posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY!, {
+      api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST,
       loaded: (ph) => {
         if (process.env.NODE_ENV === 'development') ph.debug();
       },

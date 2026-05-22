@@ -11,63 +11,70 @@ interface ConnectWalletModalProps {
 
 function PhantomIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="128" height="128" rx="26" fill="#AB9FF2" />
-      <path
-        d="M109.8 64c0 25.4-20.6 46-46 46S17.8 89.4 17.8 64s20.6-46 46-46 46 20.6 46 46z"
-        fill="#fff"
-      />
-      <path
-        d="M82.4 55.2c-1.4-7.6-8-13.2-15.8-13.2-8.8 0-16 7.2-16 16v8.4c0 1.6 1.2 2.8 2.8 2.8h2c5.6 0 10.4-3.6 12-8.8.8-2.8 3.2-4.8 6-4.8 3.4 0 6.2 2.8 6.2 6.2 0 3.8-2.8 6.8-6.4 7.2-2 .2-3.4 2-3.4 4v.8c0 3.2 3.6 5 6.2 3.2 7.2-4.8 11-13.8 6.4-21.8z"
-        fill="#AB9FF2"
-      />
-      <circle cx="54.8" cy="69.6" r="3.6" fill="#AB9FF2" />
-      <circle cx="67.6" cy="69.6" r="3.6" fill="#AB9FF2" />
+    <svg width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="phantomGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style={{ stopColor: '#AB9FF2', stopOpacity: 1 }} />
+          <stop offset="100%" style={{ stopColor: '#9B8FE0', stopOpacity: 1 }} />
+        </linearGradient>
+      </defs>
+      <rect width="100" height="100" rx="20" fill="url(#phantomGrad)" />
+      <path d="M50 25 C35 25, 25 35, 25 50 C25 65, 35 75, 50 75 C65 75, 75 65, 75 50 C75 35, 65 25, 50 25 Z" fill="white" opacity="0.9" />
+      <path d="M40 45 L45 55 L55 45 M45 55 L45 65 M55 45 L55 65" stroke="#AB9FF2" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
 function BackpackIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="128" height="128" rx="26" fill="#E33E3F" />
-      <path
-        d="M44 44h40a8 8 0 0 1 8 8v32a8 8 0 0 1-8 8H44a8 8 0 0 1-8-8V52a8 8 0 0 1 8-8z"
-        fill="#fff"
-      />
-      <path d="M56 44v-6a8 8 0 0 1 16 0v6" stroke="#E33E3F" strokeWidth="4" fill="none" strokeLinecap="round" />
-      <rect x="58" y="60" width="12" height="10" rx="2" fill="#E33E3F" />
-      <path d="M58 65h12" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
+    <svg width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" rx="20" fill="#DC2F2F" />
+      <g fill="white">
+        {/* Backpack main body */}
+        <path d="M 35 35 L 65 35 L 65 65 L 35 65 Z" />
+        {/* Straps */}
+        <rect x="42" y="25" width="5" height="10" rx="2" />
+        <rect x="53" y="25" width="5" height="10" rx="2" />
+        {/* Pocket */}
+        <rect x="45" y="48" width="10" height="8" rx="1" fill="#DC2F2F" />
+      </g>
     </svg>
   );
 }
 
 function SolflareIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="128" height="128" rx="26" fill="#FC6B00" />
-      <path
-        d="M64 20 L108 64 L64 108 L20 64 Z"
-        fill="none" stroke="#fff" strokeWidth="6"
-      />
-      <path d="M64 36 L92 64 L64 92 L36 64 Z" fill="#fff" opacity="0.7" />
-      <circle cx="64" cy="64" r="10" fill="#fff" />
+    <svg width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" rx="20" fill="#FF8D4D" />
+      {/* Diamond/Star shape - Solflare brand */}
+      <g fill="white">
+        <path d="M 50 20 L 70 50 L 50 80 L 30 50 Z" fillOpacity="1" />
+        <path d="M 50 35 L 65 50 L 50 65 L 35 50 Z" fill="#FF8D4D" />
+        <circle cx="50" cy="50" r="8" fill="white" />
+      </g>
     </svg>
   );
 }
 
 function MetaMaskIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="128" height="128" rx="26" fill="#F6851B" />
-      <path d="M96 24 L66 47 L71 35 Z" fill="#E2761B" stroke="#E2761B" strokeWidth="0.5" />
-      <path d="M32 24 L61.6 47.2 L57.2 35 Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
-      <path d="M85.6 76.4 L77.6 89.2 L94 93.6 L98.4 76.8 Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
-      <path d="M29.6 76.8 L34 93.6 L50.4 89.2 L42.4 76.4 Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
-      <path d="M49.6 55.6 L45.2 62.4 L61.2 63.2 L60.8 46 Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
-      <path d="M78.4 55.6 L67.2 45.6 L66.8 63.2 L82.8 62.4 Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
-      <path d="M50.4 89.2 L60.4 84.4 L51.6 77.2 Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
-      <path d="M67.6 84.4 L77.6 89.2 L76.4 77.2 Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
+    <svg width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" rx="20" fill="#F6851B" />
+      {/* Simplified Fox head silhouette - MetaMask brand */}
+      <g fill="white" fillOpacity="0.95">
+        {/* Left ear */}
+        <path d="M 30 30 L 35 20 L 40 30 Z" />
+        {/* Right ear */}
+        <path d="M 60 30 L 65 20 L 70 30 Z" />
+        {/* Face */}
+        <ellipse cx="50" cy="55" rx="22" ry="25" />
+        {/* Left eye */}
+        <circle cx="40" cy="50" r="4" fill="#F6851B" />
+        {/* Right eye */}
+        <circle cx="60" cy="50" r="4" fill="#F6851B" />
+        {/* Nose */}
+        <polygon points="50,60 48,65 52,65" fill="#F6851B" />
+      </g>
     </svg>
   );
 }
