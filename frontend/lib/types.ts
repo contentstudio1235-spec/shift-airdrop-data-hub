@@ -81,7 +81,7 @@ export interface EventsResponse {
   events: ShiftEvent[];
 }
 
-export type WalletType = 'phantom' | 'backpack' | 'solflare' | 'magiceden' | 'metamask-solana' | 'metamask' | null;
+export type WalletType = 'phantom' | 'backpack' | 'solflare' | 'magiceden' | 'metamask-solana' | 'metamask' | 'trustwallet' | null;
 export type WalletChain = 'solana' | 'evm' | null;
 
 export interface WalletContextValue {
@@ -95,6 +95,7 @@ export interface WalletContextValue {
   connectMagicEden: () => Promise<void>;
   connectMetaMaskSolana: () => Promise<void>;
   connectMetaMask: () => Promise<void>;
+  connectTrustWallet: () => Promise<void>;
   disconnect: () => void;
   shortWallet: (addr: string) => string;
 }

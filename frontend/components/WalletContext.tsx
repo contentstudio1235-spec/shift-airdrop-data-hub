@@ -82,9 +82,23 @@ declare global {
     // MetaMask / EVM (eth_requestAccounts)
     ethereum?: {
       isMetaMask?: boolean;
+      isTrust?: boolean;
       request: (args: { method: string; params?: unknown[] }) => Promise<string[]>;
       on: (event: string, handler: (...args: unknown[]) => void) => void;
       removeListener: (event: string, handler: (...args: unknown[]) => void) => void;
+    };
+    // Trust Wallet
+    trustwallet?: {
+      isTrustWallet?: boolean;
+      solana?: {
+        connect: () => Promise<{ publicKey: { toString: () => string } }>;
+        disconnect: () => Promise<void>;
+        on: (event: string, handler: (...args: unknown[]) => void) => void;
+        off: (event: string, handler: (...args: unknown[]) => void) => void;
+      };
+      ethereum?: {
+        request: (args: { method: string }) => Promise<string[]>;
+      };
     };
     // Wallet Standard registry — MetaMask Solana registers here
     getWallets?: () => {
@@ -107,6 +121,7 @@ const WalletContext = createContext<WalletContextValue>({
   connectMagicEden: async () => {},
   connectMetaMaskSolana: async () => {},
   connectMetaMask: async () => {},
+  connectTrustWallet: async () => {},
   disconnect: () => {},
   shortWallet: (a) => a,
 });
@@ -115,7 +130,7 @@ const WalletContext = createContext<WalletContextValue>({
 
 function chainFor(type: WalletType): WalletChain {
   if (type === 'metamask') return 'evm';
-  if (type === 'phantom' || type === 'backpack' || type === 'solflare' || type === 'magiceden' || type === 'metamask-solana') return 'solana';
+  if (type === 'phantom' || type === 'backpack' || type === 'solflare' || type === 'magiceden' || type === 'metamask-solana' || type === 'trustwallet') return 'solana';
   return null;
 }
 
@@ -486,6 +501,55 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [persist]);
 
+  // ── Connect: Trust Wallet ─────────────────────────────────────────────────
+  // Trust Wallet injects window.trustwallet.solana on mobile/extension.
+  // Falls back to window.ethereum.isTrust for EVM-only installs.
+
+  const connectTrustWallet = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+
+    // Prefer Solana (SHIFT is Solana-based)
+    if (window.trustwallet?.solana) {
+      setConnecting(true);
+      try {
+        const resp = await window.trustwallet.solana.connect();
+        const addr = resp.publicKey.toString();
+        console.log('[Wallet] Trust Wallet (Solana) connected:', addr.slice(0, 8) + '...');
+        setWallet(addr);
+        setWalletType('trustwallet');
+        persist(addr, 'trustwallet');
+      } catch {
+        console.log('[Wallet] Trust Wallet connection rejected');
+      } finally {
+        setConnecting(false);
+      }
+      return;
+    }
+
+    // Fallback: Trust Wallet EVM (window.ethereum.isTrust)
+    if (window.ethereum?.isTrust || (window.ethereum as any)?.isTrustWallet) {
+      setConnecting(true);
+      try {
+        const accounts = await window.ethereum!.request({ method: 'eth_requestAccounts' }) as string[];
+        if (accounts?.length) {
+          const addr = accounts[0];
+          console.log('[Wallet] Trust Wallet (EVM) connected:', addr.slice(0, 8) + '...');
+          setWallet(addr);
+          setWalletType('metamask'); // treat as EVM wallet
+          persist(addr, 'metamask');
+        }
+      } catch {
+        console.log('[Wallet] Trust Wallet EVM rejected');
+      } finally {
+        setConnecting(false);
+      }
+      return;
+    }
+
+    // Not installed — open download page
+    window.open('https://trustwallet.com/download', '_blank');
+  }, [persist]);
+
   // ── Disconnect ────────────────────────────────────────────────────────────
 
   const disconnect = useCallback(() => {
@@ -504,6 +568,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       window.solflare.disconnect().catch(() => {});
     } else if (currentType === 'magiceden' && window.magicEden) {
       window.magicEden.disconnect().catch(() => {});
+    } else if (currentType === 'trustwallet' && window.trustwallet?.solana) {
+      window.trustwallet.solana.disconnect().catch(() => {});
     } else if (currentType === 'metamask-solana' && typeof window.getWallets === 'function') {
       const wallets = window.getWallets().get();
       const mm = wallets.find(w => w.name === 'MetaMask' && w.chains.some(c => c.startsWith('solana:')));
@@ -544,6 +610,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         connectMagicEden,
         connectMetaMaskSolana,
         connectMetaMask,
+        connectTrustWallet,
         disconnect,
         shortWallet,
       }}
