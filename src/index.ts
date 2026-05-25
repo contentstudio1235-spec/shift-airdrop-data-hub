@@ -20,6 +20,7 @@ import leaderboardRoutes from './routes/leaderboard';
 import badgesRoutes from './routes/badges';
 import eventsRoutes from './routes/events';
 import snagRoutes from './routes/snag';
+import authRoutes from './routes/auth';
 
 const app = express();
 
@@ -68,6 +69,7 @@ app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/badges', badgesRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/snag', snagRoutes);
+app.use('/api/auth', authRoutes);
 
 // ── Health Check ──
 

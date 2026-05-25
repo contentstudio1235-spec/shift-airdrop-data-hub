@@ -409,6 +409,42 @@ export class SnagSyncService {
     }
   }
 
+  // ── Social Rule Completion ──
+
+  /**
+   * Mark a social task rule as complete in SNAG.
+   * Called after we've independently verified the action
+   * (Discord guild join, Twitter follow, Telegram membership).
+   * Uses the rule completion endpoint so SNAG records the activity.
+   */
+  async awardSocialRule(wallet: string, ruleId: string, points: number): Promise<void> {
+    if (!ruleId || !this.checkCircuit()) {
+      if (!ruleId) console.log('[SnagSync] No rule ID supplied, skipping social rule award');
+      return;
+    }
+
+    try {
+      await this.client.post(`/api/loyalty/rules/${ruleId}/complete`, {
+        walletAddress: wallet,
+        amount: points,
+        idempotencyKey: `social-${ruleId}-${wallet}`.slice(0, 64),
+      });
+
+      this.recordSuccess();
+      console.log(`[SnagSync] ✅ Social rule ${ruleId} completed for ${wallet.slice(0, 8)}... (+${points} pts)`);
+    } catch (error: any) {
+      this.recordFailure();
+      const errMsg = error?.response?.data ? JSON.stringify(error.response.data) : error.message;
+      console.error(`[SnagSync] Social rule completion failed, queueing:`, errMsg);
+      await this.queueFailedEntries(
+        [{ wallet, rule_id: ruleId, points }],
+        'social_rule',
+        errMsg,
+        `social-${ruleId}`
+      );
+    }
+  }
+
   // ── Queue Retry ──
 
   /**

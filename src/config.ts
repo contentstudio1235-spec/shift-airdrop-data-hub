@@ -48,6 +48,24 @@ export const config = {
     first_trade:    process.env.SNAG_FIRST_TRADE_RULE_ID || '',
   },
 
+  // App URL (for OAuth redirects)
+  appUrl: process.env.APP_URL || 'https://airdrop.shiftrwa.xyz',
+  backendUrl: process.env.BACKEND_URL || 'https://shift-airdrop-backend.onrender.com',
+
+  // Discord OAuth App
+  discordClientId:     process.env.DISCORD_CLIENT_ID || '',
+  discordClientSecret: process.env.DISCORD_CLIENT_SECRET || '',
+  discordGuildId:      process.env.DISCORD_GUILD_ID || '',  // SHIFT Discord server ID
+
+  // Twitter/X OAuth 2.0 App
+  twitterClientId:     process.env.TWITTER_CLIENT_ID || '',
+  twitterClientSecret: process.env.TWITTER_CLIENT_SECRET || '',
+  twitterAccountId:    process.env.TWITTER_ACCOUNT_ID || '', // @ShiftRWA numeric user ID
+
+  // Telegram Bot
+  telegramBotToken:  process.env.TELEGRAM_BOT_TOKEN || '',
+  telegramChannelId: process.env.TELEGRAM_CHANNEL_ID || '', // @shiftrwa or numeric ID
+
   // Anti-Farm
   antiFarm: {
     minPositionSizeUSD: parseFloat(process.env.MIN_POSITION_SIZE_USD || '10'),
