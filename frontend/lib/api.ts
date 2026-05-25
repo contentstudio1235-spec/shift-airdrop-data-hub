@@ -188,3 +188,13 @@ export async function fetchLeaderboardContext(
     `/api/dashboard/${wallet}/leaderboard-context?context=${context}`
   );
 }
+
+// ── SNAG & Referral Helpers ────────────────────────────────
+
+export function getLoyaltyPageUrl(): string {
+  return process.env.NEXT_PUBLIC_SNAG_LOYALTY_URL || 'https://loyalty.shiftrwa.xyz';
+}
+
+export function getAirdropUrl(): string {
+  return process.env.NEXT_PUBLIC_AIRDROP_URL || 'https://airdrop.shiftrwa.xyz';
+}

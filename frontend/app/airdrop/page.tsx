@@ -603,23 +603,24 @@ export default function AirdropPage() {
                 </div>
               ) : referralLinks?.defaultLink ? (
                 <>
-                  {/* Default SNAG Referral Link */}
+                  {/* Branded SHIFT Referral Link (using /r/[code] route) */}
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ fontSize: 11, color: 'var(--text-mute)', marginBottom: 6, fontWeight: 600 }}>
-                      Your SNAG Referral Link
+                      Your Branded Referral Link
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <input
                         readOnly
-                        value={referralLinks.defaultLink}
+                        value={`${process.env.NEXT_PUBLIC_AIRDROP_URL || 'https://airdrop.shiftrwa.xyz'}/r/${referralLinks.customLink || referralLinks.defaultLink.split('/').pop() || 'ref'}`}
                         className="input"
                         style={{ flex: 1, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-mute)' }}
                       />
                       <button
                         className="btn ghost"
                         onClick={() => {
-                          navigator.clipboard.writeText(referralLinks.defaultLink);
-                          toast('Referral link copied!');
+                          const brandedLink = `${process.env.NEXT_PUBLIC_AIRDROP_URL || 'https://airdrop.shiftrwa.xyz'}/r/${referralLinks.customLink || referralLinks.defaultLink.split('/').pop() || 'ref'}`;
+                          navigator.clipboard.writeText(brandedLink);
+                          toast('Branded referral link copied!');
                         }}
                         style={{ flexShrink: 0 }}
                       >
@@ -654,11 +655,12 @@ export default function AirdropPage() {
                     <button
                       className="btn ghost sm"
                       onClick={() => {
+                        const brandedLink = `${process.env.NEXT_PUBLIC_AIRDROP_URL || 'https://airdrop.shiftrwa.xyz'}/r/${referralLinks.customLink || referralLinks.defaultLink.split('/').pop() || 'ref'}`;
                         const text = encodeURIComponent(
                           `I just joined the @ShiftRWA airdrop! 🚀\n\nTrade RWA tokens on Solana and earn XP. Join via my link:`
                         );
                         window.open(
-                          `https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(referralLinks.defaultLink)}`,
+                          `https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(brandedLink)}`,
                           '_blank'
                         );
                       }}
@@ -668,24 +670,26 @@ export default function AirdropPage() {
                     </button>
                     <button
                       className="btn ghost sm"
-                      onClick={() =>
+                      onClick={() => {
+                        const brandedLink = `${process.env.NEXT_PUBLIC_AIRDROP_URL || 'https://airdrop.shiftrwa.xyz'}/r/${referralLinks.customLink || referralLinks.defaultLink.split('/').pop() || 'ref'}`;
                         window.open(
-                          `https://t.me/share/url?url=${encodeURIComponent(referralLinks.defaultLink)}&text=Join+SHIFT+Airdrop`,
+                          `https://t.me/share/url?url=${encodeURIComponent(brandedLink)}&text=Join+SHIFT+Airdrop`,
                           '_blank'
-                        )
-                      }
+                        );
+                      }}
                     >
                       <Icon name="telegram" size={13} />
                       Telegram
                     </button>
                     <button
                       className="btn ghost sm"
-                      onClick={() =>
+                      onClick={() => {
+                        const brandedLink = `${process.env.NEXT_PUBLIC_AIRDROP_URL || 'https://airdrop.shiftrwa.xyz'}/r/${referralLinks.customLink || referralLinks.defaultLink.split('/').pop() || 'ref'}`;
                         window.open(
-                          `https://wa.me/?text=${encodeURIComponent('Join SHIFT Airdrop: ' + referralLinks.defaultLink)}`,
+                          `https://wa.me/?text=${encodeURIComponent('Join SHIFT Airdrop: ' + brandedLink)}`,
                           '_blank'
-                        )
-                      }
+                        );
+                      }}
                     >
                       <span style={{ fontSize: 13 }}>🟢</span>
                       WhatsApp
@@ -693,8 +697,9 @@ export default function AirdropPage() {
                     <button
                       className="btn ghost sm"
                       onClick={() => {
-                        navigator.clipboard.writeText(referralLinks.defaultLink);
-                        toast('Referral link copied!');
+                        const brandedLink = `${process.env.NEXT_PUBLIC_AIRDROP_URL || 'https://airdrop.shiftrwa.xyz'}/r/${referralLinks.customLink || referralLinks.defaultLink.split('/').pop() || 'ref'}`;
+                        navigator.clipboard.writeText(brandedLink);
+                        toast('Branded referral link copied!');
                       }}
                     >
                       <Icon name="copy" size={13} />
@@ -702,9 +707,20 @@ export default function AirdropPage() {
                     </button>
                   </div>
 
+                  {/* Go to Quests Button */}
+                  <button
+                    className="btn primary sm"
+                    onClick={() => {
+                      window.open(process.env.NEXT_PUBLIC_SNAG_LOYALTY_URL || 'https://loyalty.shiftrwa.xyz', '_blank');
+                    }}
+                    style={{ marginBottom: 16, width: '100%' }}
+                  >
+                    Go to Quests
+                  </button>
+
                   {/* Info */}
                   <div style={{ fontSize: 11, color: 'var(--text-mute)', padding: '12px 14px', background: 'var(--panel)', borderRadius: 8, textAlign: 'center' }}>
-                    Each referral earns you rewards through SNAG Loyalty
+                    Share your branded link to earn referral rewards. Complete quests on SNAG for bonus XP!
                   </div>
                 </>
               ) : (

@@ -399,28 +399,39 @@ export default function RegisterContent() {
 
         {/* Referral Bonus Banner */}
         {refBonus && refBonus.multiplierType !== 'none' && (
-          <div
-            style={{
-              background: 'linear-gradient(135deg, rgba(34,197,94,0.1), rgba(16,185,129,0.05))',
-              border: '1px solid rgba(34,197,94,0.3)',
-              borderRadius: 12,
-              padding: '16px 20px',
-              marginBottom: 24,
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ fontSize: 12, color: 'var(--mint)', fontWeight: 600, letterSpacing: '0.08em', marginBottom: 4 }}>
-              ✨ SPECIAL INVITE
+          <div style={{ marginBottom: 24 }}>
+            <div
+              style={{
+                background: 'linear-gradient(135deg, rgba(34,197,94,0.1), rgba(16,185,129,0.05))',
+                border: '1px solid rgba(34,197,94,0.3)',
+                borderRadius: 12,
+                padding: '16px 20px',
+                marginBottom: 12,
+                textAlign: 'center',
+              }}
+            >
+              <div style={{ fontSize: 12, color: 'var(--mint)', fontWeight: 600, letterSpacing: '0.08em', marginBottom: 4 }}>
+                ✨ SPECIAL INVITE
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
+                {refBonus.displayName || 'A KOL'} invited you!
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-mute)', marginBottom: 8 }}>
+                Get a {Math.round((refBonus.multiplierBonus - 1) * 100)}% bonus multiplier on {refBonus.multiplierType === 'permanent' ? 'all' : 'new'} XP
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>
+                Code: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{refBonus.code}</span>
+              </div>
             </div>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
-              {refBonus.displayName || 'A KOL'} invited you!
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--text-mute)', marginBottom: 8 }}>
-              Get a {Math.round((refBonus.multiplierBonus - 1) * 100)}% bonus multiplier on {refBonus.multiplierType === 'permanent' ? 'all' : 'new'} XP
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>
-              Code: <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{refBonus.code}</span>
-            </div>
+            <button
+              className="btn secondary sm"
+              onClick={() => {
+                window.open(process.env.NEXT_PUBLIC_SNAG_LOYALTY_URL || 'https://loyalty.shiftrwa.xyz', '_blank');
+              }}
+              style={{ width: '100%' }}
+            >
+              View All Quests on SNAG
+            </button>
           </div>
         )}
 
