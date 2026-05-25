@@ -7,6 +7,7 @@ import { Position } from '../types';
 import { positionService } from './positionService';
 import { antiFarmService } from './antiFarmService';
 import { getTokenInfo } from '../config/tokens';
+import { getLaunchPhase } from '../config/launchMultipliers';
 
 export class XPEngine {
   // ── Core Formulas ──
@@ -23,23 +24,24 @@ export class XPEngine {
   }
 
   /**
-   * Weekly XP for a single position.
-   * weekly_position_XP = log₁₀(max(position_size_USD, 10)) × 100 × position_multiplier
+   * Weekly XP for a single position (includes launch event multiplier).
+   * weekly_position_XP = log₁₀(max(position_size_USD, 10)) × 100 × position_multiplier × launch_multiplier
    */
-  calculateWeeklyXP(positionSizeUSD: number, multiplier: number): number {
-    return Math.log10(Math.max(positionSizeUSD, 10)) * 100 * multiplier;
+  calculateWeeklyXP(positionSizeUSD: number, multiplier: number, launchMultiplier: number = 1.0): number {
+    return Math.log10(Math.max(positionSizeUSD, 10)) * 100 * multiplier * launchMultiplier;
   }
 
   /**
    * Calculate XP earned since last calculation for a position.
-   * Prorates the weekly XP based on hours elapsed.
+   * Prorates the weekly XP based on hours elapsed (includes launch event multiplier).
    */
   calculateXPSinceLastCalc(
     positionSizeUSD: number,
     multiplier: number,
-    hoursSinceLastCalc: number
+    hoursSinceLastCalc: number,
+    launchMultiplier: number = 1.0
   ): number {
-    const weeklyXP = this.calculateWeeklyXP(positionSizeUSD, multiplier);
+    const weeklyXP = this.calculateWeeklyXP(positionSizeUSD, multiplier, launchMultiplier);
     const hoursInWeek = 7 * 24;
     return (weeklyXP / hoursInWeek) * hoursSinceLastCalc;
   }
@@ -47,10 +49,10 @@ export class XPEngine {
   // ── Cron Job: Recalculate All XP ──
 
   /**
-   * Main recalculation job — runs every hour.
+   * Main recalculation job — runs every minute (or configurable interval).
    * 1. Get all open positions
    * 2. Skip positions under 24h hold (anti-farm)
-   * 3. Calculate position multiplier based on age
+   * 3. Calculate position multiplier based on age + apply launch event multiplier
    * 4. Calculate XP earned since last calc
    * 5. Update position records
    * 6. Aggregate XP per wallet → update users.total_xp
@@ -58,6 +60,10 @@ export class XPEngine {
   async recalculateAllXP(): Promise<{ usersUpdated: number; positionsProcessed: number }> {
     console.log('[XPEngine] Starting recalculation...');
     const now = new Date();
+
+    // Get current launch event multiplier (typically 3.0x week 1, 2.0x week 2, 1.0x week 3+)
+    const launchPhase = getLaunchPhase(now);
+    const launchMultiplier = launchPhase.multiplier;
 
     // 1. Get all open positions
     const openPositions = await positionService.getAllOpenPositions();
@@ -82,14 +88,15 @@ export class XPEngine {
       const lastCalc = position.last_xp_calc ? new Date(position.last_xp_calc) : new Date(position.opened_at);
       const hoursSinceLastCalc = (now.getTime() - lastCalc.getTime()) / (1000 * 60 * 60);
 
-      // Skip if less than 1 hour since last calc
-      if (hoursSinceLastCalc < 0.9) continue;
+      // Skip if less than 0.5 hours since last calc
+      if (hoursSinceLastCalc < 0.5) continue;
 
-      // Calculate new XP earned
+      // Calculate new XP earned (now includes launch event multiplier)
       const xpDelta = this.calculateXPSinceLastCalc(
         Number(position.position_size_usd),
         multiplier,
-        hoursSinceLastCalc
+        hoursSinceLastCalc,
+        launchMultiplier
       );
 
       const newTotalXP = Number(position.xp_generated) + xpDelta;
@@ -116,7 +123,9 @@ export class XPEngine {
       }
     }
 
-    console.log(`[XPEngine] ✅ Recalc complete: ${positionsProcessed} positions, ${usersUpdated} users`);
+    console.log(
+      `[XPEngine] ✅ Recalc: ${positionsProcessed} pos, ${usersUpdated} users | launch: ${launchPhase.label} (${launchMultiplier}x)`
+    );
     return { usersUpdated, positionsProcessed };
   }
 
@@ -132,30 +141,40 @@ export class XPEngine {
   }
 
   /**
-   * Get XP breakdown per position for a wallet.
+   * Get XP breakdown per position for a wallet (includes launch event multiplier).
    */
   async getXPBreakdown(wallet: string): Promise<Array<{
     asset: string;
     positionSizeUSD: number;
     weeksHeld: number;
     multiplier: number;
+    launchMultiplier: number;
+    effectiveMultiplier: number;
     xpPerWeek: number;
+    xpPerHour: number;
     totalXP: number;
   }>> {
     const positions = await positionService.getActivePositions(wallet);
     const now = new Date();
+    const launchPhase = getLaunchPhase(now);
 
     return positions.map((p) => {
       const { weeks } = positionService.getPositionAge(p.opened_at, now);
       const multiplier = this.calculatePositionMultiplier(weeks);
-      const xpPerWeek = this.calculateWeeklyXP(Number(p.position_size_usd), multiplier);
+      const launchMultiplier = launchPhase.multiplier;
+      const effectiveMultiplier = multiplier * launchMultiplier;
+      const xpPerWeek = this.calculateWeeklyXP(Number(p.position_size_usd), multiplier, launchMultiplier);
+      const xpPerHour = xpPerWeek / (7 * 24);
 
       return {
         asset: p.asset,
         positionSizeUSD: Number(p.position_size_usd),
         weeksHeld: weeks,
         multiplier,
+        launchMultiplier,
+        effectiveMultiplier,
         xpPerWeek,
+        xpPerHour,
         totalXP: Number(p.xp_generated),
       };
     });

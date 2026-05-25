@@ -3,7 +3,14 @@
 // RWA Tokens for position holding multiplier
 // ============================================================
 
-export const TRACKED_TOKENS = {
+interface TokenInfo {
+  mint: string;
+  symbol: string;
+  name: string;
+  baseMultiplier: number;
+}
+
+export const TRACKED_TOKENS: Record<string, TokenInfo> = {
   // Tesla 2x Long
   TSL2L: {
     mint: '6afjZE5Qv9WF5K1adBgTxtWyenJ7ZerH6BVAzmoSHFT',
@@ -51,7 +58,7 @@ export const TRACKED_TOKENS = {
     name: 'Shift S&P500 3x Long',
     baseMultiplier: 1.15, // 15% base bonus
   },
-} as const;
+};
 
 // Get token info by mint address
 export function getTokenInfo(mint: string) {

@@ -12,9 +12,10 @@ let isQueueRunning = false;
  * Initialize all cron jobs.
  */
 export function initCronJobs(): void {
-  // ── Full sync every 10 minutes ──
-  // Keeps Render free-tier container active and recalculates all XP/badges/multipliers
-  cron.schedule('*/10 * * * *', async () => {
+  // ── Full sync every minute ──
+  // Recalculates all XP/badges/multipliers with near-real-time updates.
+  // (Keeps Render free-tier container active as bonus side effect)
+  cron.schedule('* * * * *', async () => {
     if (isRunning) {
       console.log('[Cron] Previous sync job still running, skipping...');
       return;
