@@ -110,9 +110,14 @@ router.post('/referral/:wallet/custom', async (req, res) => {
     });
   } catch (error: any) {
     console.error('[SNAG] Failed to set custom referral code:', error);
-    res.status(500).json({
-      error: error.message || 'Failed to set custom referral code',
-    });
+    // CRITICAL FIX: Sanitize error messages to prevent information leakage
+    let userMessage = 'Failed to set custom referral code';
+    if (error.message?.includes('already in use')) {
+      userMessage = 'This code is already in use. Please try another.';
+    } else if (error.message?.includes('invalid') || error.message?.includes('format')) {
+      userMessage = 'Code format is invalid. Use only letters, numbers, and hyphens.';
+    }
+    res.status(500).json({ error: userMessage });
   }
 });
 

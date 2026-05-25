@@ -82,3 +82,51 @@ export const config = {
     maxMultiplier: 5.0,   // cap
   },
 } as const;
+
+/**
+ * CRITICAL FIX: Validate SNAG configuration on startup.
+ * Ensures all required SNAG identifiers are configured before the service starts.
+ */
+export function validateSnagConfig(): {
+  valid: boolean;
+  errors: string[];
+} {
+  const errors: string[] = [];
+
+  if (!config.snagApiKey) {
+    errors.push('SNAG_API_KEY is not configured');
+  }
+
+  if (!config.snagOrganizationId) {
+    errors.push('SNAG_ORGANIZATION_ID is not configured');
+  }
+
+  if (!config.snagWebsiteId) {
+    errors.push('SNAG_WEBSITE_ID is not configured');
+  }
+
+  if (!config.snagWebhookSecret) {
+    errors.push('SNAG_WEBHOOK_SECRET is not configured (dev mode: webhooks will be accepted without signature verification)');
+  }
+
+  if (!config.snagLoyaltyCurrencyId) {
+    errors.push('SNAG_LOYALTY_CURRENCY_ID is not configured (loyalty point syncing will not work)');
+  }
+
+  // Social rule IDs are optional but warn if missing
+  const socialRules = config.snagSocialRuleIds;
+  if (!socialRules.follow_x) {
+    errors.push('SNAG_FOLLOW_X_RULE_ID is not configured (X follow task will not work)');
+  }
+  if (!socialRules.join_discord) {
+    errors.push('SNAG_JOIN_DISCORD_RULE_ID is not configured (Discord join task will not work)');
+  }
+  if (!socialRules.join_telegram) {
+    errors.push('SNAG_JOIN_TELEGRAM_RULE_ID is not configured (Telegram join task will not work)');
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}

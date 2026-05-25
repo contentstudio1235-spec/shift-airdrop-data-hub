@@ -129,26 +129,7 @@ export default function AirdropPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch referral links when wallet connects
-  useEffect(() => {
-    if (!wallet) {
-      setReferralLinks(null);
-      return;
-    }
-
-    (async () => {
-      try {
-        const links = await fetchReferralLinks(wallet);
-        if (links) {
-          setReferralLinks(links);
-        }
-      } catch (error) {
-        console.error('Failed to fetch referral links:', error);
-      }
-    })();
-  }, [wallet]);
-
-  // Fetch user data when wallet changes
+  // Fetch user data AND referral links together when wallet changes (CRITICAL FIX: Prevent race condition)
   const loadUserData = useCallback(
     async (isRefresh = false) => {
       if (!wallet) return;
@@ -156,14 +137,18 @@ export default function AirdropPage() {
       else setLoading(true);
 
       try {
-        const [dash, pos, bdg] = await Promise.all([
+        const [dash, pos, bdg, links] = await Promise.all([
           fetchDashboard(wallet),
           fetchPositions(wallet),
           fetchBadges(wallet),
+          fetchReferralLinks(wallet), // Fetch referral links together to prevent race condition
         ]);
         if (dash) setDashboard(dash);
         if (pos?.positions) setPositions(pos.positions);
         if (bdg?.badges) setEarnedBadges(bdg.badges as never[]);
+        if (links) setReferralLinks(links); // Set referral links atomically with dashboard data
+      } catch (error) {
+        console.error('Failed to fetch user data:', error);
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -547,7 +532,9 @@ export default function AirdropPage() {
                 </div>
                 <div className="kv" style={{ padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
                   <span className="k">Referral XP</span>
-                  <span className="v" style={{ color: 'var(--amber)' }}>900</span>
+                  <span className="v" style={{ color: 'var(--amber)' }}>
+                    {dashboard ? Math.round(dashboard.totalXp * 0.3).toLocaleString() : '—'}
+                  </span>
                 </div>
                 <div className="kv" style={{ padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
                   <span className="k">Pending unlock</span>

@@ -81,6 +81,40 @@ export interface EventsResponse {
   events: ShiftEvent[];
 }
 
+// ── Referral API Types ──────────────────────────────────────────────────
+
+export interface ReferralCodeInfo {
+  code: string;
+  displayName: string | null;
+  isKol: boolean;
+  multiplierBonus: number;
+  multiplierType: 'dynamic' | 'permanent' | 'none';
+}
+
+export interface ReferralLinks {
+  defaultLink: string;
+  customLink: string | null;
+}
+
+export interface SetCustomCodeResponse {
+  success: boolean;
+  customLink: string;
+}
+
+export interface UserReferrals {
+  wallet: string;
+  referrals: Array<{
+    wallet: string;
+    codeUsed: string;
+    isKol: boolean;
+    bonusMultiplier: number;
+    bonusType: string;
+    referredAt: string;
+    refereeXp: number;
+  }>;
+  totalReferrals: number;
+}
+
 export type WalletType = 'phantom' | 'backpack' | 'solflare' | 'magiceden' | 'metamask-solana' | 'metamask' | 'trustwallet' | null;
 export type WalletChain = 'solana' | 'evm' | null;
 

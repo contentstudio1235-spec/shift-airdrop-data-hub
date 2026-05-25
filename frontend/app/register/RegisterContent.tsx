@@ -100,14 +100,21 @@ export default function RegisterContent() {
 
   // ── Resolve referral code via API ──
   const resolveRefCode = async (code: string) => {
-    if (!code || code.length < 4) {
+    if (!code || code.length < 4 || code.length > 32) {
+      setRefBonus(null);
+      return;
+    }
+
+    // Validate code format locally before querying API (prevent invalid requests)
+    const normalized = code.trim().toUpperCase();
+    if (!/^[A-Z0-9-]{4,32}$/.test(normalized)) {
       setRefBonus(null);
       return;
     }
 
     try {
       setRefLoading(true);
-      const res = await fetch(`${API_URL}/api/airdrop/ref/${code}`);
+      const res = await fetch(`${API_URL}/api/airdrop/ref/${encodeURIComponent(normalized)}`);
       if (!res.ok) {
         setRefBonus(null);
         return;

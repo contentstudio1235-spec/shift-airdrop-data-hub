@@ -11,12 +11,33 @@ import { execute, queryOne } from '../db/pool';
 export class SnagWebhookHandler {
   /**
    * Verify SNAG Stratus webhook signature (HMAC-SHA256).
-   * If no secret is configured (dev mode), returns true.
+   * CRITICAL HARDENING: Strict verification in production.
+   * If no secret is configured (dev mode), logs warning and returns true.
    */
   static verifySignature(rawBody: string, signature: string): boolean {
     if (!config.snagWebhookSecret) {
-      console.warn('[SnagWebhook] No webhook secret configured — bypassing signature check (dev mode)');
-      return true;
+      const isDev = config.nodeEnv !== 'production';
+      const msg = '[SnagWebhook] No webhook secret configured — bypassing signature check';
+      if (isDev) {
+        console.warn(msg + ' (dev mode)');
+      } else {
+        console.error(msg + ' ❌ CRITICAL: This is insecure in production!');
+      }
+      return isDev; // Reject in production if secret is missing
+    }
+
+    // Validate signature format first (prevent malformed requests)
+    if (!signature || typeof signature !== 'string') {
+      console.warn('[SnagWebhook] Missing or invalid signature header');
+      return false;
+    }
+
+    // Extract hex portion (format: "sha256=<hex>")
+    const signatureHex = signature.replace(/^sha256=/, '');
+    if (!signatureHex || signatureHex === signature) {
+      // Invalid format or missing prefix
+      console.warn('[SnagWebhook] Invalid signature format (expected "sha256=<hex>")');
+      return false;
     }
 
     const expected = crypto
@@ -25,11 +46,13 @@ export class SnagWebhookHandler {
       .digest('hex');
 
     try {
+      // Use timing-safe comparison to prevent timing attacks
       return crypto.timingSafeEqual(
         Buffer.from(expected, 'hex'),
-        Buffer.from(signature.replace(/^sha256=/, ''), 'hex')
+        Buffer.from(signatureHex, 'hex')
       );
-    } catch {
+    } catch (err) {
+      console.warn('[SnagWebhook] Signature verification failed (buffer conversion error):', err);
       return false;
     }
   }

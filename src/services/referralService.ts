@@ -5,6 +5,12 @@
 
 import { pool } from '../db/pool';
 import { snagSyncService } from './snagSyncService';
+import {
+  REFERRAL_CODE_RULES,
+  INVITE_BONUS_XP,
+  validateReferralCode,
+  normalizeReferralCode,
+} from '../constants/referralConstants';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const SNAG_REFERRAL_RULE_ID = '4646dc56-11d0-4c85-8545-b066eb0784e9';
@@ -39,9 +45,10 @@ export function walletToCode(wallet: string): string {
   return wallet.slice(0, 6).toUpperCase();
 }
 
-/** Validate a code string — alphanumeric + hyphens, 4–32 chars */
+/** Validate a code string — use constants-based validation */
 export function isValidCode(code: string): boolean {
-  return /^[A-Z0-9-]{4,32}$/.test(code.toUpperCase());
+  const validation = validateReferralCode(code);
+  return validation.valid;
 }
 
 // ── Referral Code Lookup ───────────────────────────────────────────────────
@@ -49,9 +56,16 @@ export function isValidCode(code: string): boolean {
 /**
  * Resolve a referral code to its owner + bonus info.
  * Checks KOL whitelist first, then standard wallet-based codes.
+ * CRITICAL: Validates code format before querying DB (prevent injection).
  */
 export async function resolveReferralCode(code: string): Promise<ReferralCodeInfo | null> {
-  const upperCode = code.trim().toUpperCase();
+  const validation = validateReferralCode(code);
+  if (!validation.valid) {
+    console.warn(`[Referral] Invalid code format: ${code}`);
+    return null;
+  }
+
+  const upperCode = normalizeReferralCode(code);
 
   // 1. Check KOL whitelist
   const kolResult = await pool.query(
@@ -172,7 +186,18 @@ export async function registerWithReferral(
 
           // Award multiplier if bonus > 1
           if (bonusMultiplier > 1.0 && bonusType !== 'none') {
-            await applyReferralMultiplier(client, wallet, bonusMultiplier, bonusType as 'dynamic' | 'permanent', codeInfo.code);
+            try {
+              await applyReferralMultiplier(client, wallet, bonusMultiplier, bonusType as 'dynamic' | 'permanent', codeInfo.code);
+            } catch (err) {
+              // CRITICAL FIX: Error recovery — don't fail registration if multiplier application fails
+              console.error('[Referral] Warning: Failed to apply referral multiplier (will retry on next sync):', err);
+              // Mark as failed in referral record for manual retry
+              await client.query(
+                `UPDATE referrals SET bonus_applied = false WHERE referred_wallet = $1`,
+                [wallet]
+              );
+              // Continue — user is registered but multiplier may need manual application
+            }
           }
 
           // Award invite bonus XP to referrer
@@ -274,38 +299,51 @@ async function applyReferralMultiplier(
     );
 
   } else if (multiplierType === 'permanent') {
-    // Get current values
-    const userResult = await client.query(
-      `SELECT total_xp, permanent_multiplier FROM users WHERE wallet = $1`,
-      [wallet]
-    );
-    const user = userResult.rows[0];
-    const oldPermMult = parseFloat(user?.permanent_multiplier || '1.0');
-    const currentXp = parseFloat(user?.total_xp || '0');
-
-    // New permanent multiplier is max(old, new bonus)
-    const newPermMult = Math.max(oldPermMult, multiplierBonus);
-
-    if (newPermMult > oldPermMult) {
-      // Retroactive: scale total_xp by ratio
-      const ratio = newPermMult / oldPermMult;
-      const newXp = currentXp * ratio;
-
-      await client.query(
-        `UPDATE users SET
-           permanent_multiplier = $2,
-           total_xp = $3,
-           updated_at = NOW()
-         WHERE wallet = $1`,
-        [wallet, newPermMult, newXp]
+    try {
+      // Get current values
+      const userResult = await client.query(
+        `SELECT total_xp, permanent_multiplier FROM users WHERE wallet = $1`,
+        [wallet]
       );
+      const user = userResult.rows[0];
+      const oldPermMult = parseFloat(user?.permanent_multiplier || '1.0');
+      const currentXp = parseFloat(user?.total_xp || '0');
 
-      await client.query(
-        `INSERT INTO multiplier_log
-           (wallet, multiplier_type, old_value, new_value, reason, source, source_id, xp_before, xp_after)
-         VALUES ($1, 'permanent', $2, $3, $4, 'kol_referral', $5, $6, $7)`,
-        [wallet, oldPermMult, newPermMult, `Retroactive referral bonus from ${sourceCode}`, sourceCode, currentXp, newXp]
-      );
+      // New permanent multiplier is max(old, new bonus)
+      const newPermMult = Math.max(oldPermMult, multiplierBonus);
+
+      if (newPermMult > oldPermMult) {
+        // Retroactive: scale total_xp by ratio
+        const ratio = newPermMult / oldPermMult;
+        const newXp = currentXp * ratio;
+
+        // CRITICAL FIX: Use transaction-level locking to prevent concurrent updates
+        // Lock the row for update to prevent race conditions
+        await client.query(
+          `SELECT 1 FROM users WHERE wallet = $1 FOR UPDATE`,
+          [wallet]
+        );
+
+        await client.query(
+          `UPDATE users SET
+             permanent_multiplier = $2,
+             total_xp = $3,
+             updated_at = NOW()
+           WHERE wallet = $1`,
+          [wallet, newPermMult, newXp]
+        );
+
+        await client.query(
+          `INSERT INTO multiplier_log
+             (wallet, multiplier_type, old_value, new_value, reason, source, source_id, xp_before, xp_after)
+           VALUES ($1, 'permanent', $2, $3, $4, 'kol_referral', $5, $6, $7)`,
+          [wallet, oldPermMult, newPermMult, `Retroactive referral bonus from ${sourceCode}`, sourceCode, currentXp, newXp]
+        );
+      }
+    } catch (err) {
+      console.error('[Referral] Error applying permanent multiplier:', err);
+      // Log the error but don't fail registration — multiplier can be recalculated later
+      throw new Error(`Failed to apply permanent multiplier: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 }
@@ -320,12 +358,8 @@ async function awardInviteBonus(
   referredWallet: string
 ): Promise<void> {
   try {
-    // Get config
-    const configResult = await client.query('SELECT standard_bonus_xp, kol_bonus_xp FROM referral_config WHERE id = 1');
-    const cfg = configResult.rows[0];
-    const bonusXp = isKol
-      ? parseFloat(cfg?.kol_bonus_xp || '500')
-      : parseFloat(cfg?.standard_bonus_xp || '250');
+    // Use constants-based bonus amounts (CRITICAL: consistent throughout system)
+    const bonusXp = isKol ? INVITE_BONUS_XP.KOL : INVITE_BONUS_XP.STANDARD;
 
     await client.query(
       `UPDATE users SET

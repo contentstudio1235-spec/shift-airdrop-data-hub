@@ -9,6 +9,10 @@ import type {
   LeaderboardResponse,
   EventsResponse,
   HealthResponse,
+  ReferralCodeInfo,
+  ReferralLinks,
+  SetCustomCodeResponse,
+  UserReferrals,
 } from './types';
 import type {
   LevelInfo,
@@ -89,10 +93,7 @@ export async function fetchSnagPoints(wallet: string): Promise<number | null> {
   return data?.loyaltyPoints ?? null;
 }
 
-export async function fetchReferralLinks(wallet: string): Promise<{
-  defaultLink: string;
-  customLink: string | null;
-} | null> {
+export async function fetchReferralLinks(wallet: string): Promise<ReferralLinks | null> {
   if (!wallet) return null;
   return apiFetch<{ wallet: string; defaultLink: string; customLink: string | null }>(
     `/api/snag/referral/${wallet}`
@@ -102,7 +103,7 @@ export async function fetchReferralLinks(wallet: string): Promise<{
 export async function setCustomReferralCode(
   wallet: string,
   customCode: string
-): Promise<{ success: boolean; customLink: string } | null> {
+): Promise<SetCustomCodeResponse | null> {
   if (!wallet || !customCode) return null;
 
   try {
@@ -121,11 +122,27 @@ export async function setCustomReferralCode(
       throw new Error(err.error || 'Failed to set custom code');
     }
 
-    return (await res.json()) as { success: boolean; customLink: string };
+    return (await res.json()) as SetCustomCodeResponse;
   } catch (error) {
     console.error('Failed to set custom referral code:', error);
     return null;
   }
+}
+
+/**
+ * Resolve a referral code to get bonus info (used by registration flow).
+ */
+export async function resolveReferralCode(code: string): Promise<ReferralCodeInfo | null> {
+  if (!code || code.length < 4) return null;
+  return apiFetch<ReferralCodeInfo>(`/api/airdrop/ref/${encodeURIComponent(code)}`);
+}
+
+/**
+ * Get all referrals made by a wallet.
+ */
+export async function fetchUserReferrals(wallet: string): Promise<UserReferrals | null> {
+  if (!wallet) return null;
+  return apiFetch<UserReferrals>(`/api/airdrop/referrals/${wallet}`);
 }
 
 // ── Gamification API ───────────────────────────────────────

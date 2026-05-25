@@ -6,7 +6,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import { config } from './config';
+import { config, validateSnagConfig } from './config';
 import { initCronJobs } from './cron/jobs';
 import { pool } from './db/pool';
 
@@ -117,6 +117,13 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 // ── Start Server ──
 
 async function startServer() {
+  // CRITICAL FIX: Validate SNAG configuration on startup
+  const snagValidation = validateSnagConfig();
+  if (!snagValidation.valid) {
+    console.warn('[SNAG] ⚠️  Configuration issues detected:');
+    snagValidation.errors.forEach(err => console.warn(`  - ${err}`));
+  }
+
   // Test database connection before starting (with 5 second timeout)
   try {
     const connectionPromise = pool.connect();
