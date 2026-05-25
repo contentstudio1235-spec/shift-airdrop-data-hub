@@ -205,9 +205,11 @@ export default function NavBar() {
       {showWalletModal && <ConnectWalletModal onClose={() => setShowWalletModal(false)} />}
 
       {/* Close wallet menu on outside click */}
+      {/* z-index MUST be < 100 (nav-root z-index) so the backdrop sits behind the */}
+      {/* dropdown — backdrop-filter on nav-root creates its own stacking context   */}
       {showWalletMenu && (
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 100 }}
+          style={{ position: 'fixed', inset: 0, zIndex: 50 }}
           onClick={() => setShowWalletMenu(false)}
         />
       )}

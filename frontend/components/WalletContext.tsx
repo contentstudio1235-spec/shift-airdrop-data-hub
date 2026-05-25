@@ -11,6 +11,29 @@ import type { WalletChain, WalletContextValue, WalletType } from '@/lib/types';
 
 // ── Window augmentation ──────────────────────────────────────────────────────
 
+/** Wallet Standard account shape (MetaMask Solana / any Wallet Standard wallet) */
+interface WalletStandardAccount {
+  address: string;
+  publicKey: Uint8Array;
+}
+
+/** Minimal Wallet Standard interface used for MetaMask Solana detection */
+interface WalletStandardWallet {
+  name: string;
+  icon: string;
+  chains: string[];
+  features: {
+    'standard:connect'?: {
+      connect: (opts?: { silent?: boolean }) => Promise<{ accounts: WalletStandardAccount[] }>;
+    };
+    'standard:disconnect'?: { disconnect: () => Promise<void> };
+    'standard:events'?: {
+      on: (event: 'change', handler: (args: { accounts?: WalletStandardAccount[] }) => void) => () => void;
+    };
+  };
+  accounts: WalletStandardAccount[];
+}
+
 declare global {
   interface Window {
     // Phantom — new API (window.phantom.solana) + legacy (window.solana)
@@ -56,12 +79,17 @@ declare global {
       on: (event: string, handler: (...args: unknown[]) => void) => void;
       off: (event: string, handler: (...args: unknown[]) => void) => void;
     };
-    // MetaMask / EVM
+    // MetaMask / EVM (eth_requestAccounts)
     ethereum?: {
       isMetaMask?: boolean;
       request: (args: { method: string; params?: unknown[] }) => Promise<string[]>;
       on: (event: string, handler: (...args: unknown[]) => void) => void;
       removeListener: (event: string, handler: (...args: unknown[]) => void) => void;
+    };
+    // Wallet Standard registry — MetaMask Solana registers here
+    getWallets?: () => {
+      get: () => WalletStandardWallet[];
+      on: (event: 'register', handler: (wallets: WalletStandardWallet[]) => void) => () => void;
     };
   }
 }
@@ -77,6 +105,7 @@ const WalletContext = createContext<WalletContextValue>({
   connectBackpack: async () => {},
   connectSolflare: async () => {},
   connectMagicEden: async () => {},
+  connectMetaMaskSolana: async () => {},
   connectMetaMask: async () => {},
   disconnect: () => {},
   shortWallet: (a) => a,
@@ -86,7 +115,7 @@ const WalletContext = createContext<WalletContextValue>({
 
 function chainFor(type: WalletType): WalletChain {
   if (type === 'metamask') return 'evm';
-  if (type === 'phantom' || type === 'backpack' || type === 'solflare' || type === 'magiceden') return 'solana';
+  if (type === 'phantom' || type === 'backpack' || type === 'solflare' || type === 'magiceden' || type === 'metamask-solana') return 'solana';
   return null;
 }
 
@@ -154,6 +183,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           setWallet(addr);
           setWalletType('magiceden');
           persist(addr, 'magiceden');
+        } else if (savedType === 'metamask-solana' && typeof window.getWallets === 'function') {
+          // MetaMask Solana reconnect via Wallet Standard (silent — no popup if already approved)
+          const wallets = window.getWallets().get();
+          const mm = wallets.find(w => w.name === 'MetaMask' && w.chains.some(c => c.startsWith('solana:')));
+          if (mm?.accounts.length) {
+            const addr = mm.accounts[0].address;
+            setWallet(addr);
+            setWalletType('metamask-solana');
+            persist(addr, 'metamask-solana');
+          }
         }
         // MetaMask auto-reconnect: EVM accounts are already exposed if user
         // previously approved the site — check silently via eth_accounts (no popup).
@@ -202,6 +241,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (walletType === 'magiceden' && window.magicEden) {
       window.magicEden.on('disconnect', handleAccountChanged);
       return () => window.magicEden!.off('disconnect', handleAccountChanged);
+    }
+    if (walletType === 'metamask-solana' && typeof window.getWallets === 'function') {
+      const wallets = window.getWallets().get();
+      const mm = wallets.find(w => w.name === 'MetaMask' && w.chains.some(c => c.startsWith('solana:')));
+      const eventsFeature = mm?.features['standard:events'];
+      if (eventsFeature) {
+        const unsub = eventsFeature.on('change', ({ accounts }) => {
+          if (!accounts || accounts.length === 0) handleAccountChanged();
+          else {
+            setWallet(accounts[0].address);
+            persist(accounts[0].address, 'metamask-solana');
+          }
+        });
+        return unsub;
+      }
     }
     if (walletType === 'metamask' && window.ethereum) {
       const handleAccounts = (accounts: unknown) => {
@@ -309,6 +363,58 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [persist]);
 
+  // ── Connect: MetaMask Solana (Wallet Standard) ───────────────────────────
+  // MetaMask supports Solana via the Wallet Standard protocol.
+  // It registers itself with window.getWallets() — no Phantom-style window injection.
+  // Docs: https://docs.metamask.io/metamask-connect/solana
+
+  const connectMetaMaskSolana = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+
+    // Check Wallet Standard registry
+    if (typeof window.getWallets !== 'function') {
+      console.log('[Wallet] Wallet Standard not found — MetaMask Solana unavailable');
+      window.open('https://metamask.io/', '_blank');
+      return;
+    }
+
+    const wallets = window.getWallets().get();
+    const mm = wallets.find(
+      w => w.name === 'MetaMask' && w.chains.some(c => c.startsWith('solana:'))
+    );
+
+    if (!mm) {
+      console.log('[Wallet] MetaMask Solana not detected — ensure MetaMask extension is installed and Solana is enabled');
+      window.open('https://metamask.io/', '_blank');
+      return;
+    }
+
+    const connectFeature = mm.features['standard:connect'];
+    if (!connectFeature) {
+      console.log('[Wallet] MetaMask: standard:connect feature missing');
+      return;
+    }
+
+    setConnecting(true);
+    try {
+      const result = await connectFeature.connect();
+      if (!result.accounts || result.accounts.length === 0) {
+        console.log('[Wallet] MetaMask Solana: no accounts returned');
+        return;
+      }
+      const addr = result.accounts[0].address;
+      console.log('[Wallet] MetaMask Solana connected:', addr.slice(0, 8) + '...');
+      setWallet(addr);
+      setWalletType('metamask-solana');
+      persist(addr, 'metamask-solana');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log('[Wallet] MetaMask Solana connection rejected or failed:', msg);
+    } finally {
+      setConnecting(false);
+    }
+  }, [persist]);
+
   // ── Connect: MetaMask (EVM) ────────────────────────────────────────────────
 
   const connectMetaMask = useCallback(async () => {
@@ -357,6 +463,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       window.solflare.disconnect().catch(() => {});
     } else if (currentType === 'magiceden' && window.magicEden) {
       window.magicEden.disconnect().catch(() => {});
+    } else if (currentType === 'metamask-solana' && typeof window.getWallets === 'function') {
+      const wallets = window.getWallets().get();
+      const mm = wallets.find(w => w.name === 'MetaMask' && w.chains.some(c => c.startsWith('solana:')));
+      const disconnectFeature = mm?.features['standard:disconnect'];
+      if (disconnectFeature) disconnectFeature.disconnect().catch(() => {});
+      console.log('[Wallet] MetaMask Solana disconnected');
     } else if (currentType === 'metamask' && window.ethereum) {
       // MetaMask doesn't have a disconnect method; the state clearing below is sufficient.
       // The wallet session persists in MetaMask but our app forgets it.
@@ -389,6 +501,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         connectBackpack,
         connectSolflare,
         connectMagicEden,
+        connectMetaMaskSolana,
         connectMetaMask,
         disconnect,
         shortWallet,

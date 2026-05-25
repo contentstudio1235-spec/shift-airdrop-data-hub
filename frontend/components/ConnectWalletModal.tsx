@@ -7,86 +7,152 @@ interface ConnectWalletModalProps {
   onClose: () => void;
 }
 
-// ── Small inline SVG icons ─────────────────────────────────────────────────
+// ── Official brand-accurate wallet icons ──────────────────────────────────
 
 function PhantomIcon() {
+  // Official Phantom: purple gradient bg, white ghost face with eye cutouts
   return (
-    <svg width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg width="28" height="28" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <linearGradient id="phantomGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style={{ stopColor: '#AB9FF2', stopOpacity: 1 }} />
-          <stop offset="100%" style={{ stopColor: '#9B8FE0', stopOpacity: 1 }} />
+        <linearGradient id="phantomBg" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#534BB1" />
+          <stop offset="100%" stopColor="#551BF9" />
         </linearGradient>
       </defs>
-      <rect width="100" height="100" rx="20" fill="url(#phantomGrad)" />
-      <path d="M50 25 C35 25, 25 35, 25 50 C25 65, 35 75, 50 75 C65 75, 75 65, 75 50 C75 35, 65 25, 50 25 Z" fill="white" opacity="0.9" />
-      <path d="M40 45 L45 55 L55 45 M45 55 L45 65 M55 45 L55 65" stroke="#AB9FF2" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <rect width="128" height="128" rx="26" fill="url(#phantomBg)" />
+      {/* Ghost body */}
+      <path
+        d="M110 64C110 40.8 91.2 22 68 22C44.8 22 26 40.8 26 64V98C26 99.1 26.9 100 28 100H37C38.1 100 39 99.1 39 98V90C39 87.8 40.8 86 43 86C45.2 86 47 87.8 47 90V98C47 99.1 47.9 100 49 100H58C59.1 100 60 99.1 60 98V90C60 87.8 61.8 86 64 86C66.2 86 68 87.8 68 90V98C68 99.1 68.9 100 70 100H79C80.1 100 81 99.1 81 98V90C81 87.8 82.8 86 85 86C87.2 86 89 87.8 89 90V98C89 99.1 89.9 100 91 100H100C101.1 100 102 99.1 102 98V64H110Z"
+        fill="white"
+        fillOpacity="0.95"
+      />
+      {/* Left eye */}
+      <ellipse cx="50" cy="62" rx="7" ry="9" fill="#534BB1" />
+      {/* Right eye */}
+      <ellipse cx="78" cy="62" rx="7" ry="9" fill="#534BB1" />
+      {/* Eye shine left */}
+      <circle cx="53" cy="59" r="2.5" fill="white" />
+      {/* Eye shine right */}
+      <circle cx="81" cy="59" r="2.5" fill="white" />
     </svg>
   );
 }
 
 function BackpackIcon() {
+  // Official Backpack: black bg with stylized xNFT backpack logo in red/orange
   return (
-    <svg width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100" height="100" rx="20" fill="#DC2F2F" />
-      <g fill="white">
-        {/* Backpack main body */}
-        <path d="M 35 35 L 65 35 L 65 65 L 35 65 Z" />
-        {/* Straps */}
-        <rect x="42" y="25" width="5" height="10" rx="2" />
-        <rect x="53" y="25" width="5" height="10" rx="2" />
-        {/* Pocket */}
-        <rect x="45" y="48" width="10" height="8" rx="1" fill="#DC2F2F" />
-      </g>
+    <svg width="28" height="28" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="128" height="128" rx="26" fill="#111111" />
+      {/* Backpack shape */}
+      <path
+        d="M84 38H44C39.6 38 36 41.6 36 46V90C36 94.4 39.6 98 44 98H84C88.4 98 92 94.4 92 90V46C92 41.6 88.4 38 84 38Z"
+        fill="#E33E3F"
+      />
+      {/* Straps top */}
+      <path d="M52 38V30C52 27.8 53.8 26 56 26H72C74.2 26 76 27.8 76 30V38" stroke="#E33E3F" strokeWidth="5" fill="none" strokeLinecap="round" />
+      {/* Front pocket */}
+      <rect x="48" y="62" width="32" height="20" rx="4" fill="#111111" fillOpacity="0.35" />
+      {/* Pocket zipper line */}
+      <line x1="48" y1="72" x2="80" y2="72" stroke="white" strokeWidth="2" strokeOpacity="0.5" />
+      {/* Handle */}
+      <rect x="56" y="30" width="16" height="5" rx="2.5" fill="#C42F2F" />
     </svg>
   );
 }
 
 function SolflareIcon() {
+  // Official Solflare: gradient orange-yellow bg, white flame/sunburst diamond
   return (
-    <svg width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100" height="100" rx="20" fill="#FF8D4D" />
-      {/* Diamond/Star shape - Solflare brand */}
-      <g fill="white">
-        <path d="M 50 20 L 70 50 L 50 80 L 30 50 Z" fillOpacity="1" />
-        <path d="M 50 35 L 65 50 L 50 65 L 35 50 Z" fill="#FF8D4D" />
-        <circle cx="50" cy="50" r="8" fill="white" />
-      </g>
+    <svg width="28" height="28" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="solflareBg" x1="0" y1="0" x2="128" y2="128" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FFA93E" />
+          <stop offset="100%" stopColor="#FC6B00" />
+        </linearGradient>
+        <linearGradient id="solflareFlame" x1="64" y1="20" x2="64" y2="108" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="white" stopOpacity="1" />
+          <stop offset="100%" stopColor="white" stopOpacity="0.7" />
+        </linearGradient>
+      </defs>
+      <rect width="128" height="128" rx="26" fill="url(#solflareBg)" />
+      {/* Outer diamond / flame */}
+      <path d="M64 16L100 64L64 112L28 64Z" fill="url(#solflareFlame)" />
+      {/* Inner diamond cutout */}
+      <path d="M64 36L88 64L64 92L40 64Z" fill="#FC6B00" />
+      {/* Center circle */}
+      <circle cx="64" cy="64" r="10" fill="white" />
     </svg>
   );
 }
 
 function MagicEdenIcon() {
+  // Official Magic Eden Wallet: dark bg, pink-magenta "ME" mark
   return (
-    <svg width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100" height="100" rx="20" fill="#1E88E5" />
-      {/* Magic Eden M logo */}
-      <g fill="white">
-        <path d="M 30 65 L 40 35 L 50 55 L 60 35 L 70 65 Z" fillRule="evenodd" />
-      </g>
+    <svg width="28" height="28" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="128" height="128" rx="26" fill="#0D0D0D" />
+      {/* ME diamond / magic eden logo */}
+      <defs>
+        <linearGradient id="meGrad" x1="26" y1="26" x2="102" y2="102" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#E42575" />
+          <stop offset="100%" stopColor="#FF6FBF" />
+        </linearGradient>
+      </defs>
+      {/* Diamond shape */}
+      <path d="M64 20L102 64L64 108L26 64Z" fill="url(#meGrad)" />
+      {/* ME letters */}
+      <text x="64" y="72" textAnchor="middle" fill="white" fontSize="28" fontWeight="800" fontFamily="Arial, sans-serif">ME</text>
     </svg>
   );
 }
 
 function MetaMaskIcon() {
+  // Official MetaMask: white/light bg, the iconic fox with orange gradient
   return (
-    <svg width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100" height="100" rx="20" fill="#F6851B" />
-      {/* Simplified Fox head silhouette - MetaMask brand */}
-      <g fill="white" fillOpacity="0.95">
-        {/* Left ear */}
-        <path d="M 30 30 L 35 20 L 40 30 Z" />
-        {/* Right ear */}
-        <path d="M 60 30 L 65 20 L 70 30 Z" />
-        {/* Face */}
-        <ellipse cx="50" cy="55" rx="22" ry="25" />
-        {/* Left eye */}
-        <circle cx="40" cy="50" r="4" fill="#F6851B" />
-        {/* Right eye */}
-        <circle cx="60" cy="50" r="4" fill="#F6851B" />
-        {/* Nose */}
-        <polygon points="50,60 48,65 52,65" fill="#F6851B" />
-      </g>
+    <svg width="28" height="28" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="128" height="128" rx="26" fill="#FFFFFF" />
+      {/* MetaMask fox - simplified but brand-accurate shapes */}
+      {/* Outer fox shape */}
+      <path d="M112 18L71 47L78 29Z" fill="#E2761B" stroke="#E2761B" strokeWidth="0.5" />
+      <path d="M16 18L56.6 47.3L50 29Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
+      <path d="M96 85L84 102L109 109L116 85.4Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
+      <path d="M12 85.4L19 109L44 102L32 85Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
+      <path d="M42.6 57L35 68.7L60 69.8L59 43Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
+      <path d="M85.4 57L69 42.5L68.5 69.8L93 68.7Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
+      <path d="M44 102L58 94.5L46 85.7Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
+      <path d="M70 94.5L84 102L82 85.7Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
+      {/* Face */}
+      <path d="M70 94.5L58 94.5L60 107L68 107Z" fill="#D7C1B3" stroke="#D7C1B3" strokeWidth="0.5" />
+      <path d="M58.5 69.8L67.5 69.8L67 79L61 79Z" fill="#CD6116" stroke="#CD6116" strokeWidth="0.5" />
+      <path d="M60 79L67 79L70 94.5L58 94.5Z" fill="#E4751F" stroke="#E4751F" strokeWidth="0.5" />
+      {/* Eyes */}
+      <ellipse cx="48" cy="65" rx="5" ry="6" fill="#763D16" />
+      <ellipse cx="80" cy="65" rx="5" ry="6" fill="#763D16" />
+    </svg>
+  );
+}
+
+function MetaMaskSolanaIcon() {
+  // MetaMask fox on a Solana-purple tinted background to distinguish the Solana variant
+  return (
+    <svg width="28" height="28" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="128" height="128" rx="26" fill="#F8F0FF" />
+      {/* Same fox as MetaMask, but with a small Solana "◎" badge overlay */}
+      <path d="M112 18L71 47L78 29Z" fill="#E2761B" stroke="#E2761B" strokeWidth="0.5" />
+      <path d="M16 18L56.6 47.3L50 29Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
+      <path d="M96 85L84 102L109 109L116 85.4Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
+      <path d="M12 85.4L19 109L44 102L32 85Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
+      <path d="M42.6 57L35 68.7L60 69.8L59 43Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
+      <path d="M85.4 57L69 42.5L68.5 69.8L93 68.7Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
+      <path d="M44 102L58 94.5L46 85.7Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
+      <path d="M70 94.5L84 102L82 85.7Z" fill="#E4761B" stroke="#E4761B" strokeWidth="0.5" />
+      <path d="M70 94.5L58 94.5L60 107L68 107Z" fill="#D7C1B3" stroke="#D7C1B3" strokeWidth="0.5" />
+      <path d="M58.5 69.8L67.5 69.8L67 79L61 79Z" fill="#CD6116" stroke="#CD6116" strokeWidth="0.5" />
+      <path d="M60 79L67 79L70 94.5L58 94.5Z" fill="#E4751F" stroke="#E4751F" strokeWidth="0.5" />
+      <ellipse cx="48" cy="65" rx="5" ry="6" fill="#763D16" />
+      <ellipse cx="80" cy="65" rx="5" ry="6" fill="#763D16" />
+      {/* Solana badge bottom-right */}
+      <circle cx="96" cy="96" r="18" fill="#9945FF" />
+      <text x="96" y="102" textAnchor="middle" fill="white" fontSize="18" fontWeight="700" fontFamily="Arial, sans-serif">◎</text>
     </svg>
   );
 }
@@ -170,7 +236,7 @@ function WalletBtn({
 // ── Modal ──────────────────────────────────────────────────────────────────
 
 export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps) {
-  const { connectPhantom, connectBackpack, connectSolflare, connectMagicEden, connectMetaMask, connecting } = useWallet();
+  const { connectPhantom, connectBackpack, connectSolflare, connectMagicEden, connectMetaMask, connectMetaMaskSolana, connecting } = useWallet();
 
   // Detect wallet extensions after mount (window not available during SSR)
   const [hasPhantom, setHasPhantom] = useState(false);
@@ -178,6 +244,7 @@ export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps)
   const [hasSolflare, setHasSolflare] = useState(false);
   const [hasMagicEden, setHasMagicEden] = useState(false);
   const [hasMetaMask, setHasMetaMask] = useState(false);
+  const [hasMetaMaskSolana, setHasMetaMaskSolana] = useState(false);
 
   useEffect(() => {
     // Check both new (window.phantom.solana) and legacy (window.solana) APIs
@@ -186,6 +253,15 @@ export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps)
     setHasSolflare(!!window.solflare?.isSolflare);
     setHasMagicEden(!!window.magicEden?.isMagicEden);
     setHasMetaMask(!!window.ethereum?.isMetaMask);
+    // MetaMask Solana — detected via Wallet Standard
+    if (typeof window.getWallets === 'function') {
+      const wallets = window.getWallets().get();
+      const mm = wallets.find(
+        (w: { name: string; chains: string[] }) =>
+          w.name === 'MetaMask' && w.chains.some((c: string) => c.startsWith('solana:'))
+      );
+      setHasMetaMaskSolana(!!mm);
+    }
   }, []);
 
   const wrap = (fn: () => Promise<void>) => async () => {
@@ -277,10 +353,10 @@ export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps)
             <WalletBtn
               icon={<MagicEdenIcon />}
               name="Magic Eden"
-              description="Solana's premier wallet"
+              description="Multi-chain wallet by ME"
               installed={hasMagicEden}
-              bgColor="rgba(30,136,229,0.06)"
-              borderColor={hasMagicEden ? 'rgba(30,136,229,0.25)' : 'var(--border)'}
+              bgColor="rgba(228,37,117,0.06)"
+              borderColor={hasMagicEden ? 'rgba(228,37,117,0.25)' : 'var(--border)'}
               onClick={wrap(connectMagicEden)}
               disabled={connecting}
             />
@@ -331,16 +407,28 @@ export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps)
             />
           </div>
 
-          <WalletBtn
-            icon={<MetaMaskIcon />}
-            name="MetaMask"
-            description="Ethereum & EVM chains"
-            installed={hasMetaMask}
-            bgColor="rgba(247,162,59,0.06)"
-            borderColor={hasMetaMask ? 'rgba(247,162,59,0.2)' : 'var(--border)'}
-            onClick={wrap(connectMetaMask)}
-            disabled={connecting}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <WalletBtn
+              icon={<MetaMaskIcon />}
+              name="MetaMask"
+              description="Ethereum & EVM chains"
+              installed={hasMetaMask}
+              bgColor="rgba(247,162,59,0.06)"
+              borderColor={hasMetaMask ? 'rgba(247,162,59,0.2)' : 'var(--border)'}
+              onClick={wrap(connectMetaMask)}
+              disabled={connecting}
+            />
+            <WalletBtn
+              icon={<MetaMaskSolanaIcon />}
+              name="MetaMask (Solana)"
+              description="MetaMask via Wallet Standard"
+              installed={hasMetaMaskSolana}
+              bgColor="rgba(247,162,59,0.04)"
+              borderColor={hasMetaMaskSolana ? 'rgba(247,162,59,0.2)' : 'var(--border)'}
+              onClick={wrap(connectMetaMaskSolana)}
+              disabled={connecting}
+            />
+          </div>
         </div>
 
         {/* ── Footer note ──────────────────────────────────────────── */}
