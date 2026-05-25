@@ -5,6 +5,11 @@
 import express from 'express';
 import { snagSyncService } from '../services/snagSyncService';
 import { referralService } from '../services/referralService';
+import { holdingService } from '../services/holdingService';
+import { positionService } from '../services/positionService';
+import { jupiterPriceService } from '../services/jupiterPriceService';
+import { TRACKED_TOKENS } from '../config/tokens';
+import { pool } from '../db/pool';
 
 const router = express.Router();
 
@@ -223,6 +228,177 @@ router.delete('/kol/:wallet', verifyAdminSecret, async (req, res) => {
   } catch (error) {
     console.error('[Admin] Failed to deactivate KOL:', error);
     res.status(500).json({ error: 'Failed to deactivate KOL' });
+  }
+});
+
+// ── Wallet Backfill ───────────────────────────────────────────────────────
+
+/**
+ * POST /api/admin/backfill-wallet
+ * Scan on-chain SHIFT token balances for a wallet and create any missing positions.
+ * Use this for wallets that bought tokens before the Helius webhook was live,
+ * or whose transactions were missed by the webhook.
+ *
+ * Body: { wallet: string }
+ * Returns a summary of positions created / already existing.
+ */
+router.post('/backfill-wallet', verifyAdminSecret, async (req, res) => {
+  const { wallet } = req.body as { wallet?: string };
+
+  if (!wallet || wallet.length < 32) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
+
+  try {
+    // 1. Ensure the user is registered
+    await positionService.ensureUserExists(wallet);
+
+    const results: Array<{
+      token: string;
+      mint: string;
+      balance: number;
+      usdValue: number;
+      action: 'created' | 'already_open' | 'skipped_zero';
+    }> = [];
+
+    // 2. For every tracked SHIFT token, check on-chain balance
+    for (const token of Object.values(TRACKED_TOKENS)) {
+      const balance = await holdingService.getTokenBalance(wallet, token.mint);
+
+      if (balance <= 0) {
+        results.push({ token: token.symbol, mint: token.mint, balance: 0, usdValue: 0, action: 'skipped_zero' });
+        continue;
+      }
+
+      // Check if an open position already exists
+      const existingPositions = await pool.query(
+        `SELECT id FROM positions WHERE wallet = $1 AND asset = $2 AND status = 'open' LIMIT 1`,
+        [wallet, token.symbol]
+      );
+
+      if (existingPositions.rows.length > 0) {
+        results.push({ token: token.symbol, mint: token.mint, balance, usdValue: 0, action: 'already_open' });
+        continue;
+      }
+
+      // Get current USD value
+      const priceData = await jupiterPriceService.calculateUSDValue(token.mint, balance);
+      const usdValue = priceData?.usdValue ?? 0;
+      const price = priceData?.price ?? null;
+
+      // Create a backdated position with a synthetic signature
+      const syntheticSig = `backfill_${wallet.slice(0, 8)}_${token.symbol}_${Date.now()}`;
+      await positionService.openPosition(
+        wallet,
+        token.symbol,
+        token.mint,
+        usdValue,
+        balance,
+        price,
+        syntheticSig,
+        new Date()
+      );
+
+      results.push({ token: token.symbol, mint: token.mint, balance, usdValue, action: 'created' });
+      console.log(`[Admin] Backfilled position: ${wallet.slice(0, 8)}... | ${token.symbol} | ${balance} tokens | $${usdValue.toFixed(2)}`);
+    }
+
+    const created = results.filter(r => r.action === 'created').length;
+    const alreadyOpen = results.filter(r => r.action === 'already_open').length;
+
+    res.json({
+      success: true,
+      wallet,
+      summary: { created, alreadyOpen, skippedZeroBalance: results.filter(r => r.action === 'skipped_zero').length },
+      positions: results,
+    });
+  } catch (error) {
+    console.error('[Admin] Backfill wallet failed:', error);
+    res.status(500).json({ error: 'Backfill failed', message: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+/**
+ * POST /api/admin/manual-position
+ * Manually create a position for a wallet — for cases where the purchase amount/price
+ * is already known and you want to set it precisely.
+ *
+ * Body: { wallet, asset, mint, tokenAmount, usdValue, openedAt? }
+ */
+router.post('/manual-position', verifyAdminSecret, async (req, res) => {
+  const { wallet, asset, mint, tokenAmount, usdValue, openedAt } = req.body as {
+    wallet?: string;
+    asset?: string;
+    mint?: string;
+    tokenAmount?: number;
+    usdValue?: number;
+    openedAt?: string;
+  };
+
+  if (!wallet || wallet.length < 32) return res.status(400).json({ error: 'Invalid wallet' });
+  if (!asset) return res.status(400).json({ error: 'asset (token symbol) required' });
+  if (!usdValue || usdValue <= 0) return res.status(400).json({ error: 'usdValue must be > 0' });
+
+  try {
+    await positionService.ensureUserExists(wallet);
+
+    const syntheticSig = `manual_${wallet.slice(0, 8)}_${asset}_${Date.now()}`;
+    const timestamp = openedAt ? new Date(openedAt) : new Date();
+    const pricePerToken = tokenAmount && tokenAmount > 0 ? usdValue / tokenAmount : null;
+
+    await positionService.openPosition(
+      wallet, asset, mint ?? null, usdValue, tokenAmount ?? null,
+      pricePerToken, syntheticSig, timestamp
+    );
+
+    console.log(`[Admin] Manual position created: ${wallet.slice(0, 8)}... | ${asset} | $${usdValue}`);
+    res.json({ success: true, wallet, asset, usdValue, openedAt: timestamp.toISOString() });
+  } catch (error) {
+    console.error('[Admin] Manual position failed:', error);
+    res.status(500).json({ error: 'Failed to create position', message: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+/**
+ * GET /api/admin/wallet-status/:wallet
+ * Quick diagnostic view: is wallet registered, how many positions, total XP.
+ */
+router.get('/wallet-status/:wallet', verifyAdminSecret, async (req, res) => {
+  const { wallet } = req.params;
+
+  try {
+    const [userResult, positionsResult, balances] = await Promise.all([
+      pool.query('SELECT wallet, total_xp, claim_multiplier, created_at FROM users WHERE wallet = $1', [wallet]),
+      pool.query(`SELECT asset, status, position_size_usd, opened_at FROM positions WHERE wallet = $1 ORDER BY opened_at DESC LIMIT 20`, [wallet]),
+      // Check live on-chain balances for SHIFT tokens
+      Promise.all(
+        Object.values(TRACKED_TOKENS).map(async (t) => ({
+          symbol: t.symbol,
+          mint: t.mint,
+          onChainBalance: await holdingService.getTokenBalance(wallet, t.mint),
+        }))
+      ),
+    ]);
+
+    const user = userResult.rows[0] || null;
+    const nonZeroBalances = balances.filter(b => b.onChainBalance > 0);
+
+    res.json({
+      wallet,
+      registered: !!user,
+      user: user ?? null,
+      dbPositions: positionsResult.rows,
+      onChainBalances: balances,
+      needsBackfill: nonZeroBalances.some(b => {
+        const hasOpenPos = positionsResult.rows.some(
+          (p: any) => p.asset === b.symbol && p.status === 'open'
+        );
+        return !hasOpenPos;
+      }),
+    });
+  } catch (error) {
+    console.error('[Admin] Wallet status check failed:', error);
+    res.status(500).json({ error: 'Failed to check wallet status' });
   }
 });
 
