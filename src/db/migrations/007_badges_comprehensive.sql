@@ -1,14 +1,14 @@
--- ============================================================
+﻿-- ============================================================
 -- Migration 007: Comprehensive Badge System (31 badges)
 -- Implements the SHIFT Badges Strategy with all categories
--- All statements use IF NOT EXISTS — safe to re-run (idempotent)
+-- All statements use IF NOT EXISTS â€” safe to re-run (idempotent)
 -- ============================================================
 
 -- 1. Badge definitions table: metadata for all 31 badges
 CREATE TABLE IF NOT EXISTS badge_definitions (
   id SERIAL PRIMARY KEY,
   badge_name VARCHAR(64) NOT NULL UNIQUE,
-  category VARCHAR(32) NOT NULL,  -- 'conviction_adding', 'buying_dip', etc.
+  category VARCHAR(32),  -- 'conviction_adding', 'buying_dip', etc.
   description TEXT,
   trigger_condition VARCHAR(128),
   multiplier_value DECIMAL(6,4) NOT NULL,
@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS badge_definitions (
   icon_url VARCHAR(255),
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Ensure category column exists (for idempotency if table already exists)
+ALTER TABLE badge_definitions
+  ADD COLUMN IF NOT EXISTS category VARCHAR(32);
 
 -- 2. Enhanced badges table: add more metadata to track status
 ALTER TABLE badges
@@ -76,7 +80,7 @@ VALUES
   ('Triple Down', 'conviction_adding', 'Added 3+ times to the same position during a -10% drawdown.', 'multiple_adds_on_weakness', 1.20, 'permanent', 'rare'),
   ('Pyramid Up', 'conviction_adding', 'Added 3+ times to a position as it rose +10% or more from entry.', 'multiple_adds_on_strength', 1.15, 'permanent', 'rare'),
   ('Conviction Stack', 'conviction_adding', '5+ separate adds to the same position over 30+ days.', 'many_adds_over_time', 1.25, 'permanent', 'epic')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (badge_name) DO NOTHING;
 
 -- Category 2: Buying the Dip (3 badges)
 INSERT INTO badge_definitions (badge_name, category, description, trigger_condition, multiplier_value, badge_type, rarity)
@@ -84,7 +88,7 @@ VALUES
   ('Dip Buyer', 'buying_dip', 'Opened long on a day the underlying closed -3% or worse.', 'long_on_down_day', 1.10, 'permanent', 'common'),
   ('Crash Buyer', 'buying_dip', 'Opened long on a day SPX closed -5% or worse.', 'long_on_spx_crash', 1.20, 'permanent', 'rare'),
   ('Black Swan Buyer', 'buying_dip', 'Opened long on a day SPX closed -10% or worse.', 'long_on_spx_crash_10pct', 1.30, 'permanent', 'legendary')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (badge_name) DO NOTHING;
 
 -- Category 3: Buying the Breakout (3 badges)
 INSERT INTO badge_definitions (badge_name, category, description, trigger_condition, multiplier_value, badge_type, rarity)
@@ -92,7 +96,7 @@ VALUES
   ('Momentum Rider', 'buying_breakout', 'Opened long on a day the underlying closed +3% or higher.', 'long_on_up_day', 1.10, 'permanent', 'common'),
   ('Breakout Buyer', 'buying_breakout', 'Opened long within 24h of a stock breaking a 52-week high.', 'long_at_52wk_high', 1.15, 'permanent', 'rare'),
   ('New High Holder', 'buying_breakout', 'Opened long at an all-time high and held the position 30+ days.', 'long_at_ath_hold_30d', 1.20, 'permanent', 'rare')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (badge_name) DO NOTHING;
 
 -- Category 4: Event-Driven Trades (5 badges: 2 permanent, 3 dynamic)
 INSERT INTO badge_definitions (badge_name, category, description, trigger_condition, multiplier_value, badge_type, duration_days, rarity)
@@ -102,7 +106,7 @@ VALUES
   ('Fed Day Trade', 'event_driven', 'Opened position on FOMC announcement day.', 'position_on_fomc_day', 1.20, 'dynamic', 14, 'rare'),
   ('CPI Bet', 'event_driven', 'Opened position on CPI release day.', 'position_on_cpi_day', 1.15, 'dynamic', 7, 'rare'),
   ('News Reactor', 'event_driven', 'Opened position within 1h of a market-moving headline.', 'position_within_1h_news', 1.15, 'dynamic', 7, 'common')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (badge_name) DO NOTHING;
 
 -- Category 5: Short Conviction (5 badges)
 INSERT INTO badge_definitions (badge_name, category, description, trigger_condition, multiplier_value, badge_type, rarity)
@@ -112,7 +116,7 @@ VALUES
   ('Earnings Short', 'short_conviction', 'Shorted into earnings, closed profitable.', 'short_into_earnings', 1.20, 'permanent', 'rare'),
   ('Squeeze Survivor', 'short_conviction', 'Held a short through a +10% squeeze, closed profitable.', 'short_survive_squeeze', 1.30, 'permanent', 'legendary'),
   ('Macro Bear', 'short_conviction', 'Held a short position 30+ days.', 'short_hold_30d', 1.25, 'permanent', 'rare')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (badge_name) DO NOTHING;
 
 -- Category 6: Held Through Pain (3 badges)
 INSERT INTO badge_definitions (badge_name, category, description, trigger_condition, multiplier_value, badge_type, rarity)
@@ -120,7 +124,7 @@ VALUES
   ('-10% Survivor', 'held_through_pain', 'Held a position through a -10% unrealized drawdown without closing.', 'survive_10pct_drawdown', 1.15, 'permanent', 'common'),
   ('-20% Survivor', 'held_through_pain', 'Held a position through a -20% unrealized drawdown without closing.', 'survive_20pct_drawdown', 1.25, 'permanent', 'rare'),
   ('Iron Hands', 'held_through_pain', 'Held through a -30%+ drawdown and closed profitable.', 'survive_30pct_drawdown_profitable', 1.30, 'permanent', 'legendary')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (badge_name) DO NOTHING;
 
 -- Category 7: Long-Term Conviction (4 badges)
 INSERT INTO badge_definitions (badge_name, category, description, trigger_condition, multiplier_value, badge_type, rarity)
@@ -129,16 +133,16 @@ VALUES
   ('Long-Hauler', 'long_term', 'Held a single position open 90+ days.', 'hold_90d', 1.20, 'permanent', 'rare'),
   ('The Believer', 'long_term', 'Held a single position open 180+ days.', 'hold_180d', 1.30, 'permanent', 'legendary'),
   ('Multi-Earnings Holder', 'long_term', 'Held the same position through 2+ earnings reports.', 'hold_through_2_earnings', 1.20, 'permanent', 'epic')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (badge_name) DO NOTHING;
 
 -- Category 8: Volume + OG (4 badges)
 INSERT INTO badge_definitions (badge_name, category, description, trigger_condition, multiplier_value, badge_type, rarity)
 VALUES
-  ('Volume Veteran I', 'volume_og', 'Cumulative trade volume ≥ $10,000.', 'volume_10k', 1.10, 'permanent', 'common'),
-  ('Volume Veteran II', 'volume_og', 'Cumulative trade volume ≥ $100,000.', 'volume_100k', 1.20, 'permanent', 'rare'),
-  ('Volume Veteran III', 'volume_og', 'Cumulative trade volume ≥ $1,000,000.', 'volume_1m', 1.30, 'permanent', 'epic'),
+  ('Volume Veteran I', 'volume_og', 'Cumulative trade volume â‰¥ $10,000.', 'volume_10k', 1.10, 'permanent', 'common'),
+  ('Volume Veteran II', 'volume_og', 'Cumulative trade volume â‰¥ $100,000.', 'volume_100k', 1.20, 'permanent', 'rare'),
+  ('Volume Veteran III', 'volume_og', 'Cumulative trade volume â‰¥ $1,000,000.', 'volume_1m', 1.30, 'permanent', 'epic'),
   ('The OG', 'volume_og', 'Active trader in the first 30 days of launch.', 'og_status', 1.25, 'permanent', 'epic')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (badge_name) DO NOTHING;
 
 -- 6. Hall of Fame special badges (these bypass the +2.0x cap and get +0.10x premium)
 UPDATE badge_definitions
@@ -182,3 +186,4 @@ CREATE INDEX IF NOT EXISTS idx_revocation_wallet_badge
 -- GRANT SELECT ON badge_definitions TO app_user;
 -- GRANT SELECT, INSERT ON badges TO app_user;
 -- GRANT SELECT ON badge_events TO app_user;
+
