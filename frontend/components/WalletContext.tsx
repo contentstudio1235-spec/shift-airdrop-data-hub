@@ -119,6 +119,29 @@ function chainFor(type: WalletType): WalletChain {
   return null;
 }
 
+// ── API URL ──────────────────────────────────────────────────────────────────
+const API_URL =
+  (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_API_URL) ||
+  'https://shift-airdrop-backend.onrender.com';
+
+/**
+ * Fire-and-forget: register + sync SHIFT holdings for a wallet.
+ * Called automatically after any wallet connects. Non-blocking.
+ */
+async function triggerWalletSync(walletAddr: string): Promise<void> {
+  try {
+    await fetch(`${API_URL}/api/airdrop/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wallet: walletAddr }),
+    });
+    console.log('[Wallet] Sync triggered for', walletAddr.slice(0, 8) + '...');
+  } catch (err) {
+    // Non-critical — swallow silently, webhook will catch future txs
+    console.warn('[Wallet] Sync call failed (non-critical):', err);
+  }
+}
+
 // ── Provider ─────────────────────────────────────────────────────────────────
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
@@ -269,6 +292,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       return () => window.ethereum!.removeListener('accountsChanged', handleAccounts);
     }
   }, [walletType, clear, persist]);
+
+  // ── Auto-sync on wallet connect ───────────────────────────────────────────
+  // Fires once whenever wallet goes from null → an address.
+  // Registers the user and backfills any SHIFT token holdings / missed txs.
+
+  const prevWalletRef = React.useRef<string | null>(null);
+  useEffect(() => {
+    if (wallet && wallet !== prevWalletRef.current) {
+      prevWalletRef.current = wallet;
+      // Only trigger for Solana wallets (EVM wallets don't hold SHIFT tokens)
+      if (walletChain === 'solana') {
+        triggerWalletSync(wallet);
+      }
+    }
+    if (!wallet) {
+      prevWalletRef.current = null;
+    }
+  }, [wallet, walletChain]);
 
   // ── Connect: Phantom ───────────────────────────────────────────────────────
 

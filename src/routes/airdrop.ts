@@ -6,6 +6,7 @@ import express from 'express';
 import { pool } from '../db/pool';
 import { snagSyncService } from '../services/snagSyncService';
 import { referralService, resolveReferralCode } from '../services/referralService';
+import { walletSyncService } from '../services/walletSyncService';
 
 const router = express.Router();
 
@@ -144,6 +145,7 @@ router.get('/referrals/:wallet', async (req, res) => {
 
 // ── POST /api/airdrop/register ────────────────────────────────────────────
 // Register wallet; optionally apply referral code (?ref=CODE in body)
+// After registration, automatically syncs on-chain SHIFT token holdings.
 router.post('/register', async (req, res) => {
   try {
     const { wallet, refCode } = req.body;
@@ -152,10 +154,40 @@ router.post('/register', async (req, res) => {
     }
 
     const result = await referralService.registerWithReferral(wallet, refCode || undefined);
+
+    // Fire-and-forget: sync holdings after new registration
+    walletSyncService.syncWallet(wallet).catch((err) =>
+      console.warn(`[Airdrop] Post-register sync failed for ${wallet.slice(0, 8)}...:`, err)
+    );
+
     res.json(result);
   } catch (error) {
     console.error('[Airdrop] Register error:', error);
     res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+// ── POST /api/airdrop/sync ────────────────────────────────────────────────
+// Triggered by the frontend whenever a wallet connects.
+// Scans Helius tx history + live on-chain balances for all SHIFT tokens,
+// then creates/closes any positions that are missing from the DB.
+// Safe to call repeatedly — all operations are idempotent.
+router.post('/sync', async (req, res) => {
+  try {
+    const { wallet } = req.body;
+    if (!wallet || wallet.length < 32) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+
+    const syncResult = await walletSyncService.syncWallet(wallet);
+
+    res.json({
+      success: true,
+      ...syncResult,
+    });
+  } catch (error) {
+    console.error('[Airdrop] Sync error:', error);
+    res.status(500).json({ error: 'Sync failed', message: error instanceof Error ? error.message : String(error) });
   }
 });
 
