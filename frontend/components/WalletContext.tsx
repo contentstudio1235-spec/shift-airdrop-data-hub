@@ -48,6 +48,14 @@ declare global {
       on: (event: string, handler: (...args: unknown[]) => void) => void;
       off: (event: string, handler: (...args: unknown[]) => void) => void;
     };
+    // Magic Eden
+    magicEden?: {
+      isMagicEden?: boolean;
+      connect: (opts?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: { toString: () => string } }>;
+      disconnect: () => Promise<void>;
+      on: (event: string, handler: (...args: unknown[]) => void) => void;
+      off: (event: string, handler: (...args: unknown[]) => void) => void;
+    };
     // MetaMask / EVM
     ethereum?: {
       isMetaMask?: boolean;
@@ -68,6 +76,7 @@ const WalletContext = createContext<WalletContextValue>({
   connectPhantom: async () => {},
   connectBackpack: async () => {},
   connectSolflare: async () => {},
+  connectMagicEden: async () => {},
   connectMetaMask: async () => {},
   disconnect: () => {},
   shortWallet: (a) => a,
@@ -77,7 +86,7 @@ const WalletContext = createContext<WalletContextValue>({
 
 function chainFor(type: WalletType): WalletChain {
   if (type === 'metamask') return 'evm';
-  if (type === 'phantom' || type === 'backpack' || type === 'solflare') return 'solana';
+  if (type === 'phantom' || type === 'backpack' || type === 'solflare' || type === 'magiceden') return 'solana';
   return null;
 }
 
@@ -139,12 +148,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           setWallet(addr);
           setWalletType('solflare');
           persist(addr, 'solflare');
+        } else if (savedType === 'magiceden' && window.magicEden?.isMagicEden) {
+          const resp = await window.magicEden.connect({ onlyIfTrusted: true });
+          const addr = resp.publicKey.toString();
+          setWallet(addr);
+          setWalletType('magiceden');
+          persist(addr, 'magiceden');
         }
         // MetaMask auto-reconnect: EVM accounts are already exposed if user
         // previously approved the site — check silently via eth_accounts (no popup).
         else if (savedType === 'metamask' && window.ethereum) {
           const accounts = await window.ethereum.request({ method: 'eth_accounts' }) as string[];
-          if (accounts[0]) {
+          if (accounts && accounts.length > 0) {
             setWallet(accounts[0]);
             setWalletType('metamask');
             persist(accounts[0], 'metamask');
@@ -183,6 +198,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (walletType === 'solflare' && window.solflare) {
       window.solflare.on('disconnect', handleAccountChanged);
       return () => window.solflare!.off('disconnect', handleAccountChanged);
+    }
+    if (walletType === 'magiceden' && window.magicEden) {
+      window.magicEden.on('disconnect', handleAccountChanged);
+      return () => window.magicEden!.off('disconnect', handleAccountChanged);
     }
     if (walletType === 'metamask' && window.ethereum) {
       const handleAccounts = (accounts: unknown) => {
@@ -267,6 +286,29 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [persist]);
 
+  // ── Connect: Magic Eden ───────────────────────────────────────────────────
+
+  const connectMagicEden = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    if (!window.magicEden?.isMagicEden) {
+      window.open('https://www.magiceden.io/', '_blank');
+      return;
+    }
+    setConnecting(true);
+    try {
+      const resp = await window.magicEden.connect();
+      const addr = resp.publicKey.toString();
+      console.log('[Wallet] Magic Eden connected:', addr.slice(0, 8) + '...');
+      setWallet(addr);
+      setWalletType('magiceden');
+      persist(addr, 'magiceden');
+    } catch {
+      console.log('[Wallet] Magic Eden connection rejected or failed');
+    } finally {
+      setConnecting(false);
+    }
+  }, [persist]);
+
   // ── Connect: MetaMask (EVM) ────────────────────────────────────────────────
 
   const connectMetaMask = useCallback(async () => {
@@ -279,15 +321,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setConnecting(true);
     try {
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' }) as string[];
-      const addr = accounts[0];
-      if (addr) {
-        console.log('[Wallet] MetaMask connected:', addr.slice(0, 8) + '...');
-        setWallet(addr);
-        setWalletType('metamask');
-        persist(addr, 'metamask');
+      if (!accounts || accounts.length === 0) {
+        console.log('[Wallet] MetaMask: no accounts returned from eth_requestAccounts');
+        setConnecting(false);
+        return;
       }
+      const addr = accounts[0];
+      console.log('[Wallet] MetaMask connected:', addr.slice(0, 8) + '...');
+      setWallet(addr);
+      setWalletType('metamask');
+      persist(addr, 'metamask');
     } catch (err) {
-      console.log('[Wallet] MetaMask connection rejected or failed');
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      console.log('[Wallet] MetaMask connection rejected or failed:', errorMsg);
     } finally {
       setConnecting(false);
     }
@@ -309,6 +355,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       window.backpack.solana.disconnect().catch(() => {});
     } else if (currentType === 'solflare' && window.solflare) {
       window.solflare.disconnect().catch(() => {});
+    } else if (currentType === 'magiceden' && window.magicEden) {
+      window.magicEden.disconnect().catch(() => {});
     } else if (currentType === 'metamask' && window.ethereum) {
       // MetaMask doesn't have a disconnect method; the state clearing below is sufficient.
       // The wallet session persists in MetaMask but our app forgets it.
@@ -340,6 +388,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         connectPhantom,
         connectBackpack,
         connectSolflare,
+        connectMagicEden,
         connectMetaMask,
         disconnect,
         shortWallet,

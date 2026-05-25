@@ -56,6 +56,18 @@ function SolflareIcon() {
   );
 }
 
+function MagicEdenIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" rx="20" fill="#1E88E5" />
+      {/* Magic Eden M logo */}
+      <g fill="white">
+        <path d="M 30 65 L 40 35 L 50 55 L 60 35 L 70 65 Z" fillRule="evenodd" />
+      </g>
+    </svg>
+  );
+}
+
 function MetaMaskIcon() {
   return (
     <svg width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -158,12 +170,13 @@ function WalletBtn({
 // ── Modal ──────────────────────────────────────────────────────────────────
 
 export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps) {
-  const { connectPhantom, connectBackpack, connectSolflare, connectMetaMask, connecting } = useWallet();
+  const { connectPhantom, connectBackpack, connectSolflare, connectMagicEden, connectMetaMask, connecting } = useWallet();
 
   // Detect wallet extensions after mount (window not available during SSR)
   const [hasPhantom, setHasPhantom] = useState(false);
   const [hasBackpack, setHasBackpack] = useState(false);
   const [hasSolflare, setHasSolflare] = useState(false);
+  const [hasMagicEden, setHasMagicEden] = useState(false);
   const [hasMetaMask, setHasMetaMask] = useState(false);
 
   useEffect(() => {
@@ -171,6 +184,7 @@ export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps)
     setHasPhantom(!!(window.phantom?.solana?.isPhantom || window.solana?.isPhantom));
     setHasBackpack(!!window.backpack?.solana);
     setHasSolflare(!!window.solflare?.isSolflare);
+    setHasMagicEden(!!window.magicEden?.isMagicEden);
     setHasMetaMask(!!window.ethereum?.isMetaMask);
   }, []);
 
@@ -258,6 +272,16 @@ export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps)
               bgColor="rgba(252,107,0,0.06)"
               borderColor={hasSolflare ? 'rgba(252,107,0,0.25)' : 'var(--border)'}
               onClick={wrap(connectSolflare)}
+              disabled={connecting}
+            />
+            <WalletBtn
+              icon={<MagicEdenIcon />}
+              name="Magic Eden"
+              description="Solana's premier wallet"
+              installed={hasMagicEden}
+              bgColor="rgba(30,136,229,0.06)"
+              borderColor={hasMagicEden ? 'rgba(30,136,229,0.25)' : 'var(--border)'}
+              onClick={wrap(connectMagicEden)}
               disabled={connecting}
             />
           </div>
