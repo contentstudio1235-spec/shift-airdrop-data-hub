@@ -55,6 +55,12 @@ export default function RegisterContent() {
   const [tasks, setTasks] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [showWalletModal, setShowWalletModal] = useState(false);
+  const [launchBonus, setLaunchBonus] = useState<{
+    active: boolean;
+    multiplier: number;
+    daysRemaining: number;
+    label: string;
+  } | null>(null);
 
   // Social verification state: which task is currently verifying
   const [verifying, setVerifying] = useState<string | null>(null);
@@ -65,6 +71,23 @@ export default function RegisterContent() {
   const [refCode, setRefCode] = useState<string | null>(null);
   const [refBonus, setRefBonus] = useState<ReferralBonusInfo | null>(null);
   const [refLoading, setRefLoading] = useState(false);
+
+  // ── Calculate launch bonus on mount ──
+  useEffect(() => {
+    const launchStartStr = process.env.NEXT_PUBLIC_LAUNCH_START_DATE || '2026-05-25T00:00:00Z';
+    const launchStart = new Date(launchStartStr);
+    const now = new Date();
+    const diffMs = now.getTime() - launchStart.getTime();
+    const daysIntoLaunch = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (daysIntoLaunch < 7) {
+      setLaunchBonus({ active: true, multiplier: 3.0, daysRemaining: 7 - daysIntoLaunch, label: '🚀 LAUNCH WEEK' });
+    } else if (daysIntoLaunch < 14) {
+      setLaunchBonus({ active: true, multiplier: 2.0, daysRemaining: 14 - daysIntoLaunch, label: '🔥 MOMENTUM WEEK' });
+    } else {
+      setLaunchBonus({ active: false, multiplier: 1.0, daysRemaining: 0, label: '⭐ STEADY STATE' });
+    }
+  }, []);
 
   // ── Resolve referral code from URL on mount ──
   useEffect(() => {
@@ -316,8 +339,22 @@ export default function RegisterContent() {
   if (!wallet) {
     return (
       <div className="page fade-in" style={{ maxWidth: 640, margin: '0 auto', textAlign: 'center', padding: '60px 24px' }}>
-        <p style={{ fontSize: 16, color: 'var(--text-mute)', marginBottom: 24 }}>
-          Connect your Solana wallet to join the SHIFT airdrop
+        {launchBonus && launchBonus.active && (
+          <div style={{ marginBottom: 40 }}>
+            <div style={{ fontSize: 28, fontWeight: 700, marginBottom: 8, color: 'var(--mint)' }}>
+              {launchBonus.label}
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>
+              Get <span style={{ color: 'var(--mint)', fontSize: 18 }}>{launchBonus.multiplier.toFixed(1)}x</span> XP for {launchBonus.daysRemaining} more days
+            </div>
+          </div>
+        )}
+        <p style={{ fontSize: 16, color: 'var(--text-mute)', marginBottom: 24, lineHeight: 1.5 }}>
+          Connect your Solana wallet to start earning XP and move up the queue for the SHIFT airdrop.
+          <br />
+          <span style={{ fontSize: 14, display: 'block', marginTop: 8, color: 'var(--mint)', fontWeight: 600 }}>
+            Limited-time bonus multipliers active →
+          </span>
         </p>
       </div>
     );
@@ -334,6 +371,32 @@ export default function RegisterContent() {
   return (
     <>
       <div className="page fade-in" style={{ maxWidth: 640, margin: '0 auto' }}>
+        {/* Launch Bonus Banner */}
+        {launchBonus && launchBonus.active && (
+          <div
+            style={{
+              background: launchBonus.multiplier >= 2
+                ? 'linear-gradient(135deg, rgba(38,200,184,0.15), rgba(34,197,94,0.1))'
+                : 'linear-gradient(135deg, rgba(239,68,68,0.1), rgba(251,146,60,0.08))',
+              border: `1px solid ${launchBonus.multiplier >= 2 ? 'rgba(38,200,184,0.4)' : 'rgba(251,146,60,0.3)'}`,
+              borderRadius: 12,
+              padding: '16px 20px',
+              marginBottom: 24,
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: 12, color: launchBonus.multiplier >= 2 ? 'var(--mint)' : '#FB923C', fontWeight: 700, letterSpacing: '0.08em', marginBottom: 4 }}>
+              {launchBonus.label}
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6, color: launchBonus.multiplier >= 2 ? 'var(--mint)' : '#FB923C' }}>
+              {launchBonus.multiplier.toFixed(1)}x XP Bonus Active
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+              {launchBonus.daysRemaining} days remaining — move up the queue faster!
+            </div>
+          </div>
+        )}
+
         {/* Referral Bonus Banner */}
         {refBonus && refBonus.multiplierType !== 'none' && (
           <div
