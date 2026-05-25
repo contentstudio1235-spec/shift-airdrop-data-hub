@@ -20,9 +20,18 @@ CREATE TABLE IF NOT EXISTS badge_definitions (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Ensure category column exists (for idempotency if table already exists)
+-- Ensure all columns exist (for idempotency if table was partially created)
 ALTER TABLE badge_definitions
-  ADD COLUMN IF NOT EXISTS category VARCHAR(32);
+  ADD COLUMN IF NOT EXISTS category VARCHAR(32),
+  ADD COLUMN IF NOT EXISTS description TEXT,
+  ADD COLUMN IF NOT EXISTS trigger_condition VARCHAR(128),
+  ADD COLUMN IF NOT EXISTS multiplier_value DECIMAL(6,4),
+  ADD COLUMN IF NOT EXISTS badge_type VARCHAR(16),
+  ADD COLUMN IF NOT EXISTS duration_days INTEGER,
+  ADD COLUMN IF NOT EXISTS rarity VARCHAR(16) DEFAULT 'common',
+  ADD COLUMN IF NOT EXISTS hall_of_fame BOOLEAN DEFAULT false,
+  ADD COLUMN IF NOT EXISTS icon_url VARCHAR(255),
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
 
 -- 2. Enhanced badges table: add more metadata to track status
 ALTER TABLE badges
