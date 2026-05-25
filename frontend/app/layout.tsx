@@ -31,6 +31,10 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'SHIFT Airdrop — Earn XP Through Trading',
   description: 'Trade RWA tokens on Jupiter and earn XP. Hold longer for multiplier bonuses. Compete for the SHIFT airdrop.',
+  icons: {
+    icon: '/shift-logo.svg',
+    apple: '/shift-logo.svg',
+  },
   openGraph: {
     title: 'SHIFT Airdrop',
     description: 'Earn XP by trading real-world asset tokens on Solana',
