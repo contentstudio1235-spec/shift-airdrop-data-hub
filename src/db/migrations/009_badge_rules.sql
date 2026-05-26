@@ -66,7 +66,8 @@ VALUES
   ('volume_veteran_i', 'volume_og', 'Volume Veteran I', 'Cumulative volume ≥ $10,000', 1.10, 'permanent', false),
   ('volume_veteran_ii', 'volume_og', 'Volume Veteran II', 'Cumulative volume ≥ $100,000', 1.12, 'permanent', false),
   ('volume_veteran_iii', 'volume_og', 'Volume Veteran III', 'Cumulative volume ≥ $1,000,000', 1.15, 'permanent', false),
-  ('the_og', 'volume_og', 'The OG', 'Active in first 30 days of launch', 1.10, 'permanent', false);
+  ('the_og', 'volume_og', 'The OG', 'Active in first 30 days of launch', 1.10, 'permanent', false)
+ON CONFLICT (template_key) DO NOTHING;
 
 -- ── Table 2: Badge Multiplier Stack (Enforce +2.0x Cap) ─────────────
 -- Tracks badge stacking per wallet/position to enforce +2.0x cap
@@ -120,24 +121,27 @@ SET rule_template = brt.template_key,
 FROM badge_rule_templates brt
 WHERE bd.badge_name = brt.template_key;
 
--- ── Constraints ───────────────────────────────────────────────────
--- Ensure multiplier values are within valid range
-ALTER TABLE badge_multiplier_stack
-ADD CONSTRAINT multiplier_range CHECK (
-  final_multiplier >= 1.0 AND final_multiplier <= 2.0
-);
+-- ── Constraints (idempotent via DO blocks) ────────────────────────
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'multiplier_range') THEN
+    ALTER TABLE badge_multiplier_stack
+    ADD CONSTRAINT multiplier_range CHECK (final_multiplier >= 1.0 AND final_multiplier <= 2.0);
+  END IF;
+END $$;
 
--- Ensure duration_type is valid
-ALTER TABLE badge_rule_templates
-ADD CONSTRAINT duration_type_valid CHECK (
-  duration_type IN ('permanent', 'dynamic', 'provisional')
-);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'duration_type_valid') THEN
+    ALTER TABLE badge_rule_templates
+    ADD CONSTRAINT duration_type_valid CHECK (duration_type IN ('permanent', 'dynamic', 'provisional'));
+  END IF;
+END $$;
 
--- Ensure dynamic_duration_days is set for dynamic badges
-ALTER TABLE badge_rule_templates
-ADD CONSTRAINT dynamic_duration_required CHECK (
-  (duration_type != 'dynamic' OR dynamic_duration_days > 0)
-);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'dynamic_duration_required') THEN
+    ALTER TABLE badge_rule_templates
+    ADD CONSTRAINT dynamic_duration_required CHECK (duration_type != 'dynamic' OR dynamic_duration_days > 0);
+  END IF;
+END $$;
 
 -- ── Summary ────────────────────────────────────────────────────────
 -- Created: badge_rule_templates (31 badges across 8 categories)

@@ -63,7 +63,8 @@ INSERT INTO launch_config (
   phase3_start_time, phase3_end_time, phase3_multiplier, phase3_label,
   is_active, launch_start_time,
   created_at, updated_at
-) VALUES (
+)
+SELECT
   '2026-05-26 00:00:00+00'::TIMESTAMP WITH TIME ZONE AT TIME ZONE 'UTC',
   '2026-06-02 15:00:00+00'::TIMESTAMP WITH TIME ZONE AT TIME ZONE 'UTC',
   3.0,
@@ -80,7 +81,7 @@ INSERT INTO launch_config (
   '2026-05-26 00:00:00+00'::TIMESTAMP WITH TIME ZONE AT TIME ZONE 'UTC',
   NOW(),
   NOW()
-);
+WHERE NOT EXISTS (SELECT 1 FROM launch_config);
 
 -- Comments
 COMMENT ON TABLE launch_config IS 'Real-time launch phase configuration with UTC timestamps. Non-coders can adjust phases via admin panel.';
