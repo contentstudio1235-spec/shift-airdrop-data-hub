@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import ShiftIdCard from '@/components/ShiftIdCard';
 import ProgressBar from '@/components/ProgressBar';
 import Icon from '@/components/Icon';
+import ConnectWalletModal from '@/components/ConnectWalletModal';
 import { useWallet } from '@/components/WalletContext';
 import { useToast } from '@/components/ToastContext';
 import { fetchSnagTasks } from '@/lib/api';
@@ -678,26 +679,8 @@ export default function RegisterContent() {
         </div>
       </div>
 
-      {/* Wallet modal */}
-      {showWalletModal && (
-        <div
-          className="modal-backdrop"
-          onClick={(e) => e.target === e.currentTarget && setShowWalletModal(false)}
-        >
-          <div className="modal fade-in">
-            <button className="modal-close" onClick={() => setShowWalletModal(false)}>
-              <Icon name="x" size={16} />
-            </button>
-            <h2 className="modal-title">Connect Wallet</h2>
-            <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 20, lineHeight: 1.5 }}>
-              Connect to track your XP, positions, and badge progress.
-            </p>
-            <Link href="/airdrop" className="btn primary block lg" onClick={() => setShowWalletModal(false)}>
-              Go to Airdrop Page →
-            </Link>
-          </div>
-        </div>
-      )}
+      {/* Wallet modal — use ConnectWalletModal for direct wallet connection */}
+      {showWalletModal && <ConnectWalletModal onClose={() => setShowWalletModal(false)} />}
     </>
   );
 }

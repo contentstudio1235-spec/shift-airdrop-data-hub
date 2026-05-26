@@ -9,6 +9,7 @@ import LivePill from '@/components/LivePill';
 import MultRing from '@/components/MultRing';
 import ProgressBar from '@/components/ProgressBar';
 import Icon from '@/components/Icon';
+import ConnectWalletModal from '@/components/ConnectWalletModal';
 import { useWallet } from '@/components/WalletContext';
 import { useToast } from '@/components/ToastContext';
 import { fetchDashboard, fetchPositions, fetchBadges, fetchEvents, fetchReferralLinks, setCustomReferralCode } from '@/lib/api';
@@ -844,33 +845,8 @@ export default function AirdropPage() {
         </div>
       )}
 
-      {/* Connect prompt modal */}
-      {showConnectPrompt && (
-        <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && setShowConnectPrompt(false)}>
-          <div className="modal fade-in">
-            <button className="modal-close" onClick={() => setShowConnectPrompt(false)}>
-              <Icon name="x" size={16} />
-            </button>
-            <h2 className="modal-title">Connect Wallet</h2>
-            <p style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 20, lineHeight: 1.5 }}>
-              Connect your Solana wallet (Phantom) to view your XP, positions, and badges.
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <button
-                className="btn primary block lg"
-                onClick={() => {
-                  setShowConnectPrompt(false);
-                  // NavBar wallet button handles the actual connect flow
-                  toast('Click "Connect Wallet" in the nav bar');
-                }}
-              >
-                <Icon name="wallet" size={14} />
-                Connect via Nav Bar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Connect wallet modal — use ConnectWalletModal for direct wallet connection */}
+      {showConnectPrompt && <ConnectWalletModal onClose={() => setShowConnectPrompt(false)} />}
     </>
   );
 }
