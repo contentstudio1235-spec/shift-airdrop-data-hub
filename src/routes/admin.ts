@@ -20,25 +20,22 @@ interface TokenBalance {
 const router = express.Router();
 
 /**
- * Middleware: Verify admin secret header
- * Protects the sync endpoint from unauthorized triggers
+ * Middleware: Verify admin passcode header
+ * Protects the admin endpoints from unauthorized access
+ * Uses hardcoded passcode for KOL management
  */
+const ADMIN_PASSCODE = 'ShiftRwa2026@@$$Key';
+
 const verifyAdminSecret = (
   req: express.Request,
   res: express.Response,
   next: express.NextFunction
 ) => {
-  const secret = req.headers['x-admin-key'] as string | undefined;
-  const expectedSecret = process.env.ADMIN_SECRET;
+  const passcode = req.headers['x-admin-key'] as string | undefined;
 
-  if (!expectedSecret) {
-    console.warn('[Admin] ADMIN_SECRET not configured');
-    return res.status(500).json({ error: 'Server not configured' });
-  }
-
-  if (!secret || secret !== expectedSecret) {
-    console.warn('[Admin] Invalid admin secret');
-    return res.status(401).json({ error: 'Unauthorized' });
+  if (!passcode || passcode !== ADMIN_PASSCODE) {
+    console.warn('[Admin] Invalid admin passcode');
+    return res.status(401).json({ error: 'Unauthorized - Invalid passcode' });
   }
 
   next();

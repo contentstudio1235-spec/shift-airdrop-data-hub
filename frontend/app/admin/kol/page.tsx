@@ -26,7 +26,7 @@ export default function AdminKolPage() {
   const [kols, setKols] = useState<KolEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [adminKey, setAdminKey] = useState('');
+  const [adminPasscode, setAdminPasscode] = useState('');
   const [authenticated, setAuthenticated] = useState(false);
 
   // Form state
@@ -44,8 +44,8 @@ export default function AdminKolPage() {
   // ── Auth ────────────────────────────────────────────────────────────────────
 
   const handleAuth = () => {
-    if (!adminKey) {
-      toast('Please enter admin key');
+    if (!adminPasscode) {
+      toast('Please enter admin passcode');
       return;
     }
     setAuthenticated(true);
@@ -58,7 +58,7 @@ export default function AdminKolPage() {
     try {
       setLoading(true);
       const res = await fetch(`${API_URL}/api/admin/kol`, {
-        headers: { 'x-admin-key': adminKey },
+        headers: { 'x-admin-key': adminPasscode },
       });
       if (!res.ok) {
         toast(`Failed to load KOLs: ${res.statusText}`);
@@ -103,7 +103,7 @@ export default function AdminKolPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-key': adminKey,
+          'x-admin-key': adminPasscode,
         },
         body: JSON.stringify(formData),
       });
@@ -140,7 +140,7 @@ export default function AdminKolPage() {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-key': adminKey,
+          'x-admin-key': adminPasscode,
         },
         body: JSON.stringify({ isActive: !isActive }),
       });
@@ -166,9 +166,9 @@ export default function AdminKolPage() {
         <div style={{ marginBottom: 16 }}>
           <input
             type="password"
-            placeholder="Enter admin key"
-            value={adminKey}
-            onChange={(e) => setAdminKey(e.target.value)}
+            placeholder="Enter admin passcode"
+            value={adminPasscode}
+            onChange={(e) => setAdminPasscode(e.target.value)}
             className="input"
             style={{ width: '100%', marginBottom: 12 }}
           />
