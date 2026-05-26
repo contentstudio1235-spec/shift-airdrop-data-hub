@@ -222,7 +222,7 @@ export interface LaunchConfigResponse {
   config: {
     phase1: { start: string; end: string; multiplier: number; label: string };
     phase2: { start: string; end: string; multiplier: number; label: string };
-    phase3: { start: string; end: string; multiplier?: string; multiplier: number; label: string };
+    phase3: { start: string; end: string; multiplier: number; label: string };
     is_active: boolean;
   };
 }

@@ -48,7 +48,7 @@ export default function AdminUsersPage() {
     );
   }
 
-  const handleSearch = async (e) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchWallet.trim()) return;
     try {
@@ -60,7 +60,7 @@ export default function AdminUsersPage() {
       const data = await res.json();
       setUserInfo(data.user);
     } catch (error) {
-      alert("Error: " + (error.message || "Unknown"));
+      alert("Error: " + ((error as Error).message || "Unknown"));
     } finally {
       setLoading(false);
     }
@@ -76,7 +76,7 @@ export default function AdminUsersPage() {
       const data = await res.json();
       setAuditLogs(data.logs || []);
     } catch (error) {
-      alert("Error: " + (error.message || "Unknown"));
+      alert("Error: " + ((error as Error).message || "Unknown"));
     }
   };
 
@@ -146,7 +146,7 @@ export default function AdminUsersPage() {
                   <table className={styles.table}>
                     <thead><tr><th>Badge</th><th>Earned</th></tr></thead>
                     <tbody>
-                      {userInfo.badges.map((b, i) => <tr key={i}><td>{b.name}</td><td>{new Date(b.earned_at).toLocaleDateString()}</td></tr>)}
+                      {userInfo.badges.map((b: any, i: number) => <tr key={i}><td>{b.name}</td><td>{new Date(b.earned_at).toLocaleDateString()}</td></tr>)}
                     </tbody>
                   </table>
                 </section>

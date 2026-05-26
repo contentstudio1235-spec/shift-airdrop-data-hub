@@ -7,20 +7,32 @@
 CREATE TABLE IF NOT EXISTS events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   event_name VARCHAR(256) NOT NULL,
-  event_type VARCHAR(32) NOT NULL, -- 'earnings', 'macro', 'geopolitical', 'news_headline'
+  event_type VARCHAR(32) NOT NULL,
   description TEXT,
   start_time TIMESTAMP NOT NULL,
   end_time TIMESTAMP NOT NULL,
-  eligible_assets TEXT[], -- e.g., ARRAY['NVDA', 'AAPL', 'TSLA']
-  eligible_indices TEXT[], -- e.g., ARRAY['SPX', 'NDX', 'DXY']
-  trigger_threshold DECIMAL(10,2), -- Market impact threshold (e.g., -5.00 for -5% drop)
+  eligible_assets TEXT[],
+  eligible_indices TEXT[],
+  trigger_threshold DECIMAL(10,2),
   is_recurring BOOLEAN DEFAULT false,
-  recurrence_rule VARCHAR(255), -- RRULE format: YEARLY on FOMC dates, etc.
-  created_by VARCHAR(64), -- Admin wallet
+  recurrence_rule VARCHAR(255),
+  created_by VARCHAR(64),
   created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP,
-  CONSTRAINT event_type_check CHECK (event_type IN ('earnings', 'macro', 'geopolitical', 'news_headline', 'custom'))
+  updated_at TIMESTAMP
 );
+
+-- Ensure all columns exist (schema.sql creates a minimal events table without these)
+ALTER TABLE events ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS eligible_indices TEXT[];
+ALTER TABLE events ADD COLUMN IF NOT EXISTS trigger_threshold DECIMAL(10,2);
+ALTER TABLE events ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN DEFAULT false;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS recurrence_rule VARCHAR(255);
+ALTER TABLE events ADD COLUMN IF NOT EXISTS created_by VARCHAR(64);
+ALTER TABLE events ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP;
+
+-- Add event_type CHECK constraint (idempotent)
+ALTER TABLE events DROP CONSTRAINT IF EXISTS event_type_check;
+ALTER TABLE events ADD CONSTRAINT event_type_check CHECK (event_type IN ('earnings', 'macro', 'geopolitical', 'news_headline', 'custom'));
 
 -- Indexes for efficient querying
 CREATE INDEX IF NOT EXISTS events_type ON events(event_type);
