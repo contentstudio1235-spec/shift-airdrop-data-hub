@@ -115,7 +115,7 @@ export interface UserReferrals {
   totalReferrals: number;
 }
 
-export type WalletType = 'phantom' | 'backpack' | 'solflare' | 'magiceden' | 'metamask-solana' | 'metamask' | 'trustwallet' | null;
+export type WalletType = 'phantom' | 'backpack' | 'solflare' | 'magiceden' | 'metamask-solana' | 'metamask' | 'trustwallet' | 'jupiter' | null;
 export type WalletChain = 'solana' | 'evm' | null;
 
 export interface WalletContextValue {
@@ -130,6 +130,7 @@ export interface WalletContextValue {
   connectMetaMaskSolana: () => Promise<void>;
   connectMetaMask: () => Promise<void>;
   connectTrustWallet: () => Promise<void>;
+  connectJupiter: () => Promise<void>;
   disconnect: () => void;
   shortWallet: (addr: string) => string;
 }

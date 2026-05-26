@@ -79,6 +79,15 @@ declare global {
       on: (event: string, handler: (...args: unknown[]) => void) => void;
       off: (event: string, handler: (...args: unknown[]) => void) => void;
     };
+    // Jupiter (Solana wallet)
+    jupiter?: {
+      solana?: {
+        connect: (opts?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: { toString: () => string } }>;
+        disconnect: () => Promise<void>;
+        on: (event: string, handler: (...args: unknown[]) => void) => void;
+        off: (event: string, handler: (...args: unknown[]) => void) => void;
+      };
+    };
     // MetaMask / EVM (eth_requestAccounts)
     ethereum?: {
       isMetaMask?: boolean;
@@ -122,6 +131,7 @@ const WalletContext = createContext<WalletContextValue>({
   connectMetaMaskSolana: async () => {},
   connectMetaMask: async () => {},
   connectTrustWallet: async () => {},
+  connectJupiter: async () => {},
   disconnect: () => {},
   shortWallet: (a) => a,
 });
@@ -130,7 +140,7 @@ const WalletContext = createContext<WalletContextValue>({
 
 function chainFor(type: WalletType): WalletChain {
   if (type === 'metamask') return 'evm';
-  if (type === 'phantom' || type === 'backpack' || type === 'solflare' || type === 'magiceden' || type === 'metamask-solana' || type === 'trustwallet') return 'solana';
+  if (type === 'phantom' || type === 'backpack' || type === 'solflare' || type === 'magiceden' || type === 'metamask-solana' || type === 'trustwallet' || type === 'jupiter') return 'solana';
   return null;
 }
 
@@ -241,6 +251,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setWalletType('metamask');
             persist(accounts[0], 'metamask');
           }
+        } else if (savedType === 'jupiter' && window.jupiter?.solana) {
+          const resp = await window.jupiter.solana.connect({ onlyIfTrusted: true });
+          const addr = resp.publicKey.toString();
+          setWallet(addr);
+          setWalletType('jupiter');
+          persist(addr, 'jupiter');
         }
       } catch {
         // Wallet not available or user revoked permission — silently ignore
@@ -305,6 +321,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       };
       window.ethereum.on('accountsChanged', handleAccounts);
       return () => window.ethereum!.removeListener('accountsChanged', handleAccounts);
+    }
+    if (walletType === 'jupiter' && window.jupiter?.solana) {
+      window.jupiter.solana.on('disconnect', handleAccountChanged);
+      return () => window.jupiter!.solana!.off('disconnect', handleAccountChanged);
     }
   }, [walletType, clear, persist]);
 
@@ -414,6 +434,29 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       persist(addr, 'magiceden');
     } catch {
       console.log('[Wallet] Magic Eden connection rejected or failed');
+    } finally {
+      setConnecting(false);
+    }
+  }, [persist]);
+
+  // ── Connect: Jupiter ──────────────────────────────────────────────────────
+
+  const connectJupiter = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    if (!window.jupiter?.solana) {
+      window.open('https://jup.ag/', '_blank');
+      return;
+    }
+    setConnecting(true);
+    try {
+      const resp = await window.jupiter.solana.connect();
+      const addr = resp.publicKey.toString();
+      console.log('[Wallet] Jupiter connected:', addr.slice(0, 8) + '...');
+      setWallet(addr);
+      setWalletType('jupiter');
+      persist(addr, 'jupiter');
+    } catch {
+      console.log('[Wallet] Jupiter connection rejected or failed');
     } finally {
       setConnecting(false);
     }
@@ -580,6 +623,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       // MetaMask doesn't have a disconnect method; the state clearing below is sufficient.
       // The wallet session persists in MetaMask but our app forgets it.
       console.log('[Wallet] MetaMask disconnected (session cleared locally)');
+    } else if (currentType === 'jupiter' && window.jupiter?.solana) {
+      window.jupiter.solana.disconnect().catch(() => {});
     }
 
     // Clear local state and storage
@@ -611,6 +656,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         connectMetaMaskSolana,
         connectMetaMask,
         connectTrustWallet,
+        connectJupiter,
         disconnect,
         shortWallet,
       }}

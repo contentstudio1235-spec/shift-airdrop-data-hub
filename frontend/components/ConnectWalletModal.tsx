@@ -146,6 +146,16 @@ function WalletConnectIcon() {
   );
 }
 
+function JupiterIcon() {
+  return (
+    <svg width="36" height="36" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" rx="22" fill="#00D4AA"/>
+      {/* Jupiter "J" stylized */}
+      <path d="M28 28h44v12H40v44H28V28Z" fill="white"/>
+    </svg>
+  );
+}
+
 // ── Wallet row component ───────────────────────────────────────────────────
 
 interface WalletRowProps {
@@ -230,7 +240,7 @@ function WalletRow({ icon, name, hint, tag, onClick, disabled, loading }: Wallet
 export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps) {
   const {
     connectPhantom, connectBackpack, connectSolflare, connectMagicEden,
-    connectMetaMask, connectMetaMaskSolana, connectTrustWallet,
+    connectMetaMask, connectMetaMaskSolana, connectTrustWallet, connectJupiter,
     connecting, walletType,
   } = useWallet();
 
@@ -241,6 +251,7 @@ export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps)
   const [hasMetaMask, setHasMetaMask] = useState(false);
   const [hasMetaMaskSolana, setHasMetaMaskSolana] = useState(false);
   const [hasTrustWallet, setHasTrustWallet] = useState(false);
+  const [hasJupiter, setHasJupiter] = useState(false);
 
   useEffect(() => {
     setHasPhantom(!!(window.phantom?.solana?.isPhantom || window.solana?.isPhantom));
@@ -249,6 +260,7 @@ export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps)
     setHasMagicEden(!!window.magicEden?.isMagicEden);
     setHasMetaMask(!!window.ethereum?.isMetaMask);
     setHasTrustWallet(!!(window.trustwallet?.solana || window.trustwallet?.isTrustWallet || (window.ethereum as any)?.isTrust));
+    setHasJupiter(!!window.jupiter?.solana);
     if (typeof window.getWallets === 'function') {
       const wallets = window.getWallets().get();
       setHasMetaMaskSolana(!!wallets.find(
@@ -377,6 +389,16 @@ export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps)
             onClick={wrap(connectTrustWallet)}
             disabled={connecting}
             loading={connecting && walletType === 'trustwallet'}
+          />
+
+          <WalletRow
+            icon={<JupiterIcon />}
+            name="Jupiter"
+            hint="Solana native wallet"
+            tag={tagFor('jupiter', hasJupiter)}
+            onClick={wrap(connectJupiter)}
+            disabled={connecting}
+            loading={connecting && walletType === 'jupiter'}
           />
 
           <WalletRow
