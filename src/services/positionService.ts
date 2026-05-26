@@ -10,9 +10,9 @@ export class PositionService {
    * Ensure a user record exists (upsert on first seen wallet).
    */
   async ensureUserExists(wallet: string): Promise<void> {
-    await queryOne(
-      `INSERT INTO users (wallet, last_active) 
-       VALUES ($1, NOW()) 
+    await execute(
+      `INSERT INTO users (wallet, last_active)
+       VALUES ($1, NOW())
        ON CONFLICT (wallet) DO UPDATE SET last_active = NOW(), updated_at = NOW()`,
       [wallet]
     );
