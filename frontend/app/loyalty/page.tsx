@@ -8,8 +8,9 @@ export default function LoyaltyPage() {
   // Dynamically adjust iframe height to fit content
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      // Only accept messages from our loyalty domain
-      if (event.origin !== 'https://loyalty.shiftrwa.xyz') return;
+      // Accept messages from same origin (proxy) or original loyalty domain
+      const allowedOrigins = [window.location.origin, 'https://loyalty.shiftrwa.xyz'];
+      if (!allowedOrigins.includes(event.origin)) return;
 
       if (event.data.type === 'resize') {
         setIframeHeight(`${event.data.height}px`);
@@ -52,7 +53,7 @@ export default function LoyaltyPage() {
         marginBottom: 48,
       }}>
         <iframe
-          src="https://loyalty.shiftrwa.xyz/loyalty"
+          src="/api/loyalty"
           style={{
             width: '100%',
             height: iframeHeight,
