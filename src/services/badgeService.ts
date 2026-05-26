@@ -290,6 +290,9 @@ export class BadgeService {
    * Award a badge to a wallet + queue immediate real-time SNAG sync.
    */
   async awardBadge(wallet: string, badgeName: BadgeName): Promise<void> {
+    // Ensure user exists first (required for FK constraint in badges table)
+    await positionService.ensureUserExists(wallet);
+
     await execute(
       `INSERT INTO badges (wallet, badge_name) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
       [wallet, badgeName]

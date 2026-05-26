@@ -4,6 +4,7 @@ exports.certificateService = exports.CertificateService = void 0;
 // Certificate Service — Achievement certificate management
 const pool_1 = require("../db/pool");
 const realtimeSnagSyncService_1 = require("./realtimeSnagSyncService");
+const positionService_1 = require("./positionService");
 class CertificateService {
     async createCertificate(name, category, displayName, multiplierValue, multiplierType, createdBy) {
         const result = await (0, pool_1.queryOne)(`INSERT INTO certificates (name, category, display_name, multiplier_value, multiplier_type, created_by)
@@ -20,6 +21,8 @@ class CertificateService {
        WHERE uc.wallet = $1 AND uc.revoked_at IS NULL`, [wallet]);
     }
     async awardCertificate(wallet, certificateId, awardedBy = 'system') {
+        // Ensure user exists first (required for FK constraint in user_certificates table)
+        await positionService_1.positionService.ensureUserExists(wallet);
         const cert = await (0, pool_1.queryOne)(`SELECT * FROM certificates WHERE id = $1`, [certificateId]);
         if (!cert)
             throw new Error('Certificate not found');

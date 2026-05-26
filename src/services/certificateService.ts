@@ -1,6 +1,7 @@
 // Certificate Service — Achievement certificate management
 import { query, queryOne, execute } from '../db/pool';
 import { realtimeSnagSyncService } from './realtimeSnagSyncService';
+import { positionService } from './positionService';
 
 interface Certificate {
   id: string;
@@ -48,6 +49,9 @@ export class CertificateService {
   }
 
   async awardCertificate(wallet: string, certificateId: string, awardedBy: string = 'system'): Promise<void> {
+    // Ensure user exists first (required for FK constraint in user_certificates table)
+    await positionService.ensureUserExists(wallet);
+
     const cert = await queryOne<Certificate>(`SELECT * FROM certificates WHERE id = $1`, [certificateId]);
     if (!cert) throw new Error('Certificate not found');
 

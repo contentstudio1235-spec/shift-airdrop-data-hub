@@ -381,7 +381,11 @@ router.post('/manual-position', verifyAdminSecret, async (req, res) => {
  * Quick diagnostic view: is wallet registered, how many positions, total XP.
  */
 router.get('/wallet-status/:wallet', verifyAdminSecret, async (req, res) => {
-  const { wallet } = req.params;
+  const wallet = asString(req.params.wallet);
+
+  if (!wallet || wallet.length < 32) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
 
   try {
     const [userResult, positionsResult] = await Promise.all([
@@ -1175,6 +1179,13 @@ router.get('/certificates/wallet/:wallet', verifyAdminSecret, async (req, res) =
 router.get('/users/:wallet', verifyAdminSecret, async (req, res) => {
   try {
     const wallet = asString(req.params.wallet);
+
+    if (!wallet || wallet.length < 32) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+
+    // Ensure user exists (creates if missing, updates last_active if exists)
+    await positionService.ensureUserExists(wallet);
 
     const userResult = await pool.query(
       `SELECT u.wallet, u.total_xp, u.claim_multiplier, u.current_streak, u.created_at,

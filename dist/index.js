@@ -41,7 +41,7 @@ app.use((0, cors_1.default)({
         /\.vercel\.app$/, // allow all Vercel preview URLs
     ],
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-admin-key'],
 }));
 // Logging
 app.use((0, morgan_1.default)('short'));

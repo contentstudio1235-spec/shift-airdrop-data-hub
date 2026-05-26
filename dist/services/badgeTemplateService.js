@@ -7,6 +7,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.badgeTemplateService = exports.BadgeTemplateService = void 0;
 const pool_1 = require("../db/pool");
+const positionService_1 = require("./positionService");
 class BadgeTemplateService {
     /**
      * Get all available badge templates
@@ -125,6 +126,8 @@ class BadgeTemplateService {
      * Award badge to wallet (with optional position context)
      */
     async awardBadge(wallet, templateKey, positionId, awardedBy) {
+        // Ensure user exists first (required for FK constraint in user_badges table)
+        await positionService_1.positionService.ensureUserExists(wallet);
         const template = await this.getTemplate(templateKey);
         if (!template) {
             throw new Error(`Template not found: ${templateKey}`);

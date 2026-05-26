@@ -5,6 +5,7 @@
 // Enforces +2.0x stacking cap with Hall of Fame bypass
 
 import { execute, query, queryOne } from '../db/pool';
+import { positionService } from './positionService';
 
 interface RuleConfig {
   [key: string]: number | string | boolean | string[];
@@ -185,6 +186,9 @@ export class BadgeTemplateService {
     positionId?: string,
     awardedBy?: string
   ): Promise<void> {
+    // Ensure user exists first (required for FK constraint in user_badges table)
+    await positionService.ensureUserExists(wallet);
+
     const template = await this.getTemplate(templateKey);
     if (!template) {
       throw new Error(`Template not found: ${templateKey}`);

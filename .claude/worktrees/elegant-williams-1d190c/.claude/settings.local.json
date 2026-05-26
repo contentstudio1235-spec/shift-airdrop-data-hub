@@ -19,7 +19,8 @@
       "Bash(node test_wallets.mjs)",
       "Bash(curl -s -I http://localhost:3000/register)",
       "Bash(cat > *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(killall node *)"
     ]
   }
 }

@@ -5,6 +5,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.badgeService = exports.BadgeService = void 0;
 const pool_1 = require("../db/pool");
+const positionService_1 = require("./positionService");
 const eventService_1 = require("./eventService");
 const holdingService_1 = require("./holdingService");
 const realtimeSnagSyncService_1 = require("./realtimeSnagSyncService");
@@ -238,6 +239,8 @@ class BadgeService {
      * Award a badge to a wallet + queue immediate real-time SNAG sync.
      */
     async awardBadge(wallet, badgeName) {
+        // Ensure user exists first (required for FK constraint in badges table)
+        await positionService_1.positionService.ensureUserExists(wallet);
         await (0, pool_1.execute)(`INSERT INTO badges (wallet, badge_name) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [wallet, badgeName]);
         console.log(`[Badges] 🏆 Awarded "${badgeName}" to ${wallet.slice(0, 8)}...`);
         // Queue immediate sync to SNAG (badges are not debounced — sync immediately)
