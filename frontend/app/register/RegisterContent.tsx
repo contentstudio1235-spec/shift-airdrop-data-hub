@@ -353,7 +353,7 @@ export default function RegisterContent() {
               {launchBonus.label}
             </div>
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>
-              Get <span style={{ color: 'var(--mint)', fontSize: 18 }}>{launchBonus.multiplier.toFixed(1)}x</span> XP for {launchBonus.daysRemaining} more days
+              Get <span style={{ color: 'var(--mint)', fontSize: 18 }}>{Number(launchBonus.multiplier).toFixed(1)}x</span> XP for {launchBonus.daysRemaining} more days
             </div>
           </div>
         )}
@@ -397,7 +397,7 @@ export default function RegisterContent() {
               {launchBonus.label}
             </div>
             <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6, color: launchBonus.multiplier >= 2 ? 'var(--mint)' : '#FB923C' }}>
-              {launchBonus.multiplier.toFixed(1)}x XP Bonus Active
+              {Number(launchBonus.multiplier).toFixed(1)}x XP Bonus Active
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
               {launchBonus.daysRemaining} days remaining — move up the queue faster!

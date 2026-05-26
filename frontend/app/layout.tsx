@@ -4,7 +4,6 @@ import { Analytics } from '@vercel/analytics/react';
 import './globals.css';
 import { WalletProvider } from '@/components/WalletContext';
 import { ToastProvider } from '@/components/ToastContext';
-import { PostHogProvider } from '@/components/PostHogProvider';
 import NavBar from '@/components/NavBar';
 
 const spaceGrotesk = Space_Grotesk({
@@ -49,15 +48,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
       <body>
-        <PostHogProvider>
-          <WalletProvider>
-            <ToastProvider>
-              <NavBar />
-              <main>{children}</main>
-              <Analytics />
-            </ToastProvider>
-          </WalletProvider>
-        </PostHogProvider>
+        <WalletProvider>
+          <ToastProvider>
+            <NavBar />
+            <main>{children}</main>
+            <Analytics />
+          </ToastProvider>
+        </WalletProvider>
       </body>
     </html>
   );

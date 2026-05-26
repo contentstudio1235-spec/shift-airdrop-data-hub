@@ -181,13 +181,13 @@ export default function AirdropPage() {
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
                 Launch bonus: <span style={{ fontWeight: 700, color: launchPhase.phase === 'phase1' ? 'var(--mint)' : '#FB923C' }}>
-                  {launchPhase.multiplier.toFixed(1)}x
+                  {Number(launchPhase.multiplier).toFixed(1)}x
                 </span> (applied to all multipliers)
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: launchPhase.phase === 'phase1' ? 'var(--mint)' : '#FB923C', marginBottom: 4 }}>
-                {launchPhase.multiplier.toFixed(1)}x
+                {Number(launchPhase.multiplier).toFixed(1)}x
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-mute)', fontWeight: 600 }}>
                 {launchPhase.timeRemaining || 'Ended'}
