@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import ShiftIdCard from '@/components/ShiftIdCard';
-import ProgressBar from '@/components/ProgressBar';
 import Icon from '@/components/Icon';
 import { useWallet } from '@/components/WalletContext';
 import { useToast } from '@/components/ToastContext';
@@ -148,10 +147,6 @@ export default function RegisterContent() {
     fetchUserData();
   }, [wallet, refCode, toast]);
 
-  // ── Progress to tier 2 ──
-  const progressPct = userData ? Math.round((userData.queuePosition / userData.totalMembers) * 100) : 0;
-  const placesToTier2 = userData ? Math.max(0, Math.round(userData.totalMembers * 0.05) - userData.queuePosition) : 0;
-
   // ── Handlers ──
   const handleCopy = () => {
     if (!userData) return;
@@ -291,7 +286,7 @@ export default function RegisterContent() {
             ✦ FOUNDING MEMBER
           </span>
           <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'var(--font-space)', color: 'var(--text)', marginTop: 12 }}>
-            {userData.totalXp.toLocaleString()} XP earned
+            {userData.totalXp.toLocaleString()} SP earned
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-mute)', marginTop: 4 }}>
             Out of {userData.totalMembers.toLocaleString()} registered members
@@ -339,32 +334,6 @@ export default function RegisterContent() {
             <Icon name="twitter" size={13} />
             Share on X
           </button>
-        </div>
-
-        {/* Progress milestone */}
-        <div
-          className="card"
-          style={{
-            background: 'linear-gradient(90deg, rgba(38,200,184,0.06), rgba(7,99,140,0.04))',
-            marginBottom: 24,
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-space)' }}>
-                {placesToTier2.toLocaleString()} places to Tier 2
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 2 }}>
-                Refer friends to move up the queue
-              </div>
-            </div>
-            <span className="badge blue">Tier 1</span>
-          </div>
-          <ProgressBar value={progressPct} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-            <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>#{userData.queuePosition}</span>
-            <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>{progressPct}%</span>
-          </div>
         </div>
 
         {/* Referral section */}

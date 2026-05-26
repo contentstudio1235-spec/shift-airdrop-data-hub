@@ -17,7 +17,7 @@ import { fetchDashboard, fetchPositions, fetchBadges, fetchEvents, fetchReferral
 import { mergeBadges } from '@/lib/badges';
 import type { DashboardResponse, Position, ShiftEvent } from '@/lib/types';
 
-type MainTab = 'Holdings' | 'Badges' | 'Events';
+type MainTab = 'Holdings' | 'History' | 'Badges' | 'Events';
 type BadgeSub = 'Activity' | 'Events';
 
 const FAQ = [
@@ -104,7 +104,10 @@ export default function AirdropPage() {
     loadUserData();
   }, [loadUserData]);
 
-  const totalWeeklyXP = positions.reduce((s, p) => s + (p.xpPerWeek ?? 0), 0);
+  // Filter: only show open positions (exclude sold/closed positions)
+  const activePositions = positions.filter(p => p.status === 'open');
+  const closedPositions = positions.filter(p => p.status === 'closed');
+  const totalWeeklyXP = activePositions.reduce((s, p) => s + (p.xpPerWeek ?? 0), 0);
 
   const filteredActivity = activityBadges.filter(
     (b) => !badgeSearch || b.name.toLowerCase().includes(badgeSearch.toLowerCase())
@@ -247,14 +250,14 @@ export default function AirdropPage() {
             {/* Tab bar */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div className="text-tabs">
-                {(['Holdings', 'Badges', 'Events'] as MainTab[]).map((t) => (
+                {(['Holdings', 'History', 'Badges', 'Events'] as MainTab[]).map((t) => (
                   <button
                     key={t}
                     className={tab === t ? 'active' : ''}
                     onClick={() => setTab(t)}
                   >
                     {t}
-                    {t === 'Holdings' && positions.length > 0 && (
+                    {t === 'Holdings' && activePositions.length > 0 && (
                       <span
                         style={{
                           marginLeft: 6,
@@ -266,7 +269,22 @@ export default function AirdropPage() {
                           borderRadius: 999,
                         }}
                       >
-                        {positions.length}
+                        {activePositions.length}
+                      </span>
+                    )}
+                    {t === 'History' && closedPositions.length > 0 && (
+                      <span
+                        style={{
+                          marginLeft: 6,
+                          background: 'rgba(107,114,128,0.2)',
+                          color: 'var(--text-mute)',
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: '1px 5px',
+                          borderRadius: 999,
+                        }}
+                      >
+                        {closedPositions.length}
                       </span>
                     )}
                   </button>
@@ -325,18 +343,18 @@ export default function AirdropPage() {
                       </div>
                     ))}
                   </div>
-                ) : positions.length === 0 ? (
+                ) : activePositions.length === 0 ? (
                   <div className="empty-state">
                     <Icon name="bolt" size={32} color="var(--text-mute)" />
                     <p>No active positions yet</p>
                     <p className="hint">Trade SHIFT tokens on Jupiter to start earning Shift Points</p>
-                    <button className="btn primary sm" onClick={() => window.open('https://app.shiftrwa.xyz/coming-soon', '_blank')}>
+                    <button className="btn primary sm" onClick={() => window.open('https://app.shiftrwa.xyz', '_blank')}>
                       Go to Trade →
                     </button>
                   </div>
                 ) : (
                   <>
-                    {positions.map((p) => (
+                    {activePositions.map((p) => (
                       <PositionRow key={p.id} position={p} />
                     ))}
                     <div
@@ -350,8 +368,108 @@ export default function AirdropPage() {
                         color: 'var(--text-dim)',
                       }}
                     >
-                      <span>{positions.length} open position{positions.length !== 1 ? 's' : ''}</span>
+                      <span>{activePositions.length} open position{activePositions.length !== 1 ? 's' : ''}</span>
                       <span style={{ color: 'var(--mint)', fontWeight: 700 }}>+{totalWeeklyXP.toLocaleString()} SP/week total</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* History tab */}
+            {tab === 'History' && (
+              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                {/* Table header */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '2fr 80px 80px 80px 1fr',
+                    gap: 12,
+                    padding: '10px 12px',
+                    borderBottom: '1px solid var(--border)',
+                    background: 'var(--panel)',
+                  }}
+                >
+                  {['Asset', 'Weeks Held', 'Final Mult', 'Total SP', 'Status'].map((h) => (
+                    <div key={h} style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      {h}
+                    </div>
+                  ))}
+                </div>
+
+                {!wallet ? (
+                  <div className="empty-state">
+                    <Icon name="wallet" size={32} color="var(--text-mute)" />
+                    <p>Connect your wallet to view position history</p>
+                    <button className="btn primary" onClick={() => setShowConnectPrompt(true)}>
+                      Connect Wallet
+                    </button>
+                  </div>
+                ) : loading ? (
+                  <div style={{ padding: 24 }}>
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 80px 80px 80px 1fr', gap: 12, padding: '14px 12px', borderBottom: '1px solid var(--border)' }}>
+                        <div className="skeleton" style={{ height: 14, width: '70%' }} />
+                        <div className="skeleton" style={{ height: 14 }} />
+                        <div className="skeleton" style={{ height: 14 }} />
+                        <div className="skeleton" style={{ height: 14 }} />
+                        <div className="skeleton" style={{ height: 14 }} />
+                      </div>
+                    ))}
+                  </div>
+                ) : closedPositions.length === 0 ? (
+                  <div className="empty-state">
+                    <Icon name="history" size={32} color="var(--text-mute)" />
+                    <p>No closed positions yet</p>
+                    <p className="hint">Positions you've sold will appear in your history</p>
+                  </div>
+                ) : (
+                  <>
+                    {closedPositions.map((p) => (
+                      <div
+                        key={p.id}
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: '2fr 80px 80px 80px 1fr',
+                          gap: 12,
+                          padding: '14px 12px',
+                          borderBottom: '1px solid var(--border)',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>{p.asset}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 2 }}>
+                            {p.positionSizeUsd ? `$${(p.positionSizeUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'N/A'}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 600 }}>{p.weeksHeld}w</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--amber)' }}>{p.currentMultiplier.toFixed(2)}x</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--mint)' }}>
+                          {p.xpPerWeek > 0 ? `${(p.xpPerWeek * p.weeksHeld).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>
+                          <span style={{ padding: '2px 6px', background: 'rgba(107,114,128,0.2)', borderRadius: 4, fontSize: 9, fontWeight: 600 }}>
+                            CLOSED
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    <div
+                      style={{
+                        padding: '10px 14px',
+                        background: 'var(--panel)',
+                        borderTop: '1px solid var(--border)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontSize: 12,
+                        color: 'var(--text-dim)',
+                      }}
+                    >
+                      <span>{closedPositions.length} closed position{closedPositions.length !== 1 ? 's' : ''}</span>
+                      <span style={{ color: 'var(--text-mute)', fontWeight: 700 }}>
+                        Total earned: {closedPositions.reduce((sum, p) => sum + (p.xpPerWeek * p.weeksHeld || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} SP
+                      </span>
                     </div>
                   </>
                 )}
