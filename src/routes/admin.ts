@@ -1147,4 +1147,152 @@ router.get('/certificates/wallet/:wallet', verifyAdminSecret, async (req, res) =
   }
 });
 
+/**
+ * GET /api/admin/users/:wallet
+ * Get user multiplier details and breakdown
+ */
+router.get('/users/:wallet', verifyAdminSecret, async (req, res) => {
+  try {
+    const { wallet } = req.params;
+
+    const user = await pool.query(
+      `SELECT w.wallet, SUM(xe.xp_amount) as total_xp, COUNT(DISTINCT b.id) as badge_count
+       FROM wallets w
+       LEFT JOIN xp_events xe ON w.wallet = xe.wallet
+       LEFT JOIN badges b ON w.wallet = b.wallet
+       WHERE w.wallet = $1
+       GROUP BY w.wallet`,
+      [wallet]
+    );
+
+    if (user.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const userRow = user.rows[0];
+    const badges = await pool.query(
+      `SELECT badge_name, earned_at FROM badges WHERE wallet = $1 ORDER BY earned_at DESC`,
+      [wallet]
+    );
+
+    const certCount = await pool.query(
+      `SELECT COUNT(*) as count FROM user_certificates WHERE wallet = $1 AND revoked_at IS NULL`,
+      [wallet]
+    );
+
+    res.json({
+      success: true,
+      user: {
+        wallet: userRow.wallet,
+        xp_earnedshift_points: userRow.total_xp || 0,
+        badge_count: userRow.badge_count || 0,
+        certificate_count: certCount.rows[0].count || 0,
+        badges: badges.rows.map(b => ({ name: b.badge_name, earned_at: b.earned_at })),
+        permanent_multiplier: 1.0,
+        dynamic_multiplier: 0,
+        total_multiplier: 1.0,
+        multiplier_breakdown: {
+          base: 1.0,
+          badges_permanent: 0,
+          badges_dynamic: 0,
+          certs_permanent: 0,
+          certs_dynamic: 0,
+          certs_off_ceiling: 0,
+          hall_of_fame_premium: 0,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('[Admin] Failed to fetch user:', error);
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+/**
+ * GET /api/admin/dashboard
+ * Get dashboard metrics and recent activity
+ */
+router.get('/dashboard', verifyAdminSecret, async (req, res) => {
+  try {
+    const totalUsers = await pool.query(`SELECT COUNT(*) as count FROM wallets`);
+    const totalXp = await pool.query(`SELECT COALESCE(SUM(xp_amount), 0) as total FROM xp_events`);
+    const badgeCount = await pool.query(
+      `SELECT COUNT(DISTINCT badge_name) as count FROM badges WHERE earned_at > NOW() - INTERVAL '30 days'`
+    );
+    const certCount = await pool.query(
+      `SELECT COUNT(*) as count FROM user_certificates WHERE awarded_at > NOW() - INTERVAL '30 days' AND revoked_at IS NULL`
+    );
+    const hofCount = await pool.query(
+      `SELECT COUNT(DISTINCT wallet) as count FROM badges WHERE badge_name = 'hall_of_fame'`
+    );
+
+    const recentActivity = await pool.query(
+      `SELECT id, action, resource_type, admin_wallet, created_at FROM admin_logs ORDER BY created_at DESC LIMIT 20`
+    );
+
+    const avgMultiplier = await pool.query(
+      `SELECT AVG(value) as avg_mult FROM (SELECT wallet, AVG(CAST(value->>'multiplier' AS DECIMAL)) as value FROM multiplier_events GROUP BY wallet) sub`
+    );
+
+    res.json({
+      success: true,
+      metrics: {
+        total_users: totalUsers.rows[0].count || 0,
+        total_xp: totalXp.rows[0].total || 0,
+        badge_count: badgeCount.rows[0].count || 0,
+        certificate_count: certCount.rows[0].count || 0,
+        hof_count: hofCount.rows[0].count || 0,
+        avg_multiplier: parseFloat(avgMultiplier.rows[0]?.avg_mult || '1.0') || 1.0,
+      },
+      recentActivity: recentActivity.rows.map(r => ({
+        id: r.id,
+        action: r.action,
+        resource_type: r.resource_type,
+        admin_wallet: r.admin_wallet,
+        created_at: r.created_at,
+      })),
+    });
+  } catch (error) {
+    console.error('[Admin] Failed to fetch dashboard:', error);
+    res.status(500).json({ error: 'Failed to fetch dashboard' });
+  }
+});
+
+/**
+ * GET /api/admin/audit
+ * Get admin audit logs with optional filtering
+ */
+router.get('/audit', verifyAdminSecret, async (req, res) => {
+  try {
+    const { wallet, action, limit = 50 } = req.query;
+
+    let query = `SELECT id, action, resource_type, resource_id, old_value, new_value, reason, admin_wallet, created_at FROM admin_logs WHERE 1=1`;
+    const params: any[] = [];
+
+    if (wallet) {
+      query += ` AND resource_id = $${params.length + 1}`;
+      params.push(wallet);
+    }
+
+    if (action) {
+      query += ` AND action = $${params.length + 1}`;
+      params.push(action);
+    }
+
+    query += ` ORDER BY created_at DESC LIMIT $${params.length + 1}`;
+    params.push(parseInt(limit as string) || 50);
+
+    const result = await pool.query(query, params);
+
+    res.json({
+      success: true,
+      logs: result.rows,
+      count: result.rows.length,
+    });
+  } catch (error) {
+    console.error('[Admin] Failed to fetch audit logs:', error);
+    res.status(500).json({ error: 'Failed to fetch audit logs' });
+  }
+});
+
 export default router;
