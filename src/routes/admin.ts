@@ -248,6 +248,232 @@ router.delete('/kol/:wallet', verifyAdminSecret, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/admin/kol/:wallet/referrals
+ * Get all referrals through a KOL's custom code with detailed analytics
+ */
+router.get('/kol/:wallet/referrals', verifyAdminSecret, async (req, res) => {
+  try {
+    const wallet = asString(req.params.wallet);
+    const { limit = 100, offset = 0 } = req.query;
+
+    if (!wallet || wallet.length < 32) {
+      return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+
+    // Get KOL info
+    const kolResult = await pool.query(
+      `SELECT wallet, custom_code, display_name, multiplier_bonus, multiplier_type, is_active
+       FROM kol_whitelist WHERE wallet = $1`,
+      [wallet]
+    );
+
+    if (kolResult.rows.length === 0) {
+      return res.status(404).json({ error: 'KOL not found' });
+    }
+
+    const kol = kolResult.rows[0];
+
+    // Get all referrals through this KOL's code
+    const referralsResult = await pool.query(
+      `SELECT
+         r.id, r.referred_wallet, r.code_used, r.bonus_multiplier, r.bonus_type,
+         r.bonus_applied, r.referred_at, u.total_xp, u.permanent_multiplier, u.dynamic_multiplier
+       FROM referrals r
+       LEFT JOIN users u ON r.referred_wallet = u.wallet
+       WHERE r.referrer_wallet = $1
+       ORDER BY r.referred_at DESC
+       LIMIT $2 OFFSET $3`,
+      [wallet, parseInt(limit as string) || 100, parseInt(offset as string) || 0]
+    );
+
+    const totalResult = await pool.query(
+      `SELECT COUNT(*) as count FROM referrals WHERE referrer_wallet = $1`,
+      [wallet]
+    );
+
+    const totalReferrals = parseInt(totalResult.rows[0]?.count) || 0;
+    const appliedCount = referralsResult.rows.filter((r: any) => r.bonus_applied).length;
+
+    res.json({
+      success: true,
+      kol: {
+        wallet: kol.wallet,
+        customCode: kol.custom_code,
+        displayName: kol.display_name,
+        multiplierBonus: parseFloat(kol.multiplier_bonus),
+        multiplierType: kol.multiplier_type,
+        isActive: kol.is_active,
+      },
+      stats: {
+        totalReferrals,
+        bonusApplied: appliedCount,
+        pendingBonus: totalReferrals - appliedCount,
+      },
+      referrals: referralsResult.rows.map((r: any) => ({
+        id: r.id,
+        refereeWallet: r.referred_wallet,
+        refereeXp: parseFloat(r.total_xp) || 0,
+        codeUsed: r.code_used,
+        bonusMultiplier: parseFloat(r.bonus_multiplier),
+        bonusType: r.bonus_type,
+        bonusApplied: r.bonus_applied,
+        referredAt: r.referred_at,
+      })),
+      pagination: {
+        limit: parseInt(limit as string) || 100,
+        offset: parseInt(offset as string) || 0,
+        total: totalReferrals,
+      },
+    });
+  } catch (error) {
+    console.error('[Admin] Failed to fetch KOL referrals:', error);
+    res.status(500).json({ error: 'Failed to fetch KOL referrals' });
+  }
+});
+
+/**
+ * GET /api/admin/referrals/config
+ * Get current referral configuration (invite bonuses, multiplier ranges, etc.)
+ */
+router.get('/referrals/config', verifyAdminSecret, async (req, res) => {
+  try {
+    const configResult = await pool.query(
+      `SELECT standard_bonus_xp, kol_bonus_xp FROM referral_config WHERE id = 1`
+    );
+
+    const config = configResult.rows[0] || { standard_bonus_xp: 250, kol_bonus_xp: 500 };
+
+    res.json({
+      success: true,
+      config: {
+        standardInviteXp: parseFloat(config.standard_bonus_xp),
+        kolInviteXp: parseFloat(config.kol_bonus_xp),
+        multiplierRange: { min: 1.0, max: 2.0 },
+        multiplierTypes: ['dynamic', 'permanent'],
+        referralRequirements: {
+          description: 'Referral is counted when:',
+          items: [
+            'User registers with a valid referral code',
+            'Code is either a KOL code or standard wallet code (first 6 chars)',
+            'Referrer wallet is different from referred wallet',
+            'User hasn\'t been referred before (one referrer per user)',
+            'Registration is completed successfully'
+          ]
+        },
+        dynamicMultiplier: {
+          description: 'Forward-only bonus - applies only to XP earned AFTER registration',
+          example: 'User registers with 1.5x dynamic bonus, earns XP going forward at 1.5x rate'
+        },
+        permanentMultiplier: {
+          description: 'Retroactive bonus - applies to ALL XP (past and future)',
+          example: 'User registers with 2.0x permanent bonus, gets 100% bonus on all XP earned'
+        },
+      },
+    });
+  } catch (error) {
+    console.error('[Admin] Failed to fetch referral config:', error);
+    res.status(500).json({ error: 'Failed to fetch referral config' });
+  }
+});
+
+/**
+ * PATCH /api/admin/referrals/config
+ * Update referral configuration (invite bonuses)
+ * Body: { standardInviteXp?, kolInviteXp?, reason? }
+ */
+router.patch('/referrals/config', verifyAdminSecret, async (req, res) => {
+  try {
+    const { standardInviteXp, kolInviteXp, reason } = req.body;
+    const adminWallet = asString(req.body.adminWallet) || 'admin-system';
+
+    if (standardInviteXp !== undefined && standardInviteXp <= 0) {
+      return res.status(400).json({ error: 'standardInviteXp must be > 0' });
+    }
+    if (kolInviteXp !== undefined && kolInviteXp <= 0) {
+      return res.status(400).json({ error: 'kolInviteXp must be > 0' });
+    }
+
+    if (standardInviteXp !== undefined) {
+      await pool.query(
+        `UPDATE referral_config SET standard_bonus_xp = $1, updated_at = NOW() WHERE id = 1`,
+        [standardInviteXp]
+      );
+    }
+
+    if (kolInviteXp !== undefined) {
+      await pool.query(
+        `UPDATE referral_config SET kol_bonus_xp = $1, updated_at = NOW() WHERE id = 1`,
+        [kolInviteXp]
+      );
+    }
+
+    // Log audit trail
+    await adminAuditService.log(
+      adminWallet,
+      'referral_config_updated',
+      'referral_config',
+      'global',
+      null,
+      { standardInviteXp, kolInviteXp },
+      reason || 'Updated referral configuration'
+    );
+
+    res.json({
+      success: true,
+      message: 'Referral configuration updated',
+      updates: { standardInviteXp, kolInviteXp },
+    });
+  } catch (error) {
+    console.error('[Admin] Failed to update referral config:', error);
+    res.status(500).json({ error: 'Failed to update referral configuration' });
+  }
+});
+
+/**
+ * GET /api/admin/referrals/leaderboard
+ * Get KOL performance leaderboard with referral stats
+ */
+router.get('/referrals/leaderboard', verifyAdminSecret, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT
+         k.wallet, k.custom_code, k.display_name, k.multiplier_bonus, k.multiplier_type,
+         COUNT(r.id) as total_referrals,
+         SUM(CASE WHEN r.bonus_applied = true THEN 1 ELSE 0 END) as applied_referrals,
+         SUM(CASE WHEN r.bonus_applied = false THEN 1 ELSE 0 END) as pending_referrals,
+         SUM(u.total_xp) as referee_total_xp
+       FROM kol_whitelist k
+       LEFT JOIN referrals r ON k.wallet = r.referrer_wallet
+       LEFT JOIN users u ON r.referred_wallet = u.wallet
+       WHERE k.is_active = true
+       GROUP BY k.wallet, k.custom_code, k.display_name, k.multiplier_bonus, k.multiplier_type
+       ORDER BY total_referrals DESC`
+    );
+
+    res.json({
+      success: true,
+      leaderboard: result.rows.map((row: any) => ({
+        wallet: row.wallet,
+        customCode: row.custom_code,
+        displayName: row.display_name,
+        multiplierBonus: parseFloat(row.multiplier_bonus),
+        multiplierType: row.multiplier_type,
+        stats: {
+          totalReferrals: parseInt(row.total_referrals) || 0,
+          appliedReferrals: parseInt(row.applied_referrals) || 0,
+          pendingReferrals: parseInt(row.pending_referrals) || 0,
+          refereeAggregateXp: parseFloat(row.referee_total_xp) || 0,
+        },
+      })),
+      count: result.rows.length,
+    });
+  } catch (error) {
+    console.error('[Admin] Failed to fetch referrals leaderboard:', error);
+    res.status(500).json({ error: 'Failed to fetch leaderboard' });
+  }
+});
+
 // ── Wallet Backfill ───────────────────────────────────────────────────────
 
 /**
