@@ -10,8 +10,8 @@ class PositionService {
      * Ensure a user record exists (upsert on first seen wallet).
      */
     async ensureUserExists(wallet) {
-        await (0, pool_1.queryOne)(`INSERT INTO users (wallet, last_active) 
-       VALUES ($1, NOW()) 
+        await (0, pool_1.execute)(`INSERT INTO users (wallet, last_active)
+       VALUES ($1, NOW())
        ON CONFLICT (wallet) DO UPDATE SET last_active = NOW(), updated_at = NOW()`, [wallet]);
     }
     /**

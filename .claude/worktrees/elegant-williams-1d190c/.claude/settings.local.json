@@ -20,7 +20,10 @@
       "Bash(curl -s -I http://localhost:3000/register)",
       "Bash(cat > *)",
       "Bash(git push *)",
-      "Bash(killall node *)"
+      "Bash(killall node *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts|jsx\\)$\")"
     ]
   }
 }
