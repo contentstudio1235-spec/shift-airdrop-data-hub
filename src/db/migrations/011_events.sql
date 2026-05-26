@@ -11,8 +11,8 @@ CREATE TABLE IF NOT EXISTS events (
   description TEXT,
   start_time TIMESTAMP NOT NULL,
   end_time TIMESTAMP NOT NULL,
-  eligible_assets VARCHAR[] ARRAY, -- e.g., ARRAY['NVDA', 'AAPL', 'TSLA']
-  eligible_indices VARCHAR[] ARRAY, -- e.g., ARRAY['SPX', 'NDX', 'DXY']
+  eligible_assets TEXT[], -- e.g., ARRAY['NVDA', 'AAPL', 'TSLA']
+  eligible_indices TEXT[], -- e.g., ARRAY['SPX', 'NDX', 'DXY']
   trigger_threshold DECIMAL(10,2), -- Market impact threshold (e.g., -5.00 for -5% drop)
   is_recurring BOOLEAN DEFAULT false,
   recurrence_rule VARCHAR(255), -- RRULE format: YEARLY on FOMC dates, etc.
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS news_feed (
   source VARCHAR(128), -- e.g., 'Bloomberg', 'Reuters', 'CNBC', 'Twitter', 'Manual'
   market_impact DECIMAL(10,2), -- % market change triggered by headline (e.g., -5.50)
   published_at TIMESTAMP NOT NULL,
-  asset_symbols VARCHAR[] ARRAY, -- e.g., ARRAY['SPX', 'NVDA', 'USD']
+  asset_symbols TEXT[], -- e.g., ARRAY['SPX', 'NVDA', 'USD']
   sentiment VARCHAR(32), -- 'bearish', 'neutral', 'bullish'
   is_market_moving BOOLEAN DEFAULT true, -- Whether this triggered actual market movement
   created_by VARCHAR(64), -- Admin wallet

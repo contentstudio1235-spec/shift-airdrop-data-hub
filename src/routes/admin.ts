@@ -1174,23 +1174,24 @@ router.get('/certificates/wallet/:wallet', verifyAdminSecret, async (req, res) =
  */
 router.get('/users/:wallet', verifyAdminSecret, async (req, res) => {
   try {
-    const { wallet } = req.params;
+    const wallet = asString(req.params.wallet);
 
-    const user = await pool.query(
-      `SELECT w.wallet, SUM(xe.xp_amount) as total_xp, COUNT(DISTINCT b.id) as badge_count
-       FROM wallets w
-       LEFT JOIN xp_events xe ON w.wallet = xe.wallet
-       LEFT JOIN badges b ON w.wallet = b.wallet
-       WHERE w.wallet = $1
-       GROUP BY w.wallet`,
+    const userResult = await pool.query(
+      `SELECT u.wallet, u.total_xp, u.claim_multiplier, u.current_streak, u.created_at,
+              COUNT(DISTINCT b.id) as badge_count
+       FROM users u
+       LEFT JOIN badges b ON u.wallet = b.wallet
+       WHERE u.wallet = $1
+       GROUP BY u.wallet, u.total_xp, u.claim_multiplier, u.current_streak, u.created_at`,
       [wallet]
     );
 
-    if (user.rows.length === 0) {
+    if (userResult.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const userRow = user.rows[0];
+    const userRow = userResult.rows[0];
+
     const badges = await pool.query(
       `SELECT badge_name, earned_at FROM badges WHERE wallet = $1 ORDER BY earned_at DESC`,
       [wallet]
@@ -1201,26 +1202,29 @@ router.get('/users/:wallet', verifyAdminSecret, async (req, res) => {
       [wallet]
     );
 
+    const stacking = await badgeTemplateService.calculateBadgeStacking(wallet);
+
     res.json({
       success: true,
       user: {
         wallet: userRow.wallet,
         xp_earnedshift_points: userRow.total_xp || 0,
-        badge_count: userRow.badge_count || 0,
-        certificate_count: certCount.rows[0].count || 0,
-        badges: badges.rows.map(b => ({ name: b.badge_name, earned_at: b.earned_at })),
-        permanent_multiplier: 1.0,
+        badge_count: parseInt(userRow.badge_count) || 0,
+        certificate_count: parseInt(certCount.rows[0]?.count) || 0,
+        claim_multiplier: parseFloat(userRow.claim_multiplier) || 1.0,
+        current_streak: userRow.current_streak || 0,
+        badges: badges.rows.map((b: any) => ({ name: b.badge_name, earned_at: b.earned_at })),
+        permanent_multiplier: stacking.finalMultiplier,
         dynamic_multiplier: 0,
-        total_multiplier: 1.0,
+        total_multiplier: stacking.finalMultiplier,
         multiplier_breakdown: {
           base: 1.0,
-          badges_permanent: 0,
-          badges_dynamic: 0,
-          certs_permanent: 0,
-          certs_dynamic: 0,
-          certs_off_ceiling: 0,
-          hall_of_fame_premium: 0,
+          top_three_badges: stacking.topThreeBadges?.reduce((s: number, b: any) => s + (b.multiplier_value || 0), 0) || 0,
+          remaining_badges: stacking.remainingBadges?.reduce((s: number, b: any) => s + (b.multiplier_value || 0) * 0.5, 0) || 0,
+          hall_of_fame: stacking.hallOfFameMultiplier || 0,
+          stacking_cap: stacking.finalMultiplier >= 2.0 ? 'cap_reached' : 'under_cap',
         },
+        created_at: userRow.created_at,
       },
     });
   } catch (error) {
@@ -1235,37 +1239,27 @@ router.get('/users/:wallet', verifyAdminSecret, async (req, res) => {
  */
 router.get('/dashboard', verifyAdminSecret, async (req, res) => {
   try {
-    const totalUsers = await pool.query(`SELECT COUNT(*) as count FROM wallets`);
-    const totalXp = await pool.query(`SELECT COALESCE(SUM(xp_amount), 0) as total FROM xp_events`);
-    const badgeCount = await pool.query(
-      `SELECT COUNT(DISTINCT badge_name) as count FROM badges WHERE earned_at > NOW() - INTERVAL '30 days'`
-    );
-    const certCount = await pool.query(
-      `SELECT COUNT(*) as count FROM user_certificates WHERE awarded_at > NOW() - INTERVAL '30 days' AND revoked_at IS NULL`
-    );
-    const hofCount = await pool.query(
-      `SELECT COUNT(DISTINCT wallet) as count FROM badges WHERE badge_name = 'hall_of_fame'`
-    );
-
-    const recentActivity = await pool.query(
-      `SELECT id, action, resource_type, admin_wallet, created_at FROM admin_logs ORDER BY created_at DESC LIMIT 20`
-    );
-
-    const avgMultiplier = await pool.query(
-      `SELECT AVG(value) as avg_mult FROM (SELECT wallet, AVG(CAST(value->>'multiplier' AS DECIMAL)) as value FROM multiplier_events GROUP BY wallet) sub`
-    );
+    const [totalUsers, totalXp, badgeCount, certCount, hofCount, avgMultiplier, recentActivity] = await Promise.all([
+      pool.query(`SELECT COUNT(*) as count FROM users`),
+      pool.query(`SELECT COALESCE(SUM(total_xp), 0) as total FROM users`),
+      pool.query(`SELECT COUNT(*) as count FROM badges WHERE earned_at > NOW() - INTERVAL '30 days'`),
+      pool.query(`SELECT COUNT(*) as count FROM user_certificates WHERE awarded_at > NOW() - INTERVAL '30 days' AND revoked_at IS NULL`).catch(() => ({ rows: [{ count: 0 }] })),
+      pool.query(`SELECT COUNT(DISTINCT wallet) as count FROM badges WHERE badge_name IN ('iron_hands', 'the_believer', 'black_swan_buyer')`),
+      pool.query(`SELECT AVG(claim_multiplier) as avg_mult FROM users`),
+      pool.query(`SELECT id, action, resource_type, admin_wallet, created_at FROM admin_logs ORDER BY created_at DESC LIMIT 20`).catch(() => ({ rows: [] })),
+    ]);
 
     res.json({
       success: true,
       metrics: {
-        total_users: totalUsers.rows[0].count || 0,
-        total_xp: totalXp.rows[0].total || 0,
-        badge_count: badgeCount.rows[0].count || 0,
-        certificate_count: certCount.rows[0].count || 0,
-        hof_count: hofCount.rows[0].count || 0,
+        total_users: parseInt(totalUsers.rows[0].count) || 0,
+        total_xp: parseFloat(totalXp.rows[0].total) || 0,
+        badge_count: parseInt(badgeCount.rows[0].count) || 0,
+        certificate_count: parseInt(certCount.rows[0].count) || 0,
+        hof_count: parseInt(hofCount.rows[0].count) || 0,
         avg_multiplier: parseFloat(avgMultiplier.rows[0]?.avg_mult || '1.0') || 1.0,
       },
-      recentActivity: recentActivity.rows.map(r => ({
+      recentActivity: recentActivity.rows.map((r: any) => ({
         id: r.id,
         action: r.action,
         resource_type: r.resource_type,
@@ -1369,29 +1363,100 @@ router.post('/snag/sync-all', verifyAdminSecret, async (req, res) => {
   try {
     const adminWallet = asString(req.body.adminWallet) || 'admin-system';
 
-    // Get all users
-    const users = await pool.query(`SELECT wallet FROM wallets`);
+    // Trigger full sync using snagSyncService
+    const startTime = Date.now();
+    await snagSyncService.fullSync();
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
 
-    let synced = 0;
-    for (const user of users.rows) {
-      // Sync user's badges to SNAG
-      const badges = await pool.query(`SELECT badge_name FROM badges WHERE wallet = $1`, [user.wallet]);
-      for (const badge of badges.rows) {
-        // Will be queued for sync
-        synced++;
-      }
-    }
-
-    await adminAuditService.log(adminWallet, 'snag_full_sync', 'snag', 'all_users', null, { users_processed: users.rows.length }, 'Triggered full SNAG sync');
+    const users = await pool.query(`SELECT COUNT(*) as count FROM users`);
+    await adminAuditService.log(adminWallet, 'snag_full_sync', 'snag', 'all_users', null, { users_processed: users.rows[0].count }, 'Triggered full SNAG sync');
 
     res.json({
       success: true,
-      message: `Queued ${synced} badge syncs to SNAG`,
-      users_processed: users.rows.length,
+      message: `Full SNAG sync completed`,
+      users_processed: parseInt(users.rows[0].count) || 0,
+      duration: `${duration}s`,
     });
   } catch (error) {
     console.error('[Admin] Failed to trigger full SNAG sync:', error);
     res.status(500).json({ error: 'Failed to trigger full SNAG sync' });
+  }
+});
+
+/**
+ * POST /api/admin/recalculate-xp
+ * Manually trigger XP recalculation for all users (or specific wallet)
+ * Body: { wallet?: string } — if wallet provided, recalculate for that wallet only
+ */
+router.post('/recalculate-xp', verifyAdminSecret, async (req, res) => {
+  const wallet = asString(req.body.wallet);
+
+  try {
+    if (wallet) {
+      // Force XP recalculation for specific wallet by resetting last_xp_calc on their positions
+      await pool.query(
+        `UPDATE positions SET last_xp_calc = opened_at WHERE wallet = $1 AND status = 'open'`,
+        [wallet]
+      );
+      console.log(`[Admin] Reset XP calc timestamps for ${wallet.slice(0, 8)}...`);
+    } else {
+      // Reset all positions — XP engine will recalculate on next cron run
+      await pool.query(`UPDATE positions SET last_xp_calc = opened_at WHERE status = 'open' AND last_xp_calc IS NULL`);
+    }
+
+    // Also trigger badge check for shift_holder
+    if (wallet) {
+      const { badgeService } = await import('../services/badgeService');
+      await badgeService.checkShiftHolder(wallet);
+    }
+
+    res.json({
+      success: true,
+      message: wallet
+        ? `XP recalculation queued for ${wallet.slice(0, 8)}... — will apply on next XP engine run (within 60s)`
+        : 'XP recalculation queued for all users',
+      wallet: wallet || 'all',
+    });
+  } catch (error) {
+    console.error('[Admin] Failed to trigger XP recalculation:', error);
+    res.status(500).json({ error: 'Failed to trigger XP recalculation' });
+  }
+});
+
+/**
+ * POST /api/admin/force-badge-check
+ * Force a badge eligibility check for a specific wallet
+ * Body: { wallet: string }
+ */
+router.post('/force-badge-check', verifyAdminSecret, async (req, res) => {
+  const wallet = asString(req.body.wallet);
+
+  if (!wallet || wallet.length < 32) {
+    return res.status(400).json({ error: 'Invalid wallet address' });
+  }
+
+  try {
+    const { badgeService } = await import('../services/badgeService');
+
+    // Check all available badges for this wallet
+    const [shiftHolder, firstTrade] = await Promise.all([
+      badgeService.checkShiftHolder(wallet),
+      badgeService.checkFirstTrade(wallet),
+    ]);
+
+    const awarded = [shiftHolder, firstTrade].filter(Boolean).map((b: any) => b.badge_name);
+
+    res.json({
+      success: true,
+      wallet,
+      badgesAwarded: awarded,
+      message: awarded.length > 0
+        ? `Awarded ${awarded.length} badge(s): ${awarded.join(', ')}`
+        : 'No new badges to award',
+    });
+  } catch (error) {
+    console.error('[Admin] Failed to run badge check:', error);
+    res.status(500).json({ error: 'Failed to run badge check' });
   }
 });
 

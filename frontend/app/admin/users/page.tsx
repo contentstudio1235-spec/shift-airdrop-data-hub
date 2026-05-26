@@ -3,23 +3,58 @@ import React, { useState } from "react";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import styles from "@/styles/admin.module.css";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://shift-airdrop-backend.onrender.com";
+const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || "ShiftRwa2026@@$$Key";
+
 export default function AdminUsersPage() {
-  const { isAuthenticated } = useAdminAuth();
+  const { isAuthenticated, login } = useAdminAuth();
   const [searchWallet, setSearchWallet] = useState("");
-  const [userInfo, setUserInfo] = useState(null);
-  const [auditLogs, setAuditLogs] = useState([]);
+  const [userInfo, setUserInfo] = useState<any>(null);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState("info");
   const [loading, setLoading] = useState(false);
+  const [passcode, setPasscode] = useState("");
+  const [authError, setAuthError] = useState(false);
 
-  if (!isAuthenticated) return <div>Not authenticated.</div>;
+  if (!isAuthenticated) {
+    return (
+      <div className={styles.adminPage}>
+        <div className={styles.authGate}>
+          <h2>Admin Access Required</h2>
+          <input
+            type="password"
+            placeholder="Enter admin passcode"
+            value={passcode}
+            onChange={(e) => setPasscode(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const ok = login(passcode);
+                if (!ok) setAuthError(true);
+              }
+            }}
+          />
+          {authError && <p style={{ color: "#e63946" }}>Invalid passcode</p>}
+          <button
+            className={styles.btnPrimary}
+            onClick={() => {
+              const ok = login(passcode);
+              if (!ok) setAuthError(true);
+            }}
+          >
+            Sign In
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleSearch = async (e) => {
     e.preventDefault();
     if (!searchWallet.trim()) return;
     try {
       setLoading(true);
-      const res = await fetch(`/api/admin/users/${searchWallet}`, {
-        headers: { "x-admin-key": process.env.NEXT_PUBLIC_ADMIN_KEY || "" }
+      const res = await fetch(`${API_URL}/api/admin/users/${searchWallet}`, {
+        headers: { "x-admin-key": ADMIN_KEY }
       });
       if (!res.ok) throw new Error("User not found");
       const data = await res.json();
@@ -34,8 +69,8 @@ export default function AdminUsersPage() {
   const handleLoadAudit = async () => {
     if (!searchWallet.trim()) return;
     try {
-      const res = await fetch(`/api/admin/audit?wallet=${searchWallet}&limit=50`, {
-        headers: { "x-admin-key": process.env.NEXT_PUBLIC_ADMIN_KEY || "" }
+      const res = await fetch(`${API_URL}/api/admin/audit?wallet=${searchWallet}&limit=50`, {
+        headers: { "x-admin-key": ADMIN_KEY }
       });
       if (!res.ok) throw new Error("Failed to load audit");
       const data = await res.json();

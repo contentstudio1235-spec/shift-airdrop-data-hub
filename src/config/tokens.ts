@@ -11,6 +11,14 @@ interface TokenInfo {
 }
 
 export const TRACKED_TOKENS: Record<string, TokenInfo> = {
+  // SHIFT Governance Token — holding gives shift_holder badge + XP generation
+  SHIFT: {
+    mint: '5dVc9YuDZ3wRbohosa8bwXoj1v6zMvipwr38LFEA7MLJ',
+    symbol: 'SHIFT',
+    name: 'Shift RWA Token',
+    baseMultiplier: 1.3, // 30% base bonus — SHIFT holders get premium XP
+  },
+
   // Tesla 2x Long
   TSL2L: {
     mint: '6afjZE5Qv9WF5K1adBgTxtWyenJ7ZerH6BVAzmoSHFT',

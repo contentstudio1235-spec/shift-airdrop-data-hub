@@ -4,19 +4,21 @@ import { useAdminAuth } from "@/hooks/useAdminAuth";
 import styles from "@/styles/admin.module.css";
 
 export default function AdminDashboardPage() {
-  const { isAuthenticated } = useAdminAuth();
-  const [metrics, setMetrics] = useState(null);
-  const [recentActivity, setRecentActivity] = useState([]);
+  const { isAuthenticated, login } = useAdminAuth();
+  const [metrics, setMetrics] = useState<any>(null);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  if (!isAuthenticated) return <div>Not authenticated.</div>;
+  const [passcode, setPasscode] = useState("");
+  const [authError, setAuthError] = useState(false);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     const fetchDashboard = async () => {
       try {
-        const res = await fetch("/api/admin/dashboard", {
-          headers: { "x-admin-key": process.env.NEXT_PUBLIC_ADMIN_KEY || "" }
-        });
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || "https://shift-airdrop-backend.onrender.com"}/api/admin/dashboard`,
+          { headers: { "x-admin-key": process.env.NEXT_PUBLIC_ADMIN_KEY || "ShiftRwa2026@@$$Key" } }
+        );
         if (!res.ok) throw new Error("Failed to fetch dashboard");
         const data = await res.json();
         setMetrics(data.metrics || {});
@@ -28,9 +30,41 @@ export default function AdminDashboardPage() {
       }
     };
     fetchDashboard();
-  }, []);
+  }, [isAuthenticated]);
 
-  if (loading) return <div>Loading dashboard...</div>;
+  if (!isAuthenticated) {
+    return (
+      <div className={styles.adminPage}>
+        <div className={styles.authGate}>
+          <h2>Admin Access Required</h2>
+          <input
+            type="password"
+            placeholder="Enter admin passcode"
+            value={passcode}
+            onChange={(e) => setPasscode(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const ok = login(passcode);
+                if (!ok) setAuthError(true);
+              }
+            }}
+          />
+          {authError && <p style={{ color: "#e63946" }}>Invalid passcode</p>}
+          <button
+            className={styles.btnPrimary}
+            onClick={() => {
+              const ok = login(passcode);
+              if (!ok) setAuthError(true);
+            }}
+          >
+            Sign In
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) return <div className={styles.adminPage} style={{ padding: 40, color: "#888" }}>Loading dashboard...</div>;
 
   return (
     <div className={styles.adminPage}>
