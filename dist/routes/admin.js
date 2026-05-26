@@ -1,0 +1,1273 @@
+"use strict";
+// ============================================================
+// Admin Routes — Sync triggers, KOL management
+// ============================================================
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const snagSyncService_1 = require("../services/snagSyncService");
+const referralService_1 = require("../services/referralService");
+const holdingService_1 = require("../services/holdingService");
+const positionService_1 = require("../services/positionService");
+const jupiterPriceService_1 = require("../services/jupiterPriceService");
+const launchConfigService_1 = require("../services/launchConfigService");
+const adminAuditService_1 = require("../services/adminAuditService");
+const badgeTemplateService_1 = require("../services/badgeTemplateService");
+const tokens_1 = require("../config/tokens");
+const pool_1 = require("../db/pool");
+const eventService_1 = require("../services/eventService");
+const configService_1 = require("../services/configService");
+const certificateService_1 = require("../services/certificateService");
+const router = express_1.default.Router();
+/**
+ * Middleware: Verify admin passcode header
+ * Protects the admin endpoints from unauthorized access
+ * Uses hardcoded passcode for KOL management
+ */
+const ADMIN_PASSCODE = 'ShiftRwa2026@@$$Key';
+/**
+ * Helper: Convert string | string[] to string
+ */
+const asString = (value) => {
+    if (Array.isArray(value))
+        return value[0] || '';
+    return value || '';
+};
+const verifyAdminSecret = (req, res, next) => {
+    const passcode = req.headers['x-admin-key'];
+    if (!passcode || passcode !== ADMIN_PASSCODE) {
+        console.warn('[Admin] Invalid admin passcode');
+        return res.status(401).json({ error: 'Unauthorized - Invalid passcode' });
+    }
+    next();
+};
+/**
+ * POST /api/admin/sync
+ * Trigger a full XP recalculation + badge evaluation + SNAG sync
+ * Called by SNAG Stratus scheduled function every 10 minutes
+ */
+router.post('/sync', verifyAdminSecret, async (req, res) => {
+    try {
+        console.log('[Admin] Manual full sync triggered');
+        const startTime = Date.now();
+        await snagSyncService_1.snagSyncService.fullSync();
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`[Admin] Full sync completed in ${duration}s`);
+        res.json({
+            success: true,
+            message: 'Full sync completed',
+            duration: `${duration}s`,
+            timestamp: new Date().toISOString(),
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Sync failed:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Sync failed',
+            message: error instanceof Error ? error.message : 'Unknown error',
+        });
+    }
+});
+/**
+ * POST /api/admin/queue-retry
+ * Manually trigger SNAG sync queue retry worker
+ */
+router.post('/queue-retry', verifyAdminSecret, async (req, res) => {
+    try {
+        console.log('[Admin] Manual queue retry triggered');
+        const startTime = Date.now();
+        await snagSyncService_1.snagSyncService.processRetryQueue();
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log(`[Admin] Queue retry completed in ${duration}s`);
+        res.json({
+            success: true,
+            message: 'Queue retry completed',
+            duration: `${duration}s`,
+            timestamp: new Date().toISOString(),
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Queue retry failed:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Queue retry failed',
+            message: error instanceof Error ? error.message : 'Unknown error',
+        });
+    }
+});
+/**
+ * GET /api/admin/health
+ * Check admin endpoint is working
+ */
+router.get('/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+    });
+});
+// ── KOL Management ───────────────────────────────────────────────────────
+/**
+ * GET /api/admin/kol
+ * List all KOL entries with referral counts
+ */
+router.get('/kol', verifyAdminSecret, async (_req, res) => {
+    try {
+        const kols = await referralService_1.referralService.listKols();
+        res.json({ kols, total: kols.length });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to list KOLs:', error);
+        res.status(500).json({ error: 'Failed to list KOLs' });
+    }
+});
+/**
+ * POST /api/admin/kol
+ * Add or update a KOL whitelist entry
+ * Body: { wallet, customCode, displayName?, multiplierBonus?, multiplierType?, notes? }
+ */
+router.post('/kol', verifyAdminSecret, async (req, res) => {
+    try {
+        const { wallet, customCode, displayName, multiplierBonus, multiplierType, notes, } = req.body;
+        if (!wallet || wallet.length < 32) {
+            return res.status(400).json({ error: 'Invalid wallet address' });
+        }
+        if (!customCode || customCode.length < 4) {
+            return res.status(400).json({ error: 'Custom code must be at least 4 characters' });
+        }
+        if (!/^[A-Z0-9-]{4,32}$/i.test(customCode)) {
+            return res.status(400).json({ error: 'Code must be alphanumeric with hyphens only (4–32 chars)' });
+        }
+        if (multiplierBonus !== undefined && (multiplierBonus < 1.0 || multiplierBonus > 2.0)) {
+            return res.status(400).json({ error: 'Multiplier bonus must be between 1.0 and 2.0' });
+        }
+        if (multiplierType !== undefined && !['dynamic', 'permanent'].includes(multiplierType)) {
+            return res.status(400).json({ error: 'multiplierType must be "dynamic" or "permanent"' });
+        }
+        const kol = await referralService_1.referralService.addKol({
+            wallet,
+            customCode,
+            displayName,
+            multiplierBonus: multiplierBonus ?? 1.5,
+            multiplierType: multiplierType ?? 'dynamic',
+            notes,
+            createdBy: 'admin',
+        });
+        res.json({ success: true, kol });
+    }
+    catch (error) {
+        if (error?.code === '23505') {
+            return res.status(409).json({ error: 'Custom code already in use' });
+        }
+        console.error('[Admin] Failed to add KOL:', error);
+        res.status(500).json({ error: 'Failed to add KOL' });
+    }
+});
+/**
+ * PATCH /api/admin/kol/:wallet
+ * Update a KOL entry (activate/deactivate, change multiplier, etc.)
+ */
+router.patch('/kol/:wallet', verifyAdminSecret, async (req, res) => {
+    try {
+        const { wallet } = req.params;
+        const { customCode, displayName, multiplierBonus, multiplierType, isActive, notes } = req.body;
+        if (multiplierBonus !== undefined && (multiplierBonus < 1.0 || multiplierBonus > 2.0)) {
+            return res.status(400).json({ error: 'Multiplier bonus must be between 1.0 and 2.0' });
+        }
+        const updates = {};
+        if (customCode !== undefined)
+            updates.customCode = customCode;
+        if (displayName !== undefined)
+            updates.displayName = displayName;
+        if (multiplierBonus !== undefined)
+            updates.multiplierBonus = multiplierBonus;
+        if (multiplierType !== undefined)
+            updates.multiplierType = multiplierType;
+        if (isActive !== undefined)
+            updates.isActive = isActive;
+        if (notes !== undefined)
+            updates.notes = notes;
+        const updated = await referralService_1.referralService.updateKol(wallet, updates);
+        if (!updated) {
+            return res.status(404).json({ error: 'KOL not found' });
+        }
+        res.json({ success: true, kol: updated });
+    }
+    catch (error) {
+        if (error?.code === '23505') {
+            return res.status(409).json({ error: 'Custom code already in use' });
+        }
+        console.error('[Admin] Failed to update KOL:', error);
+        res.status(500).json({ error: 'Failed to update KOL' });
+    }
+});
+/**
+ * DELETE /api/admin/kol/:wallet
+ * Deactivate (soft delete) a KOL
+ */
+router.delete('/kol/:wallet', verifyAdminSecret, async (req, res) => {
+    try {
+        const { wallet } = req.params;
+        const updated = await referralService_1.referralService.updateKol(wallet, { isActive: false });
+        if (!updated)
+            return res.status(404).json({ error: 'KOL not found' });
+        res.json({ success: true, message: 'KOL deactivated' });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to deactivate KOL:', error);
+        res.status(500).json({ error: 'Failed to deactivate KOL' });
+    }
+});
+// ── Wallet Backfill ───────────────────────────────────────────────────────
+/**
+ * POST /api/admin/backfill-wallet
+ * Scan on-chain SHIFT token balances for a wallet and create any missing positions.
+ * Use this for wallets that bought tokens before the Helius webhook was live,
+ * or whose transactions were missed by the webhook.
+ *
+ * Body: { wallet: string }
+ * Returns a summary of positions created / already existing.
+ */
+router.post('/backfill-wallet', verifyAdminSecret, async (req, res) => {
+    const { wallet } = req.body;
+    if (!wallet || wallet.length < 32) {
+        return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+    try {
+        // 1. Ensure the user is registered
+        await positionService_1.positionService.ensureUserExists(wallet);
+        const results = [];
+        // 2. For every tracked SHIFT token, check on-chain balance
+        for (const token of Object.values(tokens_1.TRACKED_TOKENS)) {
+            const balance = await holdingService_1.holdingService.getTokenBalance(wallet, token.mint);
+            if (balance <= 0) {
+                results.push({ token: token.symbol, mint: token.mint, balance: 0, usdValue: 0, action: 'skipped_zero' });
+                continue;
+            }
+            // Check if an open position already exists
+            const existingPositions = await pool_1.pool.query(`SELECT id FROM positions WHERE wallet = $1 AND asset = $2 AND status = 'open' LIMIT 1`, [wallet, token.symbol]);
+            if (existingPositions.rows.length > 0) {
+                results.push({ token: token.symbol, mint: token.mint, balance, usdValue: 0, action: 'already_open' });
+                continue;
+            }
+            // Get current USD value
+            const priceData = await jupiterPriceService_1.jupiterPriceService.calculateUSDValue(token.mint, balance);
+            const usdValue = priceData?.usdValue ?? 0;
+            const price = priceData?.price ?? null;
+            // Create a backdated position with a synthetic signature
+            const syntheticSig = `backfill_${wallet.slice(0, 8)}_${token.symbol}_${Date.now()}`;
+            await positionService_1.positionService.openPosition(wallet, token.symbol, token.mint, usdValue, balance, price, syntheticSig, new Date());
+            results.push({ token: token.symbol, mint: token.mint, balance, usdValue, action: 'created' });
+            console.log(`[Admin] Backfilled position: ${wallet.slice(0, 8)}... | ${token.symbol} | ${balance} tokens | $${usdValue.toFixed(2)}`);
+        }
+        const created = results.filter(r => r.action === 'created').length;
+        const alreadyOpen = results.filter(r => r.action === 'already_open').length;
+        res.json({
+            success: true,
+            wallet,
+            summary: { created, alreadyOpen, skippedZeroBalance: results.filter(r => r.action === 'skipped_zero').length },
+            positions: results,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Backfill wallet failed:', error);
+        res.status(500).json({ error: 'Backfill failed', message: error instanceof Error ? error.message : String(error) });
+    }
+});
+/**
+ * POST /api/admin/manual-position
+ * Manually create a position for a wallet — for cases where the purchase amount/price
+ * is already known and you want to set it precisely.
+ *
+ * Body: { wallet, asset, mint, tokenAmount, usdValue, openedAt? }
+ */
+router.post('/manual-position', verifyAdminSecret, async (req, res) => {
+    const { wallet, asset, mint, tokenAmount, usdValue, openedAt } = req.body;
+    if (!wallet || wallet.length < 32)
+        return res.status(400).json({ error: 'Invalid wallet' });
+    if (!asset)
+        return res.status(400).json({ error: 'asset (token symbol) required' });
+    if (!usdValue || usdValue <= 0)
+        return res.status(400).json({ error: 'usdValue must be > 0' });
+    try {
+        await positionService_1.positionService.ensureUserExists(wallet);
+        const syntheticSig = `manual_${wallet.slice(0, 8)}_${asset}_${Date.now()}`;
+        const timestamp = openedAt ? new Date(openedAt) : new Date();
+        const pricePerToken = tokenAmount && tokenAmount > 0 ? usdValue / tokenAmount : null;
+        await positionService_1.positionService.openPosition(wallet, asset, mint ?? null, usdValue, tokenAmount ?? null, pricePerToken, syntheticSig, timestamp);
+        console.log(`[Admin] Manual position created: ${wallet.slice(0, 8)}... | ${asset} | $${usdValue}`);
+        res.json({ success: true, wallet, asset, usdValue, openedAt: timestamp.toISOString() });
+    }
+    catch (error) {
+        console.error('[Admin] Manual position failed:', error);
+        res.status(500).json({ error: 'Failed to create position', message: error instanceof Error ? error.message : String(error) });
+    }
+});
+/**
+ * GET /api/admin/wallet-status/:wallet
+ * Quick diagnostic view: is wallet registered, how many positions, total XP.
+ */
+router.get('/wallet-status/:wallet', verifyAdminSecret, async (req, res) => {
+    const { wallet } = req.params;
+    try {
+        const [userResult, positionsResult] = await Promise.all([
+            pool_1.pool.query('SELECT wallet, total_xp, claim_multiplier, created_at FROM users WHERE wallet = $1', [wallet]),
+            pool_1.pool.query(`SELECT asset, status, position_size_usd, opened_at FROM positions WHERE wallet = $1 ORDER BY opened_at DESC LIMIT 20`, [wallet]),
+        ]);
+        // Check live on-chain balances for SHIFT tokens (simplified)
+        const balances = [];
+        const user = userResult.rows[0] || null;
+        const nonZeroBalances = balances.filter(b => b.onChainBalance > 0);
+        res.json({
+            wallet,
+            registered: !!user,
+            user: user ?? null,
+            dbPositions: positionsResult.rows,
+            onChainBalances: balances,
+            needsBackfill: nonZeroBalances.some(b => {
+                const hasOpenPos = positionsResult.rows.some((p) => p.asset === b.symbol && p.status === 'open');
+                return !hasOpenPos;
+            }),
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Wallet status check failed:', error);
+        res.status(500).json({ error: 'Failed to check wallet status' });
+    }
+});
+// ── Launch Configuration ─────────────────────────────────────────────────────
+/**
+ * GET /api/admin/launch-config
+ * Get current launch configuration and phase
+ * Public endpoint (no auth needed) — returns current phase info for frontend
+ */
+router.get('/launch-config', async (_req, res) => {
+    try {
+        const config = await launchConfigService_1.launchConfigService.getConfig();
+        const phase = await launchConfigService_1.launchConfigService.getCurrentPhase();
+        res.json({
+            success: true,
+            phase,
+            config: {
+                phase1: {
+                    start: config?.phase1_start_time,
+                    end: config?.phase1_end_time,
+                    multiplier: config?.phase1_multiplier,
+                    label: config?.phase1_label,
+                },
+                phase2: {
+                    start: config?.phase2_start_time,
+                    end: config?.phase2_end_time,
+                    multiplier: config?.phase2_multiplier,
+                    label: config?.phase2_label,
+                },
+                phase3: {
+                    start: config?.phase3_start_time,
+                    end: config?.phase3_end_time,
+                    multiplier: config?.phase3_multiplier,
+                    label: config?.phase3_label,
+                },
+                is_active: config?.is_active,
+            },
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch launch config:', error);
+        res.status(500).json({ error: 'Failed to fetch launch config' });
+    }
+});
+/**
+ * PATCH /api/admin/launch-config/phase/:phase
+ * Update a specific phase (admin only)
+ * Body: { multiplier?, label?, start_time?, end_time?, reason? }
+ */
+router.patch('/launch-config/phase/:phase', verifyAdminSecret, async (req, res) => {
+    try {
+        const { phase } = req.params;
+        const adminWallet = req.body.adminWallet || 'admin-system';
+        const { multiplier, label, start_time, end_time, reason } = req.body;
+        if (!['phase1', 'phase2', 'phase3'].includes(phase)) {
+            return res.status(400).json({ error: 'Invalid phase' });
+        }
+        if (multiplier !== undefined && (multiplier < 0.1 || multiplier > 10)) {
+            return res.status(400).json({ error: 'Multiplier must be between 0.1 and 10' });
+        }
+        const updates = {};
+        if (multiplier !== undefined)
+            updates.multiplier = multiplier;
+        if (label !== undefined)
+            updates.label = label;
+        if (start_time !== undefined)
+            updates.start_time = new Date(start_time);
+        if (end_time !== undefined)
+            updates.end_time = new Date(end_time);
+        await launchConfigService_1.launchConfigService.updatePhase(phase, updates, adminWallet, reason);
+        // Log to audit trail
+        await adminAuditService_1.adminAuditService.log(adminWallet, `${phase}_updated`, 'launch_config', phase, null, updates, reason);
+        res.json({
+            success: true,
+            message: `Phase ${phase} updated`,
+            phase: await launchConfigService_1.launchConfigService.getCurrentPhase(),
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to update launch phase:', error);
+        res.status(500).json({ error: 'Failed to update phase' });
+    }
+});
+/**
+ * PATCH /api/admin/launch-config/toggle
+ * Toggle launch bonus on/off (admin only)
+ * Body: { is_active: boolean, reason?: string }
+ */
+router.patch('/launch-config/toggle', verifyAdminSecret, async (req, res) => {
+    try {
+        const { is_active, reason } = req.body;
+        const adminWallet = req.body.adminWallet || 'admin-system';
+        if (typeof is_active !== 'boolean') {
+            return res.status(400).json({ error: 'is_active must be a boolean' });
+        }
+        await launchConfigService_1.launchConfigService.toggleLaunchBonus(is_active, adminWallet, reason);
+        // Log to audit trail
+        await adminAuditService_1.adminAuditService.log(adminWallet, 'launch_bonus_toggled', 'launch_config', 'launch_bonus', { is_active: !is_active }, { is_active }, reason);
+        res.json({
+            success: true,
+            message: `Launch bonus ${is_active ? 'enabled' : 'disabled'}`,
+            phase: await launchConfigService_1.launchConfigService.getCurrentPhase(),
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to toggle launch bonus:', error);
+        res.status(500).json({ error: 'Failed to toggle launch bonus' });
+    }
+});
+// ── Badge Management ─────────────────────────────────────────────────
+/**
+ * GET /api/admin/badges
+ * List all badge templates with active status
+ */
+router.get('/badges', verifyAdminSecret, async (_req, res) => {
+    try {
+        const templates = await badgeTemplateService_1.badgeTemplateService.getTemplates();
+        res.json({
+            success: true,
+            count: templates.length,
+            badges: templates.map(t => ({
+                template_key: t.template_key,
+                category: t.category,
+                display_name: t.display_name,
+                description: t.description,
+                multiplier_value: t.multiplier_value,
+                duration_type: t.duration_type,
+                is_hall_of_fame: t.is_hall_of_fame,
+                dynamic_duration_days: t.dynamic_duration_days,
+            })),
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch badges:', error);
+        res.status(500).json({ error: 'Failed to fetch badges' });
+    }
+});
+/**
+ * GET /api/admin/badges/templates
+ * List available rule templates (for admin UI dropdown)
+ */
+router.get('/badges/templates', verifyAdminSecret, async (_req, res) => {
+    try {
+        const templates = await badgeTemplateService_1.badgeTemplateService.getTemplates();
+        // Group by category
+        const grouped = {};
+        templates.forEach(t => {
+            if (!grouped[t.category])
+                grouped[t.category] = [];
+            grouped[t.category].push({
+                key: t.template_key,
+                name: t.display_name,
+                multiplier: t.multiplier_value,
+                duration: t.duration_type,
+            });
+        });
+        res.json({
+            success: true,
+            categories: grouped,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch badge templates:', error);
+        res.status(500).json({ error: 'Failed to fetch templates' });
+    }
+});
+/**
+ * POST /api/admin/badges/:wallet
+ * Award badge to a wallet manually
+ * Body: { template_key: string, position_id?: string, reason?: string }
+ */
+router.post('/badges/:wallet', verifyAdminSecret, async (req, res) => {
+    const wallet = asString(req.params.wallet);
+    const template_key = asString(req.body.template_key);
+    const position_id = asString(req.body.position_id);
+    const reason = asString(req.body.reason);
+    const adminWallet = asString(req.body.adminWallet) || 'admin-system';
+    if (!wallet || wallet.length < 32) {
+        return res.status(400).json({ error: 'Invalid wallet' });
+    }
+    if (!template_key) {
+        return res.status(400).json({ error: 'template_key required' });
+    }
+    try {
+        await badgeTemplateService_1.badgeTemplateService.awardBadge(wallet, template_key, position_id, adminWallet);
+        // Log to audit trail
+        await adminAuditService_1.adminAuditService.log(adminWallet, 'badge_awarded', 'badge', `${wallet}_${template_key}`, null, { template_key, position_id }, reason);
+        res.json({
+            success: true,
+            message: `Badge ${template_key} awarded to ${wallet.slice(0, 8)}...`,
+            wallet,
+            template_key,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to award badge:', error);
+        res.status(500).json({
+            error: 'Failed to award badge',
+            message: error instanceof Error ? error.message : String(error),
+        });
+    }
+});
+/**
+ * DELETE /api/admin/badges/:wallet/:templateKey
+ * Revoke badge from wallet
+ * Body: { reason?: string }
+ */
+router.delete('/badges/:wallet/:templateKey', verifyAdminSecret, async (req, res) => {
+    const wallet = asString(req.params.wallet);
+    const templateKey = asString(req.params.templateKey);
+    const reason = asString(req.body.reason);
+    const adminWallet = asString(req.body.adminWallet) || 'admin-system';
+    if (!wallet || wallet.length < 32) {
+        return res.status(400).json({ error: 'Invalid wallet' });
+    }
+    try {
+        await badgeTemplateService_1.badgeTemplateService.revokeBadge(wallet, templateKey);
+        // Log to audit trail
+        await adminAuditService_1.adminAuditService.log(adminWallet, 'badge_revoked', 'badge', `${wallet}_${templateKey}`, { template_key: templateKey }, null, reason);
+        res.json({
+            success: true,
+            message: `Badge ${templateKey} revoked from ${wallet.slice(0, 8)}...`,
+            wallet,
+            template_key: templateKey,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to revoke badge:', error);
+        res.status(500).json({
+            error: 'Failed to revoke badge',
+            message: error instanceof Error ? error.message : String(error),
+        });
+    }
+});
+/**
+ * GET /api/admin/badges/:wallet
+ * Get all badges earned by a wallet
+ */
+router.get('/badges/:wallet', verifyAdminSecret, async (req, res) => {
+    const wallet = asString(req.params.wallet);
+    if (!wallet || wallet.length < 32) {
+        return res.status(400).json({ error: 'Invalid wallet' });
+    }
+    try {
+        const result = await pool_1.pool.query(`SELECT bd.badge_name, bd.description, bd.multiplier_value, brt.is_hall_of_fame, ub.awarded_at
+       FROM user_badges ub
+       JOIN badge_definitions bd ON ub.badge_id = bd.id
+       LEFT JOIN badge_rule_templates brt ON bd.rule_template = brt.template_key
+       WHERE ub.wallet = $1
+       ORDER BY ub.awarded_at DESC`, [wallet]);
+        const badges = result.rows;
+        const stacking = await badgeTemplateService_1.badgeTemplateService.calculateBadgeStacking(wallet);
+        res.json({
+            success: true,
+            wallet,
+            badgeCount: badges.length,
+            badges,
+            stacking: {
+                topThreeBadges: stacking.topThreeBadges,
+                remainingBadges: stacking.remainingBadges,
+                totalMultiplier: stacking.totalMultiplier,
+                hallOfFameMultiplier: stacking.hallOfFameMultiplier,
+                finalMultiplier: stacking.finalMultiplier,
+            },
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch wallet badges:', error);
+        res.status(500).json({ error: 'Failed to fetch badges' });
+    }
+});
+// ============================================================
+// Event Management Routes
+// ============================================================
+/**
+ * GET /api/admin/events
+ * List all events with filtering by type
+ */
+router.get('/events', verifyAdminSecret, async (req, res) => {
+    try {
+        const { type } = req.query;
+        let eventsList;
+        if (type) {
+            eventsList = await eventService_1.eventService.getEventsByType(type);
+        }
+        else {
+            const result = await pool_1.pool.query('SELECT * FROM events ORDER BY start_time DESC LIMIT 100');
+            eventsList = result.rows;
+        }
+        res.json({
+            success: true,
+            events: eventsList,
+            count: eventsList.length,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch events:', error);
+        res.status(500).json({ error: 'Failed to fetch events' });
+    }
+});
+/**
+ * POST /api/admin/events
+ * Create a new event
+ */
+router.post('/events', verifyAdminSecret, async (req, res) => {
+    try {
+        const { eventName, eventType, startTime, endTime, description, eligibleAssets, eligibleIndices, adminWallet } = req.body;
+        if (!eventName || !eventType || !startTime || !endTime) {
+            return res.status(400).json({ error: 'Missing required fields: eventName, eventType, startTime, endTime' });
+        }
+        const event = await eventService_1.eventService.createEvent(eventName, eventType, new Date(startTime), new Date(endTime), adminWallet || 'system', description, eligibleAssets, eligibleIndices);
+        console.log(`[Admin] Created event: ${eventName}`);
+        res.json({ success: true, event });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to create event:', error);
+        res.status(500).json({ error: 'Failed to create event' });
+    }
+});
+/**
+ * GET /api/admin/events/news
+ * Get recent news headlines (for News Reactor badge)
+ */
+router.get('/events/news', verifyAdminSecret, async (req, res) => {
+    try {
+        const { hoursBack = 24 } = req.query;
+        const news = await eventService_1.eventService.getRecentNews(parseInt(hoursBack));
+        res.json({
+            success: true,
+            news,
+            count: news.length,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch news:', error);
+        res.status(500).json({ error: 'Failed to fetch news' });
+    }
+});
+/**
+ * POST /api/admin/events/news
+ * Add a news headline
+ */
+router.post('/events/news', verifyAdminSecret, async (req, res) => {
+    try {
+        const { headline, source, marketImpact, assetSymbols, sentiment, adminWallet } = req.body;
+        if (!headline || !source || !assetSymbols) {
+            return res.status(400).json({ error: 'Missing required fields: headline, source, assetSymbols' });
+        }
+        const news = await eventService_1.eventService.addNewsHeadline(headline, source, marketImpact || 0, new Date(), assetSymbols, sentiment || 'neutral', adminWallet || 'system');
+        console.log(`[Admin] Added news headline: ${headline.slice(0, 50)}`);
+        res.json({ success: true, news });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to add news:', error);
+        res.status(500).json({ error: 'Failed to add news' });
+    }
+});
+/**
+ * GET /api/admin/events/:eventId/activity
+ * Get activity/participation for an event
+ */
+router.get('/events/:eventId/activity', verifyAdminSecret, async (req, res) => {
+    try {
+        const eventId = asString(req.params.eventId);
+        const count = await eventService_1.eventService.getEventActivityCount(eventId);
+        const participants = await eventService_1.eventService.getEventParticipants(eventId);
+        res.json({
+            success: true,
+            eventId,
+            activityCount: count,
+            participantCount: participants.length,
+            participants: participants.slice(0, 100),
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch event activity:', error);
+        res.status(500).json({ error: 'Failed to fetch event activity' });
+    }
+});
+// ============================================================
+// Configuration Management Routes
+// ============================================================
+/**
+ * GET /api/admin/config
+ * Get all configuration values
+ */
+router.get('/config', verifyAdminSecret, async (req, res) => {
+    try {
+        const config = await configService_1.configService.getAllConfig();
+        res.json({ success: true, config });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch config:', error);
+        res.status(500).json({ error: 'Failed to fetch configuration' });
+    }
+});
+/**
+ * GET /api/admin/config/:key
+ * Get specific configuration value
+ */
+router.get('/config/:key', verifyAdminSecret, async (req, res) => {
+    try {
+        const key = asString(req.params.key);
+        const value = await configService_1.configService.getConfig(key);
+        if (!value) {
+            return res.status(404).json({ error: `Configuration key not found: ${key}` });
+        }
+        res.json({ success: true, key, value });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch config:', error);
+        res.status(500).json({ error: 'Failed to fetch configuration' });
+    }
+});
+/**
+ * PATCH /api/admin/config/:key
+ * Update a configuration value
+ */
+router.patch('/config/:key', verifyAdminSecret, async (req, res) => {
+    try {
+        const key = asString(req.params.key);
+        const value = req.body.value;
+        const reason = asString(req.body.reason);
+        const adminWallet = asString(req.body.adminWallet) || 'system';
+        if (!value || !reason) {
+            return res.status(400).json({ error: 'Missing required fields: value, reason' });
+        }
+        await configService_1.configService.setConfig(key, value, adminWallet, reason);
+        console.log(`[Admin] Updated config: ${key}`);
+        res.json({ success: true, message: `Updated ${key}` });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to update config:', error);
+        res.status(400).json({ error: error.message || 'Failed to update configuration' });
+    }
+});
+/**
+ * GET /api/admin/config/:key/history
+ * Get configuration change history
+ */
+router.get('/config/:key/history', verifyAdminSecret, async (req, res) => {
+    try {
+        const key = asString(req.params.key);
+        const limit = asString(req.query.limit) || '50';
+        const history = await configService_1.configService.getConfigHistory(key, parseInt(limit));
+        res.json({
+            success: true,
+            key,
+            history,
+            count: history.length,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch config history:', error);
+        res.status(500).json({ error: 'Failed to fetch configuration history' });
+    }
+});
+/**
+ * POST /api/admin/config/batch
+ * Update multiple configuration values at once
+ */
+router.post('/config/batch', verifyAdminSecret, async (req, res) => {
+    try {
+        const { updates, reason, adminWallet } = req.body;
+        if (!updates || !reason) {
+            return res.status(400).json({ error: 'Missing required fields: updates, reason' });
+        }
+        for (const [key, value] of Object.entries(updates)) {
+            await configService_1.configService.setConfig(key, value, adminWallet || 'system', reason);
+        }
+        console.log(`[Admin] Batch updated ${Object.keys(updates).length} config values`);
+        res.json({ success: true, message: 'Configuration updated', keysUpdated: Object.keys(updates) });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to batch update config:', error);
+        res.status(400).json({ error: error.message || 'Failed to update configuration' });
+    }
+});
+/**
+ * GET /api/admin/config-schema
+ * Get configuration schema (keys, descriptions, default values)
+ */
+router.get('/config-schema', verifyAdminSecret, async (req, res) => {
+    try {
+        const schema = {
+            anti_farm: {
+                description: 'Anti-farm rules to prevent exploitation',
+                fields: {
+                    minPositionSizeUSD: { type: 'number', description: 'Minimum position size in USD' },
+                    minHoldHours: { type: 'number', description: 'Minimum hold time in hours' },
+                    washTradeWindowMinutes: { type: 'number', description: 'Wash trade detection window' },
+                    cooldownMinutes: { type: 'number', description: 'Cooldown between same trades' },
+                    maxDrawdownPercent: { type: 'number', description: 'Max drawdown before triggering filter' },
+                },
+            },
+            multiplier_progression: {
+                description: 'Claim multiplier progression settings',
+                fields: {
+                    weeklyBonus: { type: 'number', description: 'Weekly activity bonus' },
+                    monthlyBonus: { type: 'number', description: 'Monthly activity bonus' },
+                    badgeBonus: { type: 'number', description: 'Per-badge multiplier bonus' },
+                    streakBonus: { type: 'number', description: 'Per-day streak multiplier' },
+                    streakBonusMax: { type: 'number', description: 'Max days to count for streak' },
+                    maxMultiplier: { type: 'number', description: 'Hard cap on claim multiplier' },
+                },
+            },
+            launch_config: {
+                description: 'Launch event multiplier phases',
+                fields: {
+                    startDate: { type: 'string', description: 'Launch start date (ISO 8601)' },
+                    isActive: { type: 'boolean', description: 'Is launch event active' },
+                    week1Multiplier: { type: 'number', description: 'Multiplier for week 1' },
+                    week2Multiplier: { type: 'number', description: 'Multiplier for week 2' },
+                    week3PlusMultiplier: { type: 'number', description: 'Multiplier for week 3+' },
+                },
+            },
+            referral_bonuses: {
+                description: 'Referral reward tiers',
+                fields: {
+                    kolDynamicMultiplier: { type: 'number', description: 'KOL dynamic multiplier' },
+                    kolPermanentMultiplier: { type: 'number', description: 'KOL permanent multiplier' },
+                    standardInviteXP: { type: 'number', description: 'XP for standard referral' },
+                    kolInviteXP: { type: 'number', description: 'XP for KOL referral' },
+                },
+            },
+            badge_stacking: {
+                description: 'Badge multiplier stacking rules',
+                fields: {
+                    topThreeBadgesMultiplier: { type: 'number', description: 'Full multiplier for top 3' },
+                    remainingBadgesMultiplier: { type: 'number', description: 'Half multiplier for rest' },
+                    hardCap: { type: 'number', description: 'Hard cap on total stacked multiplier' },
+                    hallOfFameBypass: { type: 'boolean', description: 'Hall of Fame badges bypass cap' },
+                    hallOfFameBonus: { type: 'number', description: 'Bonus for Hall of Fame tier' },
+                },
+            },
+            tracked_tokens: {
+                description: 'RWA tokens with base multipliers',
+                type: 'array',
+            },
+            airdrop_rules: {
+                description: 'Airdrop eligibility and claim rules',
+            },
+            feature_flags: {
+                description: 'Feature toggles for experimental features',
+            },
+        };
+        res.json({ success: true, schema });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch schema:', error);
+        res.status(500).json({ error: 'Failed to fetch configuration schema' });
+    }
+});
+// ============================================================
+// Certificate Management Routes
+// ============================================================
+/**
+ * GET /api/admin/certificates/:category
+ * Get all certificates in a category
+ */
+router.get('/certificates/:category', verifyAdminSecret, async (req, res) => {
+    try {
+        const category = asString(req.params.category);
+        const certs = await certificateService_1.certificateService.getCertificatesByCategory(category);
+        res.json({
+            success: true,
+            category,
+            certificates: certs,
+            count: certs.length,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch certificates:', error);
+        res.status(500).json({ error: 'Failed to fetch certificates' });
+    }
+});
+/**
+ * POST /api/admin/certificates
+ * Create a new certificate
+ */
+router.post('/certificates', verifyAdminSecret, async (req, res) => {
+    try {
+        const { name, category, displayName, multiplierValue, multiplierType, adminWallet } = req.body;
+        if (!name || !category || !displayName || !multiplierValue) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+        const cert = await certificateService_1.certificateService.createCertificate(name, category, displayName, multiplierValue, multiplierType || 'permanent', adminWallet || 'system');
+        console.log(`[Admin] Created certificate: ${displayName}`);
+        res.json({ success: true, certificate: cert });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to create certificate:', error);
+        res.status(500).json({ error: error.message || 'Failed to create certificate' });
+    }
+});
+/**
+ * POST /api/admin/certificates/award/:wallet/:certificateId
+ * Award a certificate to a user
+ */
+router.post('/certificates/award/:wallet/:certificateId', verifyAdminSecret, async (req, res) => {
+    try {
+        const wallet = asString(req.params.wallet);
+        const certificateId = asString(req.params.certificateId);
+        const adminWallet = asString(req.body.adminWallet) || 'system';
+        await certificateService_1.certificateService.awardCertificate(wallet, certificateId, adminWallet);
+        console.log(`[Admin] Awarded certificate to ${wallet.slice(0, 8)}`);
+        res.json({ success: true, message: 'Certificate awarded' });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to award certificate:', error);
+        res.status(500).json({ error: error.message || 'Failed to award certificate' });
+    }
+});
+/**
+ * DELETE /api/admin/certificates/revoke/:wallet/:certificateId
+ * Revoke a certificate
+ */
+router.delete('/certificates/revoke/:wallet/:certificateId', verifyAdminSecret, async (req, res) => {
+    try {
+        const wallet = asString(req.params.wallet);
+        const certificateId = asString(req.params.certificateId);
+        const adminWallet = asString(req.body.adminWallet) || 'system';
+        const reason = asString(req.body.reason) || 'Admin revocation';
+        await certificateService_1.certificateService.revokeCertificate(wallet, certificateId, adminWallet, reason);
+        res.json({ success: true, message: 'Certificate revoked' });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to revoke certificate:', error);
+        res.status(500).json({ error: error.message || 'Failed to revoke certificate' });
+    }
+});
+/**
+ * GET /api/admin/certificates/wallet/:wallet
+ * Get all certificates for a wallet
+ */
+router.get('/certificates/wallet/:wallet', verifyAdminSecret, async (req, res) => {
+    try {
+        const wallet = asString(req.params.wallet);
+        const certs = await certificateService_1.certificateService.getWalletCertificates(wallet);
+        const multiplierBoost = await certificateService_1.certificateService.getCertificateMultiplierBoost(wallet);
+        res.json({
+            success: true,
+            wallet,
+            certificates: certs,
+            count: certs.length,
+            multiplierBoost,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch wallet certificates:', error);
+        res.status(500).json({ error: 'Failed to fetch wallet certificates' });
+    }
+});
+/**
+ * GET /api/admin/users/:wallet
+ * Get user multiplier details and breakdown
+ */
+router.get('/users/:wallet', verifyAdminSecret, async (req, res) => {
+    try {
+        const wallet = asString(req.params.wallet);
+        const userResult = await pool_1.pool.query(`SELECT u.wallet, u.total_xp, u.claim_multiplier, u.current_streak, u.created_at,
+              COUNT(DISTINCT b.id) as badge_count
+       FROM users u
+       LEFT JOIN badges b ON u.wallet = b.wallet
+       WHERE u.wallet = $1
+       GROUP BY u.wallet, u.total_xp, u.claim_multiplier, u.current_streak, u.created_at`, [wallet]);
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const userRow = userResult.rows[0];
+        const badges = await pool_1.pool.query(`SELECT badge_name, earned_at FROM badges WHERE wallet = $1 ORDER BY earned_at DESC`, [wallet]);
+        const certCount = await pool_1.pool.query(`SELECT COUNT(*) as count FROM user_certificates WHERE wallet = $1 AND revoked_at IS NULL`, [wallet]);
+        const stacking = await badgeTemplateService_1.badgeTemplateService.calculateBadgeStacking(wallet);
+        res.json({
+            success: true,
+            user: {
+                wallet: userRow.wallet,
+                xp_earnedshift_points: userRow.total_xp || 0,
+                badge_count: parseInt(userRow.badge_count) || 0,
+                certificate_count: parseInt(certCount.rows[0]?.count) || 0,
+                claim_multiplier: parseFloat(userRow.claim_multiplier) || 1.0,
+                current_streak: userRow.current_streak || 0,
+                badges: badges.rows.map((b) => ({ name: b.badge_name, earned_at: b.earned_at })),
+                permanent_multiplier: stacking.finalMultiplier,
+                dynamic_multiplier: 0,
+                total_multiplier: stacking.finalMultiplier,
+                multiplier_breakdown: {
+                    base: 1.0,
+                    top_three_badges: stacking.topThreeBadges?.reduce((s, b) => s + (b.multiplier_value || 0), 0) || 0,
+                    remaining_badges: stacking.remainingBadges?.reduce((s, b) => s + (b.multiplier_value || 0) * 0.5, 0) || 0,
+                    hall_of_fame: stacking.hallOfFameMultiplier || 0,
+                    stacking_cap: stacking.finalMultiplier >= 2.0 ? 'cap_reached' : 'under_cap',
+                },
+                created_at: userRow.created_at,
+            },
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch user:', error);
+        res.status(500).json({ error: 'Failed to fetch user' });
+    }
+});
+/**
+ * GET /api/admin/dashboard
+ * Get dashboard metrics and recent activity
+ */
+router.get('/dashboard', verifyAdminSecret, async (req, res) => {
+    try {
+        const [totalUsers, totalXp, badgeCount, certCount, hofCount, avgMultiplier, recentActivity] = await Promise.all([
+            pool_1.pool.query(`SELECT COUNT(*) as count FROM users`),
+            pool_1.pool.query(`SELECT COALESCE(SUM(total_xp), 0) as total FROM users`),
+            pool_1.pool.query(`SELECT COUNT(*) as count FROM badges WHERE earned_at > NOW() - INTERVAL '30 days'`),
+            pool_1.pool.query(`SELECT COUNT(*) as count FROM user_certificates WHERE awarded_at > NOW() - INTERVAL '30 days' AND revoked_at IS NULL`).catch(() => ({ rows: [{ count: 0 }] })),
+            pool_1.pool.query(`SELECT COUNT(DISTINCT wallet) as count FROM badges WHERE badge_name IN ('iron_hands', 'the_believer', 'black_swan_buyer')`),
+            pool_1.pool.query(`SELECT AVG(claim_multiplier) as avg_mult FROM users`),
+            pool_1.pool.query(`SELECT id, action, resource_type, admin_wallet, created_at FROM admin_logs ORDER BY created_at DESC LIMIT 20`).catch(() => ({ rows: [] })),
+        ]);
+        res.json({
+            success: true,
+            metrics: {
+                total_users: parseInt(totalUsers.rows[0].count) || 0,
+                total_xp: parseFloat(totalXp.rows[0].total) || 0,
+                badge_count: parseInt(badgeCount.rows[0].count) || 0,
+                certificate_count: parseInt(certCount.rows[0].count) || 0,
+                hof_count: parseInt(hofCount.rows[0].count) || 0,
+                avg_multiplier: parseFloat(avgMultiplier.rows[0]?.avg_mult || '1.0') || 1.0,
+            },
+            recentActivity: recentActivity.rows.map((r) => ({
+                id: r.id,
+                action: r.action,
+                resource_type: r.resource_type,
+                admin_wallet: r.admin_wallet,
+                created_at: r.created_at,
+            })),
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch dashboard:', error);
+        res.status(500).json({ error: 'Failed to fetch dashboard' });
+    }
+});
+/**
+ * GET /api/admin/audit
+ * Get admin audit logs with optional filtering
+ */
+router.get('/audit', verifyAdminSecret, async (req, res) => {
+    try {
+        const { wallet, action, limit = 50 } = req.query;
+        let query = `SELECT id, action, resource_type, resource_id, old_value, new_value, reason, admin_wallet, created_at FROM admin_logs WHERE 1=1`;
+        const params = [];
+        if (wallet) {
+            query += ` AND resource_id = $${params.length + 1}`;
+            params.push(wallet);
+        }
+        if (action) {
+            query += ` AND action = $${params.length + 1}`;
+            params.push(action);
+        }
+        query += ` ORDER BY created_at DESC LIMIT $${params.length + 1}`;
+        params.push(parseInt(limit) || 50);
+        const result = await pool_1.pool.query(query, params);
+        res.json({
+            success: true,
+            logs: result.rows,
+            count: result.rows.length,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch audit logs:', error);
+        res.status(500).json({ error: 'Failed to fetch audit logs' });
+    }
+});
+/**
+ * POST /api/admin/snag/link-badge/:badgeName/:snagBadgeId
+ * Link a SHIFT badge to a SNAG badge ID
+ */
+router.post('/snag/link-badge/:badgeName/:snagBadgeId', verifyAdminSecret, async (req, res) => {
+    try {
+        const badgeName = asString(req.params.badgeName);
+        const snagBadgeId = asString(req.params.snagBadgeId);
+        const adminWallet = asString(req.body.adminWallet) || 'admin-system';
+        await pool_1.pool.query(`INSERT INTO snag_badge_mapping (shift_badge_name, snag_badge_id, created_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (shift_badge_name) DO UPDATE SET snag_badge_id = EXCLUDED.snag_badge_id`, [badgeName, snagBadgeId]);
+        await adminAuditService_1.adminAuditService.log(adminWallet, 'snag_badge_linked', 'snag_mapping', badgeName, null, { snag_badge_id: snagBadgeId }, 'Admin linked SHIFT badge to SNAG');
+        res.json({ success: true, message: `Linked ${badgeName} to SNAG badge ${snagBadgeId}` });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to link badge:', error);
+        res.status(500).json({ error: 'Failed to link badge' });
+    }
+});
+/**
+ * GET /api/admin/snag/badge-mappings
+ * Get all SHIFT-to-SNAG badge mappings
+ */
+router.get('/snag/badge-mappings', verifyAdminSecret, async (req, res) => {
+    try {
+        const result = await pool_1.pool.query(`SELECT shift_badge_name, snag_badge_id, created_at FROM snag_badge_mapping ORDER BY created_at DESC`);
+        res.json({
+            success: true,
+            mappings: result.rows,
+            count: result.rows.length,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fetch badge mappings:', error);
+        res.status(500).json({ error: 'Failed to fetch badge mappings' });
+    }
+});
+/**
+ * POST /api/admin/snag/sync-all
+ * Trigger full SNAG sync for all users
+ */
+router.post('/snag/sync-all', verifyAdminSecret, async (req, res) => {
+    try {
+        const adminWallet = asString(req.body.adminWallet) || 'admin-system';
+        // Trigger full sync using snagSyncService
+        const startTime = Date.now();
+        await snagSyncService_1.snagSyncService.fullSync();
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        const users = await pool_1.pool.query(`SELECT COUNT(*) as count FROM users`);
+        await adminAuditService_1.adminAuditService.log(adminWallet, 'snag_full_sync', 'snag', 'all_users', null, { users_processed: users.rows[0].count }, 'Triggered full SNAG sync');
+        res.json({
+            success: true,
+            message: `Full SNAG sync completed`,
+            users_processed: parseInt(users.rows[0].count) || 0,
+            duration: `${duration}s`,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to trigger full SNAG sync:', error);
+        res.status(500).json({ error: 'Failed to trigger full SNAG sync' });
+    }
+});
+/**
+ * POST /api/admin/recalculate-xp
+ * Manually trigger XP recalculation for all users (or specific wallet)
+ * Body: { wallet?: string } — if wallet provided, recalculate for that wallet only
+ */
+router.post('/recalculate-xp', verifyAdminSecret, async (req, res) => {
+    const wallet = asString(req.body.wallet);
+    try {
+        if (wallet) {
+            // Force XP recalculation for specific wallet by resetting last_xp_calc on their positions
+            await pool_1.pool.query(`UPDATE positions SET last_xp_calc = opened_at WHERE wallet = $1 AND status = 'open'`, [wallet]);
+            console.log(`[Admin] Reset XP calc timestamps for ${wallet.slice(0, 8)}...`);
+        }
+        else {
+            // Reset all positions — XP engine will recalculate on next cron run
+            await pool_1.pool.query(`UPDATE positions SET last_xp_calc = opened_at WHERE status = 'open' AND last_xp_calc IS NULL`);
+        }
+        // Also trigger badge check for shift_holder
+        if (wallet) {
+            const { badgeService } = await Promise.resolve().then(() => __importStar(require('../services/badgeService')));
+            await badgeService.checkShiftHolder(wallet);
+        }
+        res.json({
+            success: true,
+            message: wallet
+                ? `XP recalculation queued for ${wallet.slice(0, 8)}... — will apply on next XP engine run (within 60s)`
+                : 'XP recalculation queued for all users',
+            wallet: wallet || 'all',
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to trigger XP recalculation:', error);
+        res.status(500).json({ error: 'Failed to trigger XP recalculation' });
+    }
+});
+/**
+ * POST /api/admin/force-badge-check
+ * Force a badge eligibility check for a specific wallet
+ * Body: { wallet: string }
+ */
+router.post('/force-badge-check', verifyAdminSecret, async (req, res) => {
+    const wallet = asString(req.body.wallet);
+    if (!wallet || wallet.length < 32) {
+        return res.status(400).json({ error: 'Invalid wallet address' });
+    }
+    try {
+        const { badgeService } = await Promise.resolve().then(() => __importStar(require('../services/badgeService')));
+        // Check all available badges for this wallet
+        const [shiftHolder, firstTrade] = await Promise.all([
+            badgeService.checkShiftHolder(wallet),
+            badgeService.checkFirstTrade(wallet),
+        ]);
+        const awarded = [shiftHolder, firstTrade].filter(Boolean).map((b) => b.badge_name);
+        res.json({
+            success: true,
+            wallet,
+            badgesAwarded: awarded,
+            message: awarded.length > 0
+                ? `Awarded ${awarded.length} badge(s): ${awarded.join(', ')}`
+                : 'No new badges to award',
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to run badge check:', error);
+        res.status(500).json({ error: 'Failed to run badge check' });
+    }
+});
+exports.default = router;
+//# sourceMappingURL=admin.js.map

@@ -1,0 +1,180 @@
+"use strict";
+// ============================================================
+// Helius Webhook Handler — Parse Jupiter swaps from Solana
+// ============================================================
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.heliusWebhookHandler = exports.HeliusWebhookHandler = void 0;
+const crypto_1 = __importDefault(require("crypto"));
+const config_1 = require("../config");
+const positionService_1 = require("./positionService");
+const jupiterPriceService_1 = require("./jupiterPriceService");
+const antiFarmService_1 = require("./antiFarmService");
+// Jupiter Program ID
+const JUPITER_PROGRAM = 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4';
+// Stablecoin mints (positions denominated against these)
+const STABLECOIN_MINTS = new Set([
+    'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+    'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
+]);
+class HeliusWebhookHandler {
+    /**
+     * Main webhook handler — receives Helius enhanced transaction data.
+     */
+    async handleWebhook(req, res) {
+        try {
+            const payload = req.body;
+            if (!Array.isArray(payload)) {
+                res.status(400).json({ error: 'Expected array payload' });
+                return;
+            }
+            // Process each transaction
+            for (const tx of payload) {
+                await this.processTransaction(tx);
+            }
+            res.status(200).json({ status: 'ok', processed: payload.length });
+        }
+        catch (error) {
+            console.error('[Helius] Webhook processing error:', error);
+            res.status(500).json({ error: 'Internal processing error' });
+        }
+    }
+    /**
+     * Process a single enhanced transaction from Helius.
+     */
+    async processTransaction(tx) {
+        // Only process Jupiter swaps
+        if (tx.source !== 'JUPITER' && tx.type !== 'SWAP') {
+            return;
+        }
+        const swapEvent = tx.events?.swap;
+        if (!swapEvent) {
+            // Try to extract from token transfers as fallback
+            await this.processFromTokenTransfers(tx);
+            return;
+        }
+        await this.processSwapEvent(tx, swapEvent);
+    }
+    /**
+     * Process a structured swap event from Helius enhanced data.
+     */
+    async processSwapEvent(tx, swap) {
+        if (!swap)
+            return;
+        const wallet = tx.feePayer;
+        const timestamp = new Date(tx.timestamp * 1000);
+        const signature = tx.signature;
+        // Determine what was bought and what was sold
+        const tokenInputs = swap.tokenInputs || [];
+        const tokenOutputs = swap.tokenOutputs || [];
+        // Find the non-stablecoin token (the "asset" being traded)
+        let assetMint = null;
+        let assetAmount = 0;
+        let direction = 'buy';
+        // Check outputs first (what user received = buy)
+        for (const output of tokenOutputs) {
+            if (!STABLECOIN_MINTS.has(output.mint)) {
+                assetMint = output.mint;
+                assetAmount = parseFloat(output.rawTokenAmount.tokenAmount) / Math.pow(10, output.rawTokenAmount.decimals);
+                direction = 'buy';
+                break;
+            }
+        }
+        // If no non-stable output, check inputs (what user sent = sell)
+        if (!assetMint) {
+            for (const input of tokenInputs) {
+                if (!STABLECOIN_MINTS.has(input.mint)) {
+                    assetMint = input.mint;
+                    assetAmount = parseFloat(input.rawTokenAmount.tokenAmount) / Math.pow(10, input.rawTokenAmount.decimals);
+                    direction = 'sell';
+                    break;
+                }
+            }
+        }
+        // SOL native swaps
+        if (!assetMint && swap.nativeOutput) {
+            assetMint = 'So11111111111111111111111111111111111111112';
+            assetAmount = parseFloat(swap.nativeOutput.amount) / 1e9;
+            direction = 'buy';
+        }
+        if (!assetMint && swap.nativeInput) {
+            assetMint = 'So11111111111111111111111111111111111111112';
+            assetAmount = parseFloat(swap.nativeInput.amount) / 1e9;
+            direction = 'sell';
+        }
+        if (!assetMint) {
+            console.log(`[Helius] Could not determine asset for tx: ${signature.slice(0, 16)}...`);
+            return;
+        }
+        const assetSymbol = jupiterPriceService_1.jupiterPriceService.getSymbol(assetMint);
+        if (direction === 'buy') {
+            await this.handleBuy(wallet, assetSymbol, assetMint, assetAmount, signature, timestamp);
+        }
+        else {
+            await this.handleSell(wallet, assetSymbol, signature, timestamp);
+        }
+    }
+    /**
+     * Fallback: extract position data from raw token transfers when no swap event.
+     */
+    async processFromTokenTransfers(tx) {
+        if (!tx.tokenTransfers || tx.tokenTransfers.length === 0)
+            return;
+        const wallet = tx.feePayer;
+        const timestamp = new Date(tx.timestamp * 1000);
+        // Find non-stablecoin tokens received (buy) or sent (sell)
+        for (const transfer of tx.tokenTransfers) {
+            if (STABLECOIN_MINTS.has(transfer.mint))
+                continue;
+            const assetSymbol = jupiterPriceService_1.jupiterPriceService.getSymbol(transfer.mint);
+            if (transfer.toUserAccount === wallet) {
+                // User received tokens = buy
+                await this.handleBuy(wallet, assetSymbol, transfer.mint, transfer.tokenAmount, tx.signature, timestamp);
+            }
+            else if (transfer.fromUserAccount === wallet) {
+                // User sent tokens = sell
+                await this.handleSell(wallet, assetSymbol, tx.signature, timestamp);
+            }
+        }
+    }
+    /**
+     * Handle a buy (open position).
+     */
+    async handleBuy(wallet, asset, assetMint, tokenAmount, txSignature, timestamp) {
+        // Get USD price from Jupiter
+        const priceData = await jupiterPriceService_1.jupiterPriceService.calculateUSDValue(assetMint, tokenAmount);
+        const positionSizeUSD = priceData?.usdValue || 0;
+        const priceAtOpen = priceData?.price || null;
+        // Anti-farm check
+        const farmCheck = await antiFarmService_1.antiFarmService.shouldFilter(wallet, asset, positionSizeUSD, timestamp);
+        if (farmCheck.filtered) {
+            console.log(`[Helius] Position filtered: ${wallet.slice(0, 8)}... | ${asset} | Reason: ${farmCheck.reason}`);
+            return;
+        }
+        // Open position
+        await positionService_1.positionService.openPosition(wallet, asset, assetMint, positionSizeUSD, tokenAmount, priceAtOpen, txSignature, timestamp);
+    }
+    /**
+     * Handle a sell (close position).
+     */
+    async handleSell(wallet, asset, txSignature, timestamp) {
+        await positionService_1.positionService.closePosition(wallet, asset, txSignature, timestamp);
+    }
+    /**
+     * Verify Helius webhook signature (HMAC-SHA256).
+     */
+    static verifySignature(body, signature) {
+        if (!config_1.config.heliusWebhookSecret)
+            return true; // Skip if not configured
+        const expected = crypto_1.default
+            .createHmac('sha256', config_1.config.heliusWebhookSecret)
+            .update(body)
+            .digest('base64');
+        return crypto_1.default.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+    }
+}
+exports.HeliusWebhookHandler = HeliusWebhookHandler;
+exports.heliusWebhookHandler = new HeliusWebhookHandler();
+//# sourceMappingURL=heliusWebhookHandler.js.map

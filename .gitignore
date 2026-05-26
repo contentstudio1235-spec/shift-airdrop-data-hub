@@ -1,4 +1,4 @@
 node_modules/
-dist/
+# dist/ is committed so Render uses pre-compiled JS without a build step
 .env
 *.log
