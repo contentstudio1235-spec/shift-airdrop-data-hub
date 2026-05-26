@@ -339,6 +339,40 @@ export default function AdminKolPage() {
                 />
               </div>
             </div>
+
+            {/* Referral Link Preview */}
+            {formData.customCode && formData.customCode.length >= 4 && (
+              <div style={{ marginBottom: 16, padding: 12, background: 'var(--panel)', borderRadius: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-mute)', marginBottom: 8 }}>
+                  Referral Link Preview
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <input
+                    type="text"
+                    readOnly
+                    value={`${AIRDROP_URL}/r/${formData.customCode}`}
+                    style={{
+                      flex: 1,
+                      padding: '10px 12px',
+                      borderRadius: 6,
+                      border: '1px solid var(--border)',
+                      background: 'var(--bg)',
+                      fontSize: 12,
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--text-mute)',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn secondary sm"
+                    onClick={() => copyReferralLink(formData.customCode)}
+                  >
+                    <Icon name="copy" size={12} /> Copy
+                  </button>
+                </div>
+              </div>
+            )}
+
             <button type="submit" className="btn primary" disabled={submitting}>
               {submitting ? 'Adding...' : 'Add KOL'}
             </button>
@@ -536,16 +570,28 @@ export default function AdminKolPage() {
                       {Math.round(kol.inviteXpGiven).toLocaleString()}
                     </td>
                     <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                      <button
-                        className={`badge ${kol.isActive ? 'mint' : 'gray'}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleActive(kol.wallet, kol.isActive);
-                        }}
-                        style={{ cursor: 'pointer', fontSize: 11 }}
-                      >
-                        {kol.isActive ? 'Active' : 'Inactive'}
-                      </button>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                        <button
+                          className="btn ghost sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            copyReferralLink(kol.customCode);
+                          }}
+                          title="Copy referral link"
+                        >
+                          <Icon name="copy" size={12} />
+                        </button>
+                        <button
+                          className={`badge ${kol.isActive ? 'mint' : 'gray'}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleActive(kol.wallet, kol.isActive);
+                          }}
+                          style={{ cursor: 'pointer', fontSize: 11 }}
+                        >
+                          {kol.isActive ? 'Active' : 'Inactive'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
