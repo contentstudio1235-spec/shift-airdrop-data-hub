@@ -121,27 +121,15 @@ SET rule_template = brt.template_key,
 FROM badge_rule_templates brt
 WHERE bd.badge_name = brt.template_key;
 
--- ── Constraints (idempotent via DO blocks) ────────────────────────
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'multiplier_range') THEN
-    ALTER TABLE badge_multiplier_stack
-    ADD CONSTRAINT multiplier_range CHECK (final_multiplier >= 1.0 AND final_multiplier <= 2.0);
-  END IF;
-END $$;
+-- ── Constraints (idempotent: drop-if-exists then recreate) ────────
+ALTER TABLE badge_multiplier_stack DROP CONSTRAINT IF EXISTS multiplier_range;
+ALTER TABLE badge_multiplier_stack ADD CONSTRAINT multiplier_range CHECK (final_multiplier >= 1.0 AND final_multiplier <= 2.0);
 
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'duration_type_valid') THEN
-    ALTER TABLE badge_rule_templates
-    ADD CONSTRAINT duration_type_valid CHECK (duration_type IN ('permanent', 'dynamic', 'provisional'));
-  END IF;
-END $$;
+ALTER TABLE badge_rule_templates DROP CONSTRAINT IF EXISTS duration_type_valid;
+ALTER TABLE badge_rule_templates ADD CONSTRAINT duration_type_valid CHECK (duration_type IN ('permanent', 'dynamic', 'provisional'));
 
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'dynamic_duration_required') THEN
-    ALTER TABLE badge_rule_templates
-    ADD CONSTRAINT dynamic_duration_required CHECK (duration_type != 'dynamic' OR dynamic_duration_days > 0);
-  END IF;
-END $$;
+ALTER TABLE badge_rule_templates DROP CONSTRAINT IF EXISTS dynamic_duration_required;
+ALTER TABLE badge_rule_templates ADD CONSTRAINT dynamic_duration_required CHECK (duration_type != 'dynamic' OR dynamic_duration_days > 0);
 
 -- ── Summary ────────────────────────────────────────────────────────
 -- Created: badge_rule_templates (31 badges across 8 categories)
