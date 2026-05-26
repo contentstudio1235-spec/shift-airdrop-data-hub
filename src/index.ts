@@ -42,7 +42,7 @@ app.use(cors({
     /\.vercel\.app$/,  // allow all Vercel preview URLs
   ],
   methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-admin-key'],
 }));
 
 // Logging
