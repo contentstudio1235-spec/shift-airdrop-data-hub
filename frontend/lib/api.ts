@@ -206,6 +206,31 @@ export async function fetchLeaderboardContext(
   );
 }
 
+// ── Launch Configuration ──────────────────────────────────
+
+export interface LaunchPhaseInfo {
+  phase: 'phase1' | 'phase2' | 'phase3' | 'none';
+  multiplier: number;
+  label: string;
+  endsAt?: string;
+  timeRemaining?: string;
+}
+
+export interface LaunchConfigResponse {
+  success: boolean;
+  phase: LaunchPhaseInfo;
+  config: {
+    phase1: { start: string; end: string; multiplier: number; label: string };
+    phase2: { start: string; end: string; multiplier: number; label: string };
+    phase3: { start: string; end: string; multiplier?: string; multiplier: number; label: string };
+    is_active: boolean;
+  };
+}
+
+export async function fetchLaunchConfig(): Promise<LaunchConfigResponse | null> {
+  return apiFetch<LaunchConfigResponse>('/api/admin/launch-config', 3000);
+}
+
 // ── SNAG & Referral Helpers ────────────────────────────────
 
 export function getLoyaltyPageUrl(): string {

@@ -8,6 +8,8 @@ import { referralService } from '../services/referralService';
 import { holdingService } from '../services/holdingService';
 import { positionService } from '../services/positionService';
 import { jupiterPriceService } from '../services/jupiterPriceService';
+import { launchConfigService } from '../services/launchConfigService';
+import { adminAuditService } from '../services/adminAuditService';
 import { TRACKED_TOKENS } from '../config/tokens';
 import { pool } from '../db/pool';
 
@@ -397,6 +399,120 @@ router.get('/wallet-status/:wallet', verifyAdminSecret, async (req, res) => {
   } catch (error) {
     console.error('[Admin] Wallet status check failed:', error);
     res.status(500).json({ error: 'Failed to check wallet status' });
+  }
+});
+
+// ── Launch Configuration ─────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/launch-config
+ * Get current launch configuration and phase
+ * Public endpoint (no auth needed) — returns current phase info for frontend
+ */
+router.get('/launch-config', async (_req, res) => {
+  try {
+    const config = await launchConfigService.getConfig();
+    const phase = await launchConfigService.getCurrentPhase();
+
+    res.json({
+      success: true,
+      phase,
+      config: {
+        phase1: {
+          start: config?.phase1_start_time,
+          end: config?.phase1_end_time,
+          multiplier: config?.phase1_multiplier,
+          label: config?.phase1_label,
+        },
+        phase2: {
+          start: config?.phase2_start_time,
+          end: config?.phase2_end_time,
+          multiplier: config?.phase2_multiplier,
+          label: config?.phase2_label,
+        },
+        phase3: {
+          start: config?.phase3_start_time,
+          end: config?.phase3_end_time,
+          multiplier: config?.phase3_multiplier,
+          label: config?.phase3_label,
+        },
+        is_active: config?.is_active,
+      },
+    });
+  } catch (error) {
+    console.error('[Admin] Failed to fetch launch config:', error);
+    res.status(500).json({ error: 'Failed to fetch launch config' });
+  }
+});
+
+/**
+ * PATCH /api/admin/launch-config/phase/:phase
+ * Update a specific phase (admin only)
+ * Body: { multiplier?, label?, start_time?, end_time?, reason? }
+ */
+router.patch('/launch-config/phase/:phase', verifyAdminSecret, async (req, res) => {
+  try {
+    const { phase } = req.params as { phase: 'phase1' | 'phase2' | 'phase3' };
+    const adminWallet = req.body.adminWallet || 'admin-system';
+    const { multiplier, label, start_time, end_time, reason } = req.body;
+
+    if (!['phase1', 'phase2', 'phase3'].includes(phase)) {
+      return res.status(400).json({ error: 'Invalid phase' });
+    }
+
+    if (multiplier !== undefined && (multiplier < 0.1 || multiplier > 10)) {
+      return res.status(400).json({ error: 'Multiplier must be between 0.1 and 10' });
+    }
+
+    const updates: any = {};
+    if (multiplier !== undefined) updates.multiplier = multiplier;
+    if (label !== undefined) updates.label = label;
+    if (start_time !== undefined) updates.start_time = new Date(start_time);
+    if (end_time !== undefined) updates.end_time = new Date(end_time);
+
+    await launchConfigService.updatePhase(phase, updates, adminWallet, reason);
+
+    // Log to audit trail
+    await adminAuditService.log(adminWallet, `${phase}_updated`, 'launch_config', phase, null, updates, reason);
+
+    res.json({
+      success: true,
+      message: `Phase ${phase} updated`,
+      phase: await launchConfigService.getCurrentPhase(),
+    });
+  } catch (error) {
+    console.error('[Admin] Failed to update launch phase:', error);
+    res.status(500).json({ error: 'Failed to update phase' });
+  }
+});
+
+/**
+ * PATCH /api/admin/launch-config/toggle
+ * Toggle launch bonus on/off (admin only)
+ * Body: { is_active: boolean, reason?: string }
+ */
+router.patch('/launch-config/toggle', verifyAdminSecret, async (req, res) => {
+  try {
+    const { is_active, reason } = req.body;
+    const adminWallet = req.body.adminWallet || 'admin-system';
+
+    if (typeof is_active !== 'boolean') {
+      return res.status(400).json({ error: 'is_active must be a boolean' });
+    }
+
+    await launchConfigService.toggleLaunchBonus(is_active, adminWallet, reason);
+
+    // Log to audit trail
+    await adminAuditService.log(adminWallet, 'launch_bonus_toggled', 'launch_config', 'launch_bonus', { is_active: !is_active }, { is_active }, reason);
+
+    res.json({
+      success: true,
+      message: `Launch bonus ${is_active ? 'enabled' : 'disabled'}`,
+      phase: await launchConfigService.getCurrentPhase(),
+    });
+  } catch (error) {
+    console.error('[Admin] Failed to toggle launch bonus:', error);
+    res.status(500).json({ error: 'Failed to toggle launch bonus' });
   }
 });
 
