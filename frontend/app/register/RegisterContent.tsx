@@ -1,29 +1,16 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import ShiftIdCard from '@/components/ShiftIdCard';
 import ProgressBar from '@/components/ProgressBar';
 import Icon from '@/components/Icon';
-import ConnectWalletModal from '@/components/ConnectWalletModal';
 import { useWallet } from '@/components/WalletContext';
 import { useToast } from '@/components/ToastContext';
-import { fetchSnagTasks } from '@/lib/api';
 
 // ── API Configuration ──
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://shift-airdrop-backend.onrender.com';
-
-// ── Task definitions ──
-// social: true → verified via OAuth popup (not just a click-through)
-const TASK_TEMPLATES = [
-  { id: 'x_follow',    icon: '𝕏',  label: 'Follow @ShiftRWA on X',   pts: 100, cta: 'Follow', social: true  },
-  { id: 'discord',     icon: '💬', label: 'Join the SHIFT Discord',   pts: 150, cta: 'Join',   social: true  },
-  { id: 'telegram',    icon: '✈️', label: 'Join SHIFT Telegram',      pts: 100, cta: 'Join',   social: true  },
-  { id: 'wallet',      icon: '👛', label: 'Connect your wallet',      pts: 200, cta: 'Connect',social: false },
-  { id: 'first_trade', icon: '⚡', label: 'Complete your first trade', pts: 300, cta: 'Trade',  social: false,
-    href: 'https://app.shiftrwa.xyz/coming-soon' },
-];
 
 interface AirdropUser {
   wallet: string;
@@ -51,22 +38,14 @@ export default function RegisterContent() {
   const toast = useToast();
   const searchParams = useSearchParams();
 
-  // Real-time state
   const [userData, setUserData] = useState<AirdropUser | null>(null);
-  const [tasks, setTasks] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
-  const [showWalletModal, setShowWalletModal] = useState(false);
   const [launchBonus, setLaunchBonus] = useState<{
     active: boolean;
     multiplier: number;
     daysRemaining: number;
     label: string;
   } | null>(null);
-
-  // Social verification state: which task is currently verifying
-  const [verifying, setVerifying] = useState<string | null>(null);
-  const popupRef = useRef<Window | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Referral state
   const [refCode, setRefCode] = useState<string | null>(null);
@@ -106,7 +85,6 @@ export default function RegisterContent() {
       return;
     }
 
-    // Validate code format locally before querying API (prevent invalid requests)
     const normalized = code.trim().toUpperCase();
     if (!/^[A-Z0-9-]{4,32}$/.test(normalized)) {
       setRefBonus(null);
@@ -153,30 +131,12 @@ export default function RegisterContent() {
             }),
           });
           if (!registerRes.ok) throw new Error('Failed to register');
-          // Continue to fetch user data
           res = await fetch(`${API_URL}/api/airdrop/user/${wallet}`);
         }
 
         if (!res.ok) throw new Error('Failed to fetch user data');
         const data: AirdropUser = await res.json();
         setUserData(data);
-
-        // Auto-check wallet task
-        setTasks((prev) => ({ ...prev, wallet: true }));
-
-        // Fetch SNAG completed tasks
-        const snagTaskIds = await fetchSnagTasks(wallet);
-        if (snagTaskIds && snagTaskIds.length > 0) {
-          const updates: Record<string, boolean> = {};
-          for (const id of snagTaskIds) {
-            if (TASK_TEMPLATES.find((t) => t.id === id)) {
-              updates[id] = true;
-            }
-          }
-          if (Object.keys(updates).length > 0) {
-            setTasks((prev) => ({ ...prev, ...updates }));
-          }
-        }
       } catch (error) {
         console.error('[Register] Failed to fetch user data:', error);
         toast('Failed to load airdrop data. Please refresh.');
@@ -188,144 +148,11 @@ export default function RegisterContent() {
     fetchUserData();
   }, [wallet, refCode, toast]);
 
-  // ── Calculate totals ──
-  const totalPts = Object.entries(tasks)
-    .filter(([, done]) => done)
-    .reduce((sum, [id]) => {
-      const task = TASK_TEMPLATES.find((t) => t.id === id);
-      return sum + (task?.pts ?? 0);
-    }, 0);
-
   // ── Progress to tier 2 ──
   const progressPct = userData ? Math.round((userData.queuePosition / userData.totalMembers) * 100) : 0;
   const placesToTier2 = userData ? Math.max(0, Math.round(userData.totalMembers * 0.05) - userData.queuePosition) : 0;
 
-  // ── Poll backend to confirm task completion ──
-  const pollTaskStatus = useCallback(
-    (taskId: string) => {
-      if (!wallet) return;
-      let attempts = 0;
-      const maxAttempts = 20; // poll for up to ~20s
-
-      if (pollRef.current) clearInterval(pollRef.current);
-
-      pollRef.current = setInterval(async () => {
-        attempts++;
-        try {
-          const res = await fetch(
-            `${API_URL}/api/auth/status?wallet=${wallet}&task=${taskId}`
-          );
-          if (res.ok) {
-            const data = await res.json();
-            if (data.completed) {
-              clearInterval(pollRef.current!);
-              setVerifying(null);
-              setTasks((prev) => ({ ...prev, [taskId]: true }));
-              const task = TASK_TEMPLATES.find((t) => t.id === taskId);
-              if (task) toast(`+${task.pts} PTS — Task verified!`);
-            }
-          }
-        } catch {
-          // silent — keep polling
-        }
-        if (attempts >= maxAttempts) {
-          clearInterval(pollRef.current!);
-          setVerifying(null);
-        }
-      }, 1000);
-    },
-    [wallet, toast]
-  );
-
-  // ── Listen for OAuth popup postMessage ──
-  useEffect(() => {
-    const handler = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-      const { type, status, task } = event.data ?? {};
-      if (type !== 'SHIFT_SOCIAL_VERIFY') return;
-
-      if (popupRef.current && !popupRef.current.closed) {
-        popupRef.current.close();
-      }
-
-      if (status === 'success') {
-        // Backend confirmed — start polling to pick up DB write
-        pollTaskStatus(task);
-      } else if (status === 'not_member') {
-        setVerifying(null);
-        toast('You need to join first, then verify again.');
-      } else {
-        setVerifying(null);
-        toast('Verification failed — please try again.');
-      }
-    };
-
-    window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
-  }, [pollTaskStatus, toast]);
-
-  // ── Cleanup on unmount ──
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, []);
-
   // ── Handlers ──
-  const handleTask = (taskId: string) => {
-    if (taskId === 'wallet') {
-      setShowWalletModal(true);
-      return;
-    }
-
-    const taskDef = TASK_TEMPLATES.find((t) => t.id === taskId);
-
-    // Non-social tasks — simple navigation
-    if (!taskDef?.social) {
-      if (taskDef?.href) window.open(taskDef.href, '_blank');
-      return;
-    }
-
-    // Social tasks — OAuth popup
-    if (!wallet) return;
-    if (verifying === taskId) return; // already in progress
-
-    // Map task ID to the backend auth endpoint
-    const authPath: Record<string, string> = {
-      x_follow: 'twitter',
-      discord:  'discord',
-    };
-    const endpoint = authPath[taskId];
-
-    if (endpoint) {
-      // Discord / Twitter — OAuth redirect popup
-      const popupUrl = `${API_URL}/api/auth/${endpoint}?wallet=${wallet}`;
-      const popup = window.open(
-        popupUrl,
-        'shift_social_verify',
-        'width=520,height=640,menubar=no,toolbar=no,location=no,status=no'
-      );
-      if (!popup) {
-        toast('Allow pop-ups in your browser for social verification.');
-        return;
-      }
-      popupRef.current = popup;
-      setVerifying(taskId);
-
-      // Fallback: if popup closes without postMessage, stop spinner
-      const checkClosed = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(checkClosed);
-          setVerifying((v) => (v === taskId ? null : v));
-        }
-      }, 800);
-    } else if (taskId === 'telegram') {
-      // Telegram uses the Login Widget — open instructions modal
-      // The Telegram widget will call our API directly
-      toast('Use the Telegram button below to verify your membership.');
-    }
-  };
-
   const handleCopy = () => {
     if (!userData) return;
     navigator.clipboard.writeText(userData.referralLink);
@@ -464,7 +291,7 @@ export default function RegisterContent() {
             ✦ FOUNDING MEMBER
           </span>
           <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'var(--font-space)', color: 'var(--text)', marginTop: 12 }}>
-            {totalPts.toLocaleString()} PTS earned
+            {userData.totalXp.toLocaleString()} XP earned
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-mute)', marginTop: 4 }}>
             Out of {userData.totalMembers.toLocaleString()} registered members
@@ -497,7 +324,7 @@ export default function RegisterContent() {
             handle={userData.wallet.slice(0, 6).toUpperCase()}
             ticker="SHIFT"
             rank={userData.queuePosition}
-            points={totalPts}
+            points={userData.totalXp}
             status="FOUNDING MEMBER"
           />
         </div>
@@ -596,78 +423,6 @@ export default function RegisterContent() {
           </div>
         </div>
 
-        {/* Tasks Ladder */}
-        <div className="card" style={{ marginBottom: 24 }}>
-          <div className="section-title">Complete Tasks to Earn PTS</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {TASK_TEMPLATES.map((task) => {
-              const done        = tasks[task.id] ?? false;
-              const isPending   = verifying === task.id;
-              const isTelegram  = task.id === 'telegram';
-
-              return (
-                <div
-                  key={task.id}
-                  style={{
-                    display: 'flex',
-                    flexDirection: (isTelegram && !done ? 'column' : 'row') as React.CSSProperties['flexDirection'],
-                    alignItems: isTelegram && !done ? 'flex-start' : 'center',
-                    gap: 12,
-                    padding: '12px 14px',
-                    background: 'var(--panel)',
-                    border: `1px solid ${done ? 'rgba(38,200,184,0.2)' : 'var(--border)'}`,
-                    borderRadius: 10,
-                    opacity: done ? 0.6 : 1,
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
-                    <span style={{ fontSize: 20, flexShrink: 0 }}>{task.icon}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-space)' }}>{task.label}</div>
-                      <div style={{ fontSize: 11, color: 'var(--mint)', fontWeight: 700 }}>+{task.pts} PTS</div>
-                    </div>
-
-                    {done ? (
-                      <span className="badge mint sm" style={{ fontSize: 11 }}>Done ✓</span>
-                    ) : isPending ? (
-                      <button className="btn sm primary" disabled style={{ opacity: 0.7, cursor: 'default' }}>
-                        Verifying…
-                      </button>
-                    ) : task.id === 'wallet' ? (
-                      <button className="btn sm primary" onClick={() => handleTask(task.id)}>
-                        {task.cta}
-                      </button>
-                    ) : task.id === 'first_trade' ? (
-                      <Link href={task.href!} className="btn sm primary" target="_blank" rel="noopener">
-                        {task.cta}
-                      </Link>
-                    ) : isTelegram ? (
-                      /* Telegram — handled by the widget row below */
-                      <button className="btn sm ghost" disabled style={{ opacity: 0.5, cursor: 'default', fontSize: 11 }}>
-                        Use widget ↓
-                      </button>
-                    ) : (
-                      /* Discord / Twitter — OAuth popup */
-                      <button className="btn sm primary" onClick={() => handleTask(task.id)}>
-                        {task.cta}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Telegram Login Widget row */}
-                  {isTelegram && !done && (
-                    <TelegramWidget wallet={wallet!} onVerified={() => {
-                      setTasks((prev) => ({ ...prev, telegram: true }));
-                      toast(`+${task.pts} PTS — Telegram verified!`);
-                    }} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
         {/* Footer CTA */}
         <div style={{ textAlign: 'center', padding: '8px 0 24px' }}>
           <Link href="/airdrop" className="btn primary lg">
@@ -678,80 +433,6 @@ export default function RegisterContent() {
           </div>
         </div>
       </div>
-
-      {/* Wallet modal — use ConnectWalletModal for direct wallet connection */}
-      {showWalletModal && <ConnectWalletModal onClose={() => setShowWalletModal(false)} />}
     </>
-  );
-}
-
-// ── Telegram Login Widget ────────────────────────────────────────────────────
-// Renders the official Telegram Login Widget button.
-// On successful login, sends the signed data to our backend for HMAC verification.
-
-interface TelegramWidgetProps {
-  wallet: string;
-  onVerified: () => void;
-}
-
-function TelegramWidget({ wallet, onVerified }: TelegramWidgetProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const toast = useToast();
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    // Attach global callback that the Telegram widget script will call
-    (window as any).onTelegramLogin = async (data: Record<string, string>) => {
-      try {
-        const res = await fetch(`${API_URL}/api/auth/telegram`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ wallet, telegramData: data }),
-        });
-        const result = await res.json();
-        if (result.verified) {
-          onVerified();
-        } else if (result.reason === 'not_member') {
-          toast('You need to join the SHIFT Telegram group first.');
-        } else {
-          toast('Telegram verification failed — try again.');
-        }
-      } catch {
-        toast('Could not reach server — please retry.');
-      }
-    };
-
-    // Inject Telegram widget script
-    const script = document.createElement('script');
-    script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.setAttribute('data-telegram-login', process.env.NEXT_PUBLIC_TELEGRAM_BOT_NAME || 'ShiftRWABot');
-    script.setAttribute('data-size', 'medium');
-    script.setAttribute('data-onauth', 'onTelegramLogin(user)');
-    script.setAttribute('data-request-access', 'write');
-    script.async = true;
-    containerRef.current.appendChild(script);
-
-    return () => {
-      delete (window as any).onTelegramLogin;
-      if (containerRef.current) {
-        containerRef.current.innerHTML = '';
-      }
-    };
-  }, [wallet, onVerified, toast]);
-
-  return (
-    <div
-      ref={containerRef}
-      style={{
-        marginTop: 8,
-        paddingTop: 8,
-        borderTop: '1px solid var(--border)',
-        width: '100%',
-        minHeight: 36,
-        display: 'flex',
-        alignItems: 'center',
-      }}
-    />
   );
 }
