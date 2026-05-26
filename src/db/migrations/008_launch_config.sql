@@ -4,7 +4,7 @@
 -- Enables real-time configuration of launch phases without code changes.
 -- All timestamps are in UTC for consistency.
 
-CREATE TABLE launch_config (
+CREATE TABLE IF NOT EXISTS launch_config (
   id SERIAL PRIMARY KEY,
 
   -- Phase 1: Week 1 (3x multiplier)
@@ -36,10 +36,10 @@ CREATE TABLE launch_config (
 );
 
 -- Enable fast lookups by current phase
-CREATE INDEX launch_config_times ON launch_config(phase1_start_time, phase1_end_time);
+CREATE INDEX IF NOT EXISTS launch_config_times ON launch_config(phase1_start_time, phase1_end_time);
 
 -- Audit trail for launch config changes
-CREATE TABLE launch_config_audit (
+CREATE TABLE IF NOT EXISTS launch_config_audit (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_wallet VARCHAR(64),
   action VARCHAR(64),                        -- 'phase_updated', 'toggle_active', 'time_adjusted'

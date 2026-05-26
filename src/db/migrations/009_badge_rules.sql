@@ -85,9 +85,9 @@ CREATE TABLE IF NOT EXISTS badge_multiplier_stack (
 );
 
 -- Create indexes for common queries
-CREATE INDEX badge_multiplier_stack_wallet ON badge_multiplier_stack(wallet);
-CREATE INDEX badge_multiplier_stack_position ON badge_multiplier_stack(position_id);
-CREATE INDEX badge_multiplier_stack_updated ON badge_multiplier_stack(updated_at DESC);
+CREATE INDEX IF NOT EXISTS badge_multiplier_stack_wallet ON badge_multiplier_stack(wallet);
+CREATE INDEX IF NOT EXISTS badge_multiplier_stack_position ON badge_multiplier_stack(position_id);
+CREATE INDEX IF NOT EXISTS badge_multiplier_stack_updated ON badge_multiplier_stack(updated_at DESC);
 
 -- ── Enhance badge_definitions Table ───────────────────────────────
 -- Add columns to support template-driven badge system
