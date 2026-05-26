@@ -4,6 +4,7 @@
 
 import { query, queryOne, execute } from '../db/pool';
 import { config } from '../config';
+import { realtimeSnagSyncService } from './realtimeSnagSyncService';
 import { User } from '../types';
 
 /**
@@ -88,7 +89,7 @@ export class MultiplierService {
   }
 
   /**
-   * Update claim multiplier with audit log.
+   * Update claim multiplier with audit log + real-time SNAG sync.
    */
   private async updateClaimMultiplier(
     wallet: string,
@@ -101,10 +102,13 @@ export class MultiplierService {
     );
 
     await execute(
-      `INSERT INTO claim_multiplier_log (wallet, old_value, new_value, reason) 
+      `INSERT INTO claim_multiplier_log (wallet, old_value, new_value, reason)
        VALUES ($1, $2, $3, $4)`,
       [wallet, oldValue, newValue, 'scheduled_recalc']
     );
+
+    // Queue real-time sync to SNAG (debounced, will batch within 2 seconds)
+    await realtimeSnagSyncService.queueMultiplierSync(wallet, newValue);
   }
 
   /**

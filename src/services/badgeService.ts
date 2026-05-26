@@ -7,6 +7,7 @@ import { BadgeAward, BadgeName, Position } from '../types';
 import { positionService } from './positionService';
 import { eventService } from './eventService';
 import { holdingService } from './holdingService';
+import { realtimeSnagSyncService } from './realtimeSnagSyncService';
 import { config } from '../config';
 
 export class BadgeService {
@@ -22,6 +23,12 @@ export class BadgeService {
       this.checkEarningsReactor(wallet),
       this.checkFOMCTrader(wallet),
       this.checkShiftHolder(wallet),
+      // Event-based badges
+      this.checkFedDayTrade(wallet),
+      this.checkCPIBet(wallet),
+      this.checkNewsReactor(wallet),
+      this.checkEarningsConviction(wallet),
+      this.checkGeopoliticalTrade(wallet),
     ]);
 
     for (const award of checks) {
@@ -157,6 +164,115 @@ export class BadgeService {
     return null;
   }
 
+  // ── Event-Based Badges ──
+
+  /**
+   * Badge: Fed Day Trade — opened position on FOMC announcement day (+1.20x Dynamic, 14 days)
+   */
+  async checkFedDayTrade(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'fed_day_trade')) return null;
+
+    const now = new Date();
+    const events = await eventService.getEventsByType('macro');
+
+    for (const event of events) {
+      if (event.event_name.toUpperCase().includes('FOMC')) {
+        const eligible = await eventService.checkEventEligibility(wallet, event.id);
+        if (eligible) {
+          await this.awardBadge(wallet, 'fed_day_trade');
+          return { badge_name: 'fed_day_trade', wallet };
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Badge: CPI Bet — opened position on CPI release day (+1.15x Dynamic, 7 days)
+   */
+  async checkCPIBet(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'cpi_bet')) return null;
+
+    const events = await eventService.getEventsByType('macro');
+
+    for (const event of events) {
+      if (event.event_name.toUpperCase().includes('CPI')) {
+        const eligible = await eventService.checkEventEligibility(wallet, event.id);
+        if (eligible) {
+          await this.awardBadge(wallet, 'cpi_bet');
+          return { badge_name: 'cpi_bet', wallet };
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Badge: News Reactor — opened within 60m of market-moving headline (+1.15x Dynamic, 7 days)
+   */
+  async checkNewsReactor(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'news_reactor')) return null;
+
+    const recentNews = await eventService.getRecentNews(24); // Last 24 hours
+
+    for (const headline of recentNews) {
+      const eligible = await eventService.checkNewsReactorEligibility(wallet, headline.id, 60);
+      if (eligible) {
+        await this.awardBadge(wallet, 'news_reactor');
+        return { badge_name: 'news_reactor', wallet };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Badge: Earnings Conviction — opened 24h before earnings, held through report (+1.20x Permanent)
+   */
+  async checkEarningsConviction(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'earnings_conviction')) return null;
+
+    const events = await eventService.getEventsByType('earnings');
+
+    for (const event of events) {
+      // Check if position opened 24h BEFORE earnings event
+      const oneHourBefore = new Date(event.start_time.getTime() - 24 * 60 * 60 * 1000);
+      const match = await queryOne(
+        `SELECT id FROM positions
+         WHERE wallet = $1
+         AND opened_at >= $2 AND opened_at <= $3
+         AND (asset = ANY($4))
+         AND status = 'closed'
+         AND closed_at >= $5
+         LIMIT 1`,
+        [wallet, oneHourBefore, event.start_time, event.eligible_assets || [], event.end_time]
+      );
+
+      if (match) {
+        await this.awardBadge(wallet, 'earnings_conviction');
+        return { badge_name: 'earnings_conviction', wallet };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Badge: Geopolitical Trade — opened during major geopolitical event (+1.20x Permanent)
+   */
+  async checkGeopoliticalTrade(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'geopolitical_trade')) return null;
+
+    const events = await eventService.getEventsByType('geopolitical');
+
+    for (const event of events) {
+      const eligible = await eventService.checkEventEligibility(wallet, event.id);
+      if (eligible) {
+        await this.awardBadge(wallet, 'geopolitical_trade');
+        return { badge_name: 'geopolitical_trade', wallet };
+      }
+    }
+    return null;
+  }
+
   // ── Helpers ──
 
   /**
@@ -171,7 +287,7 @@ export class BadgeService {
   }
 
   /**
-   * Award a badge to a wallet (local DB only — SNAG sync is separate).
+   * Award a badge to a wallet + queue immediate real-time SNAG sync.
    */
   async awardBadge(wallet: string, badgeName: BadgeName): Promise<void> {
     await execute(
@@ -179,6 +295,9 @@ export class BadgeService {
       [wallet, badgeName]
     );
     console.log(`[Badges] 🏆 Awarded "${badgeName}" to ${wallet.slice(0, 8)}...`);
+
+    // Queue immediate sync to SNAG (badges are not debounced — sync immediately)
+    await realtimeSnagSyncService.queueBadgeSync(wallet, badgeName);
   }
 
   /**

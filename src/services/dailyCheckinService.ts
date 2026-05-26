@@ -4,6 +4,7 @@
  */
 
 import { pool, execute } from '../db/pool';
+import { realtimeSnagSyncService } from './realtimeSnagSyncService';
 import { getLevel } from '../utils/levelSystem';
 
 const DAILY_CHECKIN_XP = 50;
@@ -73,6 +74,9 @@ export class DailyCheckinService {
          WHERE wallet = $3`,
         [newStreak, newTotalXp, wallet]
       );
+
+      // Queue real-time sync to SNAG for checkin bonus XP (debounced, will batch within 2 seconds)
+      await realtimeSnagSyncService.queueXPSync(wallet, xpBonus);
 
       return {
         streakCount: newStreak,

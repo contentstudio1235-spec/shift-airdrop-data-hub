@@ -64,7 +64,7 @@ export default function LeaderboardPage() {
             <span className="badge mint">Season 1</span>
             <LivePill live={!loading} />
           </div>
-          <p style={{ color: 'var(--text-dim)', fontSize: 13 }}>Top traders ranked by XP earned</p>
+          <p style={{ color: 'var(--text-dim)', fontSize: 13 }}>Top traders ranked by Shift Points (SP) earned</p>
         </div>
       </div>
 
@@ -153,7 +153,7 @@ export default function LeaderboardPage() {
             </div>
           </div>
           <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 14 }}>
-            {mode === 'Multiplier' ? `${(userEntry.multiplier ?? 1).toFixed(2)}x` : (userEntry.totalXP ?? 0).toLocaleString()} {mode === 'Points' ? 'XP' : ''}
+            {mode === 'Multiplier' ? `${(userEntry.multiplier ?? 1).toFixed(2)}x` : (userEntry.totalXP ?? 0).toLocaleString()} {mode === 'Points' ? 'SP' : ''}
           </div>
           <span className="badge mint" style={{ fontSize: 10 }}>You</span>
         </div>
@@ -211,7 +211,7 @@ export default function LeaderboardPage() {
                         : (entry.totalXP ?? 0).toLocaleString()}
                     </div>
                     <div style={{ fontSize: 10, color: 'var(--text-mute)', marginTop: 2 }}>
-                      {mode === 'Multiplier' ? 'multiplier' : 'XP'}
+                      {mode === 'Multiplier' ? 'multiplier' : 'SP'}
                     </div>
                   </div>
                 );
@@ -235,7 +235,7 @@ export default function LeaderboardPage() {
                 borderBottom: '1px solid var(--border)',
               }}
             >
-              {['Rank', 'Wallet', mode === 'Multiplier' ? 'Multiplier' : 'Total XP', 'Tier'].map((h) => (
+              {['Rank', 'Wallet', mode === 'Multiplier' ? 'Multiplier' : 'Total SP', 'Tier'].map((h) => (
                 <div
                   key={h}
                   style={{
@@ -244,7 +244,7 @@ export default function LeaderboardPage() {
                     color: 'var(--text-mute)',
                     textTransform: 'uppercase',
                     letterSpacing: '0.06em',
-                    textAlign: h === 'Total XP' || h === 'Multiplier' ? 'right' : 'left',
+                    textAlign: h === 'Total SP' || h === 'Multiplier' ? 'right' : 'left',
                   }}
                 >
                   {h}

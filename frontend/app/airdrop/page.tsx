@@ -12,6 +12,7 @@ import Icon from '@/components/Icon';
 import ConnectWalletModal from '@/components/ConnectWalletModal';
 import { useWallet } from '@/components/WalletContext';
 import { useToast } from '@/components/ToastContext';
+import { useLaunchConfig } from '@/hooks/useLaunchConfig';
 import { fetchDashboard, fetchPositions, fetchBadges, fetchEvents, fetchReferralLinks, setCustomReferralCode } from '@/lib/api';
 import { mergeBadges } from '@/lib/badges';
 import type { DashboardResponse, Position, ShiftEvent } from '@/lib/types';
@@ -20,18 +21,21 @@ type MainTab = 'Holdings' | 'Badges' | 'Events';
 type BadgeSub = 'Activity' | 'Events';
 
 const FAQ = [
-  { q: 'How is XP calculated?', a: 'XP = log₁₀(position_size_usd) × 100 × launch_bonus × claim_multiplier, prorated hourly. Larger positions and longer holds earn exponentially more.' },
-  { q: 'What are the Launch Bonuses?', a: 'Week 1 (3.0x), Week 2 (2.0x), then baseline (1.0x). Limited-time multipliers reward early participation — earn 3x more XP in the first week!' },
+  { q: 'How are Shift Points calculated?', a: 'Shift Points = log₁₀(position_size_usd) × 100 × launch_bonus × claim_multiplier, prorated hourly. Larger positions and longer holds earn exponentially more.' },
+  { q: 'What are the Launch Bonuses?', a: 'Week 1 (3.0x), Week 2 (2.0x), then baseline (1.0x). Limited-time multipliers reward early participation — earn 3x more Shift Points in the first week!' },
   { q: 'What is the Claim Multiplier?', a: 'Your personal airdrop multiplier (1.0–5.0x). Increases with weekly activity, badges earned, referrals, and time on platform.' },
-  { q: 'How do badges work?', a: 'Badges are earned by hitting milestones (volume, hold duration) or trading during special events (FOMC, earnings). Each grants bonus XP multiplier.' },
-  { q: 'What happens at TGE?', a: 'At Token Generation Event, your total XP is converted to a SHIFT token allocation based on your rank and Claim Multiplier. Higher rank = bigger airdrop.' },
-  { q: 'Can I lose XP?', a: 'No. XP is cumulative and never decreases. However, positions shorter than 24h or flagged as wash trades are not counted.' },
+  { q: 'How do badges work?', a: 'Badges are earned by hitting milestones (volume, hold duration) or trading during special events (FOMC, earnings). Each grants bonus Shift Points multiplier.' },
+  { q: 'What happens at TGE?', a: 'At Token Generation Event, your total Shift Points are converted to a SHIFT token allocation based on your rank and Claim Multiplier. Higher rank = bigger airdrop.' },
+  { q: 'Can I lose Shift Points?', a: 'No. Shift Points are cumulative and never decrease. However, positions shorter than 24h or flagged as wash trades are not counted.' },
 ];
 
 export default function AirdropPage() {
   const { wallet } = useWallet();
   const toast = useToast();
   const router = useRouter();
+
+  // Real-time launch config
+  const { phase: launchPhase } = useLaunchConfig();
 
   const [tab, setTab] = useState<MainTab>('Holdings');
   const [badgeSub, setBadgeSub] = useState<BadgeSub>('Activity');
@@ -46,15 +50,6 @@ export default function AirdropPage() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [events, setEvents] = useState<ShiftEvent[]>([]);
   const [earnedBadges, setEarnedBadges] = useState<{ id?: string; name?: string; badge_name?: string; earned_at?: string }[]>([]);
-
-  // Launch phase countdown
-  const [launchPhase, setLaunchPhase] = useState<{
-    label: string;
-    multiplier: number;
-    countdownDisplay: string;
-    phase: 'week1' | 'week2' | 'week3plus';
-  } | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState<string>('');
 
   // Referral links from SNAG
   const [referralLinks, setReferralLinks] = useState<{
@@ -74,61 +69,8 @@ export default function AirdropPage() {
     });
   }, []);
 
-  // Calculate and update launch phase with countdown
-  useEffect(() => {
-    const calculatePhase = () => {
-      const launchStartStr = process.env.NEXT_PUBLIC_LAUNCH_START_DATE || '2026-05-25T00:00:00Z';
-      const launchStart = new Date(launchStartStr);
-      const now = new Date();
-      const diffMs = now.getTime() - launchStart.getTime();
-      const daysIntoLaunch = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-      let phase: 'week1' | 'week2' | 'week3plus';
-      let multiplier: number;
-      let label: string;
-      let countdownDisplay: string;
-      let phaseEndDate: Date;
-
-      if (daysIntoLaunch < 7) {
-        phase = 'week1';
-        multiplier = 3.0;
-        label = '🚀 LAUNCH WEEK';
-        phaseEndDate = new Date(launchStart.getTime() + 7 * 24 * 60 * 60 * 1000);
-      } else if (daysIntoLaunch < 14) {
-        phase = 'week2';
-        multiplier = 2.0;
-        label = '🔥 MOMENTUM WEEK';
-        phaseEndDate = new Date(launchStart.getTime() + 14 * 24 * 60 * 60 * 1000);
-      } else {
-        phase = 'week3plus';
-        multiplier = 1.0;
-        label = '⭐ STEADY STATE';
-        phaseEndDate = new Date(0); // no deadline
-      }
-
-      // Calculate time remaining
-      const timeMs = phaseEndDate.getTime() - now.getTime();
-      if (timeMs > 0) {
-        const days = Math.floor(timeMs / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((timeMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        if (days > 0) {
-          countdownDisplay = `${days}d ${hours}h remaining`;
-        } else {
-          countdownDisplay = `${hours}h remaining`;
-        }
-        setTimeRemaining(countdownDisplay);
-      } else {
-        countdownDisplay = 'Bonus ended';
-        setTimeRemaining(countdownDisplay);
-      }
-
-      setLaunchPhase({ label, multiplier, countdownDisplay, phase });
-    };
-
-    calculatePhase();
-    const timer = setInterval(calculatePhase, 60000); // Update every minute
-    return () => clearInterval(timer);
-  }, []);
+  // Launch phase is now fetched via useLaunchConfig hook with real-time polling
+  // No need for manual calculation — admin panel updates are reflected within 10 seconds
 
   // Fetch user data AND referral links together when wallet changes (CRITICAL FIX: Prevent race condition)
   const loadUserData = useCallback(
@@ -203,12 +145,12 @@ export default function AirdropPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-              <h1 style={{ fontSize: 28, fontWeight: 700 }}>Earn XP & Compete for SHIFT</h1>
+              <h1 style={{ fontSize: 28, fontWeight: 700 }}>Earn Shift Points & Compete for SHIFT</h1>
               <span className="badge mint">SEASON 1 · ACTIVE</span>
               <LivePill live={true} />
             </div>
             <p style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.4 }}>
-              Trade SHIFT RWA tokens on Jupiter. Hold longer for bigger multipliers. Compete for the airdrop with limited-time bonus XP.
+              Trade SHIFT RWA tokens on Jupiter. Hold longer for bigger multipliers. Compete for the airdrop with limited-time bonus Shift Points.
             </p>
           </div>
           <button className="btn ghost sm" onClick={() => setShowHelp(true)}>
@@ -218,13 +160,13 @@ export default function AirdropPage() {
         </div>
 
         {/* ── Bonus Booster Banner ── */}
-        {launchPhase && launchPhase.phase !== 'week3plus' && (
+        {launchPhase && launchPhase.phase !== 'none' && (
           <div
             style={{
-              background: launchPhase.phase === 'week1'
+              background: launchPhase.phase === 'phase1'
                 ? 'linear-gradient(135deg, rgba(38,200,184,0.15), rgba(34,197,94,0.1))'
                 : 'linear-gradient(135deg, rgba(239,68,68,0.15), rgba(251,146,60,0.1))',
-              border: `1px solid ${launchPhase.phase === 'week1' ? 'rgba(38,200,184,0.4)' : 'rgba(251,146,60,0.4)'}`,
+              border: `1px solid ${launchPhase.phase === 'phase1' ? 'rgba(38,200,184,0.4)' : 'rgba(251,146,60,0.4)'}`,
               borderRadius: 12,
               padding: '16px 20px',
               marginBottom: 24,
@@ -234,28 +176,28 @@ export default function AirdropPage() {
             }}
           >
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: launchPhase.phase === 'week1' ? 'var(--mint)' : '#FB923C', marginBottom: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: launchPhase.phase === 'phase1' ? 'var(--mint)' : '#FB923C', marginBottom: 6 }}>
                 {launchPhase.label}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
-                Get <span style={{ fontWeight: 700, color: launchPhase.phase === 'week1' ? 'var(--mint)' : '#FB923C', fontSize: 13 }}>
-                  {launchPhase.multiplier.toFixed(1)}x XP multiplier
-                </span> on all positions
+                Launch bonus: <span style={{ fontWeight: 700, color: launchPhase.phase === 'phase1' ? 'var(--mint)' : '#FB923C' }}>
+                  {launchPhase.multiplier.toFixed(1)}x
+                </span> (applied to all multipliers)
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: launchPhase.phase === 'week1' ? 'var(--mint)' : '#FB923C', marginBottom: 4 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: launchPhase.phase === 'phase1' ? 'var(--mint)' : '#FB923C', marginBottom: 4 }}>
                 {launchPhase.multiplier.toFixed(1)}x
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-mute)', fontWeight: 600 }}>
-                {timeRemaining}
+                {launchPhase.timeRemaining || 'Ended'}
               </div>
             </div>
           </div>
         )}
 
         {/* ── Bonus Ended Banner ── */}
-        {launchPhase && launchPhase.phase === 'week3plus' && (
+        {launchPhase && launchPhase.phase === 'none' && (
           <div
             style={{
               background: 'rgba(107,114,128,0.1)',
@@ -268,7 +210,7 @@ export default function AirdropPage() {
               textAlign: 'center',
             }}
           >
-            Launch bonus period has ended. Base multipliers apply.
+            Launch bonus period has ended. Using base multipliers only.
           </div>
         )}
 
@@ -282,10 +224,10 @@ export default function AirdropPage() {
           }}
         >
           {[
-            { label: 'Total XP', value: dashboard ? dashboard.totalXp.toLocaleString(undefined, { maximumFractionDigits: 0 }) : (wallet ? '—' : '0'), color: 'var(--mint)' },
+            { label: 'Total SP', value: dashboard ? dashboard.totalXp.toLocaleString(undefined, { maximumFractionDigits: 0 }) : (wallet ? '—' : '0'), color: 'var(--mint)' },
             { label: 'Your Rank', value: dashboard ? `#${dashboard.rank}` : '—', color: 'var(--text)' },
             { label: 'Claim Multiplier', value: dashboard ? `${dashboard.claimMultiplier.toFixed(2)}x` : '—', color: 'var(--amber)' },
-            { label: 'Weekly XP', value: totalWeeklyXP > 0 ? `+${totalWeeklyXP.toLocaleString()}` : '—', color: 'var(--mint)' },
+            { label: 'Weekly SP', value: totalWeeklyXP > 0 ? `+${totalWeeklyXP.toLocaleString()}` : '—', color: 'var(--mint)' },
           ].map((stat) => (
             <div className="stat" key={stat.label}>
               <div className="stat-label">{stat.label}</div>
@@ -356,7 +298,7 @@ export default function AirdropPage() {
                     background: 'var(--panel)',
                   }}
                 >
-                  {['Asset', 'Weeks', 'Mult', 'XP/wk', 'Progress'].map((h) => (
+                  {['Asset', 'Weeks', 'Mult', 'SP/wk', 'Progress'].map((h) => (
                     <div key={h} style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                       {h}
                     </div>
@@ -387,7 +329,7 @@ export default function AirdropPage() {
                   <div className="empty-state">
                     <Icon name="bolt" size={32} color="var(--text-mute)" />
                     <p>No active positions yet</p>
-                    <p className="hint">Trade SHIFT tokens on Jupiter to start earning XP</p>
+                    <p className="hint">Trade SHIFT tokens on Jupiter to start earning Shift Points</p>
                     <button className="btn primary sm" onClick={() => window.open('https://app.shiftrwa.xyz/coming-soon', '_blank')}>
                       Go to Trade →
                     </button>
@@ -409,7 +351,7 @@ export default function AirdropPage() {
                       }}
                     >
                       <span>{positions.length} open position{positions.length !== 1 ? 's' : ''}</span>
-                      <span style={{ color: 'var(--mint)', fontWeight: 700 }}>+{totalWeeklyXP.toLocaleString()} XP/week total</span>
+                      <span style={{ color: 'var(--mint)', fontWeight: 700 }}>+{totalWeeklyXP.toLocaleString()} SP/week total</span>
                     </div>
                   </>
                 )}
@@ -528,11 +470,11 @@ export default function AirdropPage() {
               <div className="hr" style={{ marginBottom: 12 }} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <div className="kv" style={{ padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
-                  <span className="k">On-chain XP</span>
+                  <span className="k">On-chain SP</span>
                   <span className="v mint">{dashboard ? Math.round(dashboard.totalXp * 0.7).toLocaleString() : '—'}</span>
                 </div>
                 <div className="kv" style={{ padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
-                  <span className="k">Referral XP</span>
+                  <span className="k">Referral SP</span>
                   <span className="v" style={{ color: 'var(--amber)' }}>
                     {dashboard ? Math.round(dashboard.totalXp * 0.3).toLocaleString() : '—'}
                   </span>
@@ -645,7 +587,7 @@ export default function AirdropPage() {
                       onClick={() => {
                         const brandedLink = `${process.env.NEXT_PUBLIC_AIRDROP_URL || 'https://airdrop.shiftrwa.xyz'}/r/${referralLinks.customLink || referralLinks.defaultLink.split('/').pop() || 'ref'}`;
                         const text = encodeURIComponent(
-                          `I just joined the @ShiftRWA airdrop! 🚀\n\nTrade RWA tokens on Solana and earn XP. Join via my link:`
+                          `I just joined the @ShiftRWA airdrop! 🚀\n\nTrade RWA tokens on Solana and earn Shift Points. Join via my link:`
                         );
                         window.open(
                           `https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(brandedLink)}`,
@@ -708,7 +650,7 @@ export default function AirdropPage() {
 
                   {/* Info */}
                   <div style={{ fontSize: 11, color: 'var(--text-mute)', padding: '12px 14px', background: 'var(--panel)', borderRadius: 8, textAlign: 'center' }}>
-                    Share your branded link to earn referral rewards. Complete quests on SNAG for bonus XP!
+                    Share your branded link to earn referral rewards. Complete quests on SNAG for bonus Shift Points!
                   </div>
                 </>
               ) : (

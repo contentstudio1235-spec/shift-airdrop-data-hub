@@ -8,7 +8,18 @@
       "Bash(curl -X POST https://shift-airdrop-backend.onrender.com/api/admin/sync -H 'x-admin-key: 5ef511c54ec2670c1b0e3d336e7555261e7567117f77d30c6ca5b199e96f6c08' -H 'Content-Type: application/json')",
       "Bash(curl -s http://localhost:3000)",
       "Bash(curl -s http://localhost:3000/register)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "WebFetch(domain:docs.metamask.io)",
+      "Read(//tmp/**)",
+      "Bash(taskkill /PID 20864 /F)",
+      "Bash(curl -s \"http://localhost:3002/r/test123\" -L)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_Preview__preview_start",
+      "Read(//c/tmp/**)",
+      "Bash(node test_wallets.mjs)",
+      "Bash(curl -s -I http://localhost:3000/register)",
+      "Bash(cat > *)",
+      "Bash(git push *)"
     ]
   }
 }

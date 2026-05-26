@@ -6,6 +6,7 @@ import { query, execute } from '../db/pool';
 import { Position } from '../types';
 import { positionService } from './positionService';
 import { antiFarmService } from './antiFarmService';
+import { realtimeSnagSyncService } from './realtimeSnagSyncService';
 import { getTokenInfo } from '../config/tokens';
 import { getLaunchPhase } from '../config/launchMultipliers';
 
@@ -111,7 +112,7 @@ export class XPEngine {
       positionsProcessed++;
     }
 
-    // 3. Update user total_xp
+    // 3. Update user total_xp + queue real-time SNAG sync
     let usersUpdated = 0;
     for (const [wallet, xpDelta] of walletXPDeltas) {
       if (xpDelta > 0) {
@@ -119,6 +120,8 @@ export class XPEngine {
           `UPDATE users SET total_xp = total_xp + $1, updated_at = NOW() WHERE wallet = $2`,
           [xpDelta, wallet]
         );
+        // Queue real-time sync to SNAG (debounced, will batch within 2 seconds)
+        await realtimeSnagSyncService.queueXPSync(wallet, xpDelta);
         usersUpdated++;
       }
     }
