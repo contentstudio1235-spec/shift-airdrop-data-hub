@@ -31,8 +31,8 @@ export const metadata: Metadata = {
   title: 'SHIFT Airdrop — Earn XP Through Trading',
   description: 'Trade RWA tokens on Jupiter and earn XP. Hold longer for multiplier bonuses. Compete for the SHIFT airdrop.',
   icons: {
-    icon: '/shift-logo.svg',
-    apple: '/shift-logo.svg',
+    icon: '/shift_favicon.png',
+    apple: '/shift_favicon.png',
   },
   openGraph: {
     title: 'SHIFT Airdrop',
