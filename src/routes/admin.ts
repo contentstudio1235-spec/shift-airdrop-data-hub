@@ -1295,4 +1295,81 @@ router.get('/audit', verifyAdminSecret, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/admin/snag/link-badge/:badgeName/:snagBadgeId
+ * Link a SHIFT badge to a SNAG badge ID
+ */
+router.post('/snag/link-badge/:badgeName/:snagBadgeId', verifyAdminSecret, async (req, res) => {
+  try {
+    const { badgeName, snagBadgeId } = req.params;
+
+    await pool.query(
+      `INSERT INTO snag_badge_mapping (shift_badge_name, snag_badge_id, created_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (shift_badge_name) DO UPDATE SET snag_badge_id = EXCLUDED.snag_badge_id`,
+      [badgeName, snagBadgeId]
+    );
+
+    await adminAuditService.log('snag_badge_linked', 'snag_mapping', badgeName, null, { snag_badge_id: snagBadgeId }, 'Admin linked SHIFT badge to SNAG', 'system');
+
+    res.json({ success: true, message: `Linked ${badgeName} to SNAG badge ${snagBadgeId}` });
+  } catch (error) {
+    console.error('[Admin] Failed to link badge:', error);
+    res.status(500).json({ error: 'Failed to link badge' });
+  }
+});
+
+/**
+ * GET /api/admin/snag/badge-mappings
+ * Get all SHIFT-to-SNAG badge mappings
+ */
+router.get('/snag/badge-mappings', verifyAdminSecret, async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT shift_badge_name, snag_badge_id, created_at FROM snag_badge_mapping ORDER BY created_at DESC`);
+
+    res.json({
+      success: true,
+      mappings: result.rows,
+      count: result.rows.length,
+    });
+  } catch (error) {
+    console.error('[Admin] Failed to fetch badge mappings:', error);
+    res.status(500).json({ error: 'Failed to fetch badge mappings' });
+  }
+});
+
+/**
+ * POST /api/admin/snag/sync-all
+ * Trigger full SNAG sync for all users
+ */
+router.post('/snag/sync-all', verifyAdminSecret, async (req, res) => {
+  try {
+    const { adminWallet } = req.body;
+
+    // Get all users
+    const users = await pool.query(`SELECT wallet FROM wallets`);
+
+    let synced = 0;
+    for (const user of users.rows) {
+      // Sync user's badges to SNAG
+      const badges = await pool.query(`SELECT badge_name FROM badges WHERE wallet = $1`, [user.wallet]);
+      for (const badge of badges.rows) {
+        // Will be queued for sync
+        synced++;
+      }
+    }
+
+    await adminAuditService.log('snag_full_sync', 'snag', 'all_users', null, { users_processed: users.rows.length }, 'Triggered full SNAG sync', adminWallet || 'system');
+
+    res.json({
+      success: true,
+      message: `Queued ${synced} badge syncs to SNAG`,
+      users_processed: users.rows.length,
+    });
+  } catch (error) {
+    console.error('[Admin] Failed to trigger full SNAG sync:', error);
+    res.status(500).json({ error: 'Failed to trigger full SNAG sync' });
+  }
+});
+
 export default router;

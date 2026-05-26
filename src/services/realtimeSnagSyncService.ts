@@ -10,7 +10,7 @@ import { execute } from '../db/pool';
 
 interface SyncJob {
   wallet: string;
-  type: 'xp' | 'multiplier' | 'badge';
+  type: 'xp' | 'multiplier' | 'badge' | 'certificate';
   value: number | string;
   timestamp: Date;
   attempt: number;
@@ -109,6 +109,29 @@ export class RealtimeSnagSyncService {
   }
 
   /**
+   * Queue a certificate award for real-time sync to SNAG
+   */
+  queueCertificateSync(wallet: string, certificateName: string): void {
+    const key = `cert:${wallet}:${certificateName}`;
+
+    this.queue.set(key, {
+      wallet,
+      type: 'certificate',
+      value: certificateName,
+      timestamp: new Date(),
+      attempt: 0,
+      maxAttempts: 3,
+    });
+
+    // Certificates sync immediately (not debounced, like badges)
+    this.processQueue().catch((err) => {
+      console.error('[RealtimeSnagSync] Certificate sync failed:', err);
+    });
+
+    console.log(`[RealtimeSnagSync] Queued certificate ${certificateName} for ${wallet.slice(0, 8)}...`);
+  }
+
+  /**
    * Process all queued sync jobs
    * Batches updates by type and walletfor efficient API calls
    */
@@ -124,6 +147,7 @@ export class RealtimeSnagSyncService {
       const xpJobs = Array.from(this.queue.values()).filter((j) => j.type === 'xp');
       const multiplierJobs = Array.from(this.queue.values()).filter((j) => j.type === 'multiplier');
       const badgeJobs = Array.from(this.queue.values()).filter((j) => j.type === 'badge');
+      const certificateJobs = Array.from(this.queue.values()).filter((j) => j.type === 'certificate');
 
       // Process XP syncs
       if (xpJobs.length > 0) {
@@ -138,6 +162,11 @@ export class RealtimeSnagSyncService {
       // Process badge syncs
       if (badgeJobs.length > 0) {
         await this.processBadgeBatch(badgeJobs);
+      }
+
+      // Process certificate syncs
+      if (certificateJobs.length > 0) {
+        await this.processCertificateBatch(certificateJobs);
       }
     } catch (err) {
       console.error('[RealtimeSnagSync] Processing error:', err);
@@ -210,6 +239,22 @@ export class RealtimeSnagSyncService {
       console.log(`[RealtimeSnagSync] Synced ${jobs.length} badge awards`);
     } catch (err) {
       console.error('[RealtimeSnagSync] Badge batch failed:', err);
+    }
+  }
+
+  /**
+   * Batch process certificate syncs
+   */
+  private async processCertificateBatch(jobs: SyncJob[]): Promise<void> {
+    try {
+      for (const job of jobs) {
+        // Sync certificate like badge (treat as achievement)
+        await snagSyncService.awardBadgeInSnag(job.wallet, `cert_${job.value as string}`);
+        this.queue.delete(`cert:${job.wallet}:${job.value}`);
+      }
+      console.log(`[RealtimeSnagSync] Synced ${jobs.length} certificate awards`);
+    } catch (err) {
+      console.error('[RealtimeSnagSync] Certificate batch failed:', err);
     }
   }
 
