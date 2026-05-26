@@ -232,3 +232,36 @@
   color: #fff;
   margin: 0 0 16px;
 }
+
+/* ── Admin Navigation Grid ── */
+.adminNavGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 40px;
+}
+
+.navButton {
+  background: linear-gradient(135deg, #00c896 0%, #00a876 100%);
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  padding: 16px 12px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 200, 150, 0.2);
+}
+
+.navButton:hover {
+  background: linear-gradient(135deg, #00d9a3 0%, #00b88a 100%);
+  box-shadow: 0 4px 12px rgba(0, 200, 150, 0.4);
+  transform: translateY(-2px);
+}
+
+.navButton:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 200, 150, 0.2);
+}

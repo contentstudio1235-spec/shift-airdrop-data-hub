@@ -1,15 +1,26 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import styles from "@/styles/admin.module.css";
 
 export default function AdminDashboardPage() {
+  const router = useRouter();
   const { isAuthenticated, login } = useAdminAuth();
   const [metrics, setMetrics] = useState<any>(null);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [passcode, setPasscode] = useState("");
   const [authError, setAuthError] = useState(false);
+
+  const navItems = [
+    { label: "👥 User Management", path: "/admin/users" },
+    { label: "🏆 Badges", path: "/admin/badges" },
+    { label: "🎖️ Certificates", path: "/admin/certificates" },
+    { label: "👑 KOL Whitelist", path: "/admin/kol" },
+    { label: "⚙️ Configuration", path: "/admin/configuration" },
+    { label: "📋 Audit Logs", path: "/admin/audit" },
+  ];
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -71,6 +82,19 @@ export default function AdminDashboardPage() {
       <div className={styles.adminHeader}>
         <h1>Admin Dashboard</h1>
         <p>SHIFT airdrop system overview and metrics</p>
+      </div>
+
+      {/* Navigation Menu */}
+      <div className={styles.adminNavGrid}>
+        {navItems.map((item) => (
+          <button
+            key={item.path}
+            className={styles.navButton}
+            onClick={() => router.push(item.path)}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
 
       <div className={styles.metricsGrid}>
