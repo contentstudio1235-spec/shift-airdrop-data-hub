@@ -37,7 +37,12 @@ export const config = {
     earnings_reactor: process.env.SNAG_EARNINGS_REACTOR_BADGE_ID || '',
     fomc_trader: process.env.SNAG_FOMC_TRADER_BADGE_ID || '',
     shift_holder: process.env.SNAG_SHIFT_HOLDER_BADGE_ID || '',
-  },
+    fed_day_trade: process.env.SNAG_FED_DAY_TRADE_BADGE_ID || '',
+    cpi_bet: process.env.SNAG_CPI_BET_BADGE_ID || '',
+    news_reactor: process.env.SNAG_NEWS_REACTOR_BADGE_ID || '',
+    earnings_conviction: process.env.SNAG_EARNINGS_CONVICTION_BADGE_ID || '',
+    geopolitical_trade: process.env.SNAG_GEOPOLITICAL_TRADE_BADGE_ID || '',
+  } as const,
 
   // SNAG Social Task Rule IDs (for inbound webhook task mapping)
   snagSocialRuleIds: {

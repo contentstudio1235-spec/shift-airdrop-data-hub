@@ -32,6 +32,14 @@ const router = express.Router();
  */
 const ADMIN_PASSCODE = 'ShiftRwa2026@@$$Key';
 
+/**
+ * Helper: Convert string | string[] to string
+ */
+const asString = (value: any): string => {
+  if (Array.isArray(value)) return value[0] || '';
+  return value || '';
+};
+
 const verifyAdminSecret = (
   req: express.Request,
   res: express.Response,
@@ -586,9 +594,11 @@ router.get('/badges/templates', verifyAdminSecret, async (_req, res) => {
  * Body: { template_key: string, position_id?: string, reason?: string }
  */
 router.post('/badges/:wallet', verifyAdminSecret, async (req, res) => {
-  const { wallet } = req.params;
-  const { template_key, position_id, reason } = req.body;
-  const adminWallet = req.body.adminWallet || 'admin-system';
+  const wallet = asString(req.params.wallet);
+  const template_key = asString(req.body.template_key);
+  const position_id = asString(req.body.position_id);
+  const reason = asString(req.body.reason);
+  const adminWallet = asString(req.body.adminWallet) || 'admin-system';
 
   if (!wallet || wallet.length < 32) {
     return res.status(400).json({ error: 'Invalid wallet' });
@@ -632,9 +642,10 @@ router.post('/badges/:wallet', verifyAdminSecret, async (req, res) => {
  * Body: { reason?: string }
  */
 router.delete('/badges/:wallet/:templateKey', verifyAdminSecret, async (req, res) => {
-  const { wallet, templateKey } = req.params;
-  const { reason } = req.body;
-  const adminWallet = req.body.adminWallet || 'admin-system';
+  const wallet = asString(req.params.wallet);
+  const templateKey = asString(req.params.templateKey);
+  const reason = asString(req.body.reason);
+  const adminWallet = asString(req.body.adminWallet) || 'admin-system';
 
   if (!wallet || wallet.length < 32) {
     return res.status(400).json({ error: 'Invalid wallet' });
@@ -674,7 +685,7 @@ router.delete('/badges/:wallet/:templateKey', verifyAdminSecret, async (req, res
  * Get all badges earned by a wallet
  */
 router.get('/badges/:wallet', verifyAdminSecret, async (req, res) => {
-  const { wallet } = req.params;
+  const wallet = asString(req.params.wallet);
 
   if (!wallet || wallet.length < 32) {
     return res.status(400).json({ error: 'Invalid wallet' });
@@ -724,14 +735,19 @@ router.get('/badges/:wallet', verifyAdminSecret, async (req, res) => {
 router.get('/events', verifyAdminSecret, async (req, res) => {
   try {
     const { type } = req.query;
-    const events = type
-      ? await eventService.getEventsByType(type as string)
-      : await pool.query('SELECT * FROM events ORDER BY start_time DESC LIMIT 100');
+
+    let eventsList: any[];
+    if (type) {
+      eventsList = await eventService.getEventsByType(type as string);
+    } else {
+      const result = await pool.query('SELECT * FROM events ORDER BY start_time DESC LIMIT 100');
+      eventsList = result.rows;
+    }
 
     res.json({
       success: true,
-      events: type ? events : events.rows,
-      count: type ? events.length : events.rowCount,
+      events: eventsList,
+      count: eventsList.length,
     });
   } catch (error) {
     console.error('[Admin] Failed to fetch events:', error);
@@ -826,7 +842,7 @@ router.post('/events/news', verifyAdminSecret, async (req, res) => {
  */
 router.get('/events/:eventId/activity', verifyAdminSecret, async (req, res) => {
   try {
-    const { eventId } = req.params;
+    const eventId = asString(req.params.eventId);
 
     const count = await eventService.getEventActivityCount(eventId);
     const participants = await eventService.getEventParticipants(eventId);
@@ -868,7 +884,7 @@ router.get('/config', verifyAdminSecret, async (req, res) => {
  */
 router.get('/config/:key', verifyAdminSecret, async (req, res) => {
   try {
-    const { key } = req.params;
+    const key = asString(req.params.key);
     const value = await configService.getConfig(key);
 
     if (!value) {
@@ -888,14 +904,16 @@ router.get('/config/:key', verifyAdminSecret, async (req, res) => {
  */
 router.patch('/config/:key', verifyAdminSecret, async (req, res) => {
   try {
-    const { key } = req.params;
-    const { value, reason, adminWallet } = req.body;
+    const key = asString(req.params.key);
+    const value = req.body.value;
+    const reason = asString(req.body.reason);
+    const adminWallet = asString(req.body.adminWallet) || 'system';
 
     if (!value || !reason) {
       return res.status(400).json({ error: 'Missing required fields: value, reason' });
     }
 
-    await configService.setConfig(key, value, adminWallet || 'system', reason);
+    await configService.setConfig(key, value, adminWallet, reason);
 
     console.log(`[Admin] Updated config: ${key}`);
     res.json({ success: true, message: `Updated ${key}` });
@@ -911,10 +929,10 @@ router.patch('/config/:key', verifyAdminSecret, async (req, res) => {
  */
 router.get('/config/:key/history', verifyAdminSecret, async (req, res) => {
   try {
-    const { key } = req.params;
-    const { limit = 50 } = req.query;
+    const key = asString(req.params.key);
+    const limit = asString(req.query.limit) || '50';
 
-    const history = await configService.getConfigHistory(key, parseInt(limit as string));
+    const history = await configService.getConfigHistory(key, parseInt(limit));
 
     res.json({
       success: true,
@@ -1038,7 +1056,7 @@ router.get('/config-schema', verifyAdminSecret, async (req, res) => {
  */
 router.get('/certificates/:category', verifyAdminSecret, async (req, res) => {
   try {
-    const { category } = req.params;
+    const category = asString(req.params.category);
     const certs = await certificateService.getCertificatesByCategory(category);
 
     res.json({
@@ -1088,10 +1106,11 @@ router.post('/certificates', verifyAdminSecret, async (req, res) => {
  */
 router.post('/certificates/award/:wallet/:certificateId', verifyAdminSecret, async (req, res) => {
   try {
-    const { wallet, certificateId } = req.params;
-    const { adminWallet } = req.body;
+    const wallet = asString(req.params.wallet);
+    const certificateId = asString(req.params.certificateId);
+    const adminWallet = asString(req.body.adminWallet) || 'system';
 
-    await certificateService.awardCertificate(wallet, certificateId, adminWallet || 'system');
+    await certificateService.awardCertificate(wallet, certificateId, adminWallet);
 
     console.log(`[Admin] Awarded certificate to ${wallet.slice(0, 8)}`);
     res.json({ success: true, message: 'Certificate awarded' });
@@ -1107,14 +1126,16 @@ router.post('/certificates/award/:wallet/:certificateId', verifyAdminSecret, asy
  */
 router.delete('/certificates/revoke/:wallet/:certificateId', verifyAdminSecret, async (req, res) => {
   try {
-    const { wallet, certificateId } = req.params;
-    const { adminWallet, reason } = req.body;
+    const wallet = asString(req.params.wallet);
+    const certificateId = asString(req.params.certificateId);
+    const adminWallet = asString(req.body.adminWallet) || 'system';
+    const reason = asString(req.body.reason) || 'Admin revocation';
 
     await certificateService.revokeCertificate(
       wallet,
       certificateId,
-      adminWallet || 'system',
-      reason || 'Admin revocation'
+      adminWallet,
+      reason
     );
 
     res.json({ success: true, message: 'Certificate revoked' });
@@ -1130,7 +1151,7 @@ router.delete('/certificates/revoke/:wallet/:certificateId', verifyAdminSecret, 
  */
 router.get('/certificates/wallet/:wallet', verifyAdminSecret, async (req, res) => {
   try {
-    const { wallet } = req.params;
+    const wallet = asString(req.params.wallet);
     const certs = await certificateService.getWalletCertificates(wallet);
     const multiplierBoost = await certificateService.getCertificateMultiplierBoost(wallet);
 
@@ -1301,7 +1322,9 @@ router.get('/audit', verifyAdminSecret, async (req, res) => {
  */
 router.post('/snag/link-badge/:badgeName/:snagBadgeId', verifyAdminSecret, async (req, res) => {
   try {
-    const { badgeName, snagBadgeId } = req.params;
+    const badgeName = asString(req.params.badgeName);
+    const snagBadgeId = asString(req.params.snagBadgeId);
+    const adminWallet = asString(req.body.adminWallet) || 'admin-system';
 
     await pool.query(
       `INSERT INTO snag_badge_mapping (shift_badge_name, snag_badge_id, created_at)
@@ -1310,7 +1333,7 @@ router.post('/snag/link-badge/:badgeName/:snagBadgeId', verifyAdminSecret, async
       [badgeName, snagBadgeId]
     );
 
-    await adminAuditService.log('snag_badge_linked', 'snag_mapping', badgeName, null, { snag_badge_id: snagBadgeId }, 'Admin linked SHIFT badge to SNAG', 'system');
+    await adminAuditService.log(adminWallet, 'snag_badge_linked', 'snag_mapping', badgeName, null, { snag_badge_id: snagBadgeId }, 'Admin linked SHIFT badge to SNAG');
 
     res.json({ success: true, message: `Linked ${badgeName} to SNAG badge ${snagBadgeId}` });
   } catch (error) {
@@ -1344,7 +1367,7 @@ router.get('/snag/badge-mappings', verifyAdminSecret, async (req, res) => {
  */
 router.post('/snag/sync-all', verifyAdminSecret, async (req, res) => {
   try {
-    const { adminWallet } = req.body;
+    const adminWallet = asString(req.body.adminWallet) || 'admin-system';
 
     // Get all users
     const users = await pool.query(`SELECT wallet FROM wallets`);
@@ -1359,7 +1382,7 @@ router.post('/snag/sync-all', verifyAdminSecret, async (req, res) => {
       }
     }
 
-    await adminAuditService.log('snag_full_sync', 'snag', 'all_users', null, { users_processed: users.rows.length }, 'Triggered full SNAG sync', adminWallet || 'system');
+    await adminAuditService.log(adminWallet, 'snag_full_sync', 'snag', 'all_users', null, { users_processed: users.rows.length }, 'Triggered full SNAG sync');
 
     res.json({
       success: true,

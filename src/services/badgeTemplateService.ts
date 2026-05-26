@@ -4,8 +4,7 @@
 // Evaluates badge eligibility based on 31 rule templates
 // Enforces +2.0x stacking cap with Hall of Fame bypass
 
-import { Pool } from 'pg';
-import { getPool } from '../db';
+import { execute, query, queryOne } from '../db/pool';
 
 interface RuleConfig {
   [key: string]: number | string | boolean | string[];
@@ -27,31 +26,25 @@ interface StackingResult {
 }
 
 export class BadgeTemplateService {
-  private pool: Pool;
-
-  constructor(pool?: Pool) {
-    this.pool = pool || getPool();
-  }
-
   /**
    * Get all available badge templates
    */
   async getTemplates(): Promise<any[]> {
-    const res = await this.pool.query(
+    const res = await query(
       'SELECT * FROM badge_rule_templates WHERE duration_type IN (\'permanent\', \'dynamic\') ORDER BY category, display_name'
     );
-    return res.rows;
+    return res;
   }
 
   /**
    * Get template by key
    */
   async getTemplate(templateKey: string): Promise<any> {
-    const res = await this.pool.query(
+    const res = await query(
       'SELECT * FROM badge_rule_templates WHERE template_key = $1',
       [templateKey]
     );
-    return res.rows[0];
+    return res[0];
   }
 
   /**
@@ -122,7 +115,7 @@ export class BadgeTemplateService {
     positionId?: string
   ): Promise<StackingResult> {
     // Get all badges earned by wallet for this position
-    const query = `
+    const sql = `
       SELECT bd.badge_name, brt.multiplier_value, brt.is_hall_of_fame
       FROM user_badges ub
       JOIN badge_definitions bd ON ub.badge_id = bd.id
@@ -134,9 +127,9 @@ export class BadgeTemplateService {
     `;
 
     const params = positionId ? [wallet, positionId] : [wallet];
-    const res = await this.pool.query(query, params);
+    const res = await query(sql, params);
 
-    const badges = res.rows;
+    const badges = res;
     const regularBadges = badges.filter((b) => !b.is_hall_of_fame);
     const hofBadges = badges.filter((b) => b.is_hall_of_fame);
 
@@ -199,16 +192,16 @@ export class BadgeTemplateService {
 
     // Find or create badge definition for this template
     let badgeId: string;
-    const badgeRes = await this.pool.query(
+    const badgeRes = await query(
       'SELECT id FROM badge_definitions WHERE rule_template = $1 LIMIT 1',
       [templateKey]
     );
 
-    if (badgeRes.rows.length > 0) {
-      badgeId = badgeRes.rows[0].id;
+    if (badgeRes.length > 0) {
+      badgeId = badgeRes[0].id;
     } else {
       // Create badge definition from template
-      const createRes = await this.pool.query(
+      const createRes = await query(
         `INSERT INTO badge_definitions
          (badge_name, description, multiplier_value, rule_template, duration_type, dynamic_duration_days, is_hall_of_fame, is_active, created_by_admin)
          VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)
@@ -224,11 +217,11 @@ export class BadgeTemplateService {
           awardedBy || 'system',
         ]
       );
-      badgeId = createRes.rows[0].id;
+      badgeId = createRes[0].id;
     }
 
     // Award badge to user
-    await this.pool.query(
+    await query(
       `INSERT INTO user_badges (wallet, badge_id, position_id, awarded_at, awarded_by)
        VALUES ($1, $2, $3, NOW(), $4)
        ON CONFLICT (wallet, badge_id) DO NOTHING`,
@@ -244,7 +237,7 @@ export class BadgeTemplateService {
    * Revoke badge from wallet
    */
   async revokeBadge(wallet: string, templateKey: string): Promise<void> {
-    const res = await this.pool.query(
+    const res = await query(
       `DELETE FROM user_badges
        WHERE wallet = $1
        AND badge_id = (SELECT id FROM badge_definitions WHERE rule_template = $2)`,
@@ -322,7 +315,7 @@ export class BadgeTemplateService {
     config: RuleConfig
   ): Promise<boolean> {
     // Added to position after -5% drop from entry
-    const res = await this.pool.query(
+    const res = await query(
       `SELECT COUNT(*) as count FROM positions
        WHERE wallet = $1
        AND entry_price IS NOT NULL
@@ -330,7 +323,7 @@ export class BadgeTemplateService {
             AND entry_price_at_trade <= entry_price * 0.95) > 0`,
       [wallet]
     );
-    return res.rows[0].count > 0;
+    return res[0].count > 0;
   }
 
   private async evaluateTripleDown(
@@ -338,13 +331,13 @@ export class BadgeTemplateService {
     config: RuleConfig
   ): Promise<boolean> {
     // Added 3+ times during -10% drawdown
-    const res = await this.pool.query(
+    const res = await query(
       `SELECT COUNT(*) as count FROM positions
        WHERE wallet = $1
        AND (SELECT COUNT(*) FROM position_trades WHERE position_id = positions.id AND action = 'add') >= 3`,
       [wallet]
     );
-    return res.rows[0].count > 0;
+    return res[0].count > 0;
   }
 
   private async evaluatePyramidUp(
@@ -360,14 +353,14 @@ export class BadgeTemplateService {
     config: RuleConfig
   ): Promise<boolean> {
     // 5+ separate adds over 30+ days
-    const res = await this.pool.query(
+    const res = await query(
       `SELECT COUNT(*) as count FROM positions
        WHERE wallet = $1
        AND (SELECT COUNT(*) FROM position_trades WHERE position_id = positions.id AND action = 'add') >= 5
        AND EXTRACT(DAY FROM (closed_at - opened_at)) >= 30`,
       [wallet]
     );
-    return res.rows[0].count > 0;
+    return res[0].count > 0;
   }
 
   private async evaluateDipBuyer(
@@ -463,12 +456,12 @@ export class BadgeTemplateService {
     config: RuleConfig
   ): Promise<boolean> {
     // First short position opened
-    const res = await this.pool.query(
+    const res = await query(
       `SELECT COUNT(*) as count FROM positions
        WHERE wallet = $1 AND side = 'short'`,
       [wallet]
     );
-    return res.rows[0].count > 0;
+    return res[0].count > 0;
   }
 
   private async evaluateTopCaller(
@@ -500,14 +493,14 @@ export class BadgeTemplateService {
     config: RuleConfig
   ): Promise<boolean> {
     // Held short 30+ days
-    const res = await this.pool.query(
+    const res = await query(
       `SELECT COUNT(*) as count FROM positions
        WHERE wallet = $1
        AND side = 'short'
        AND EXTRACT(DAY FROM (closed_at - opened_at)) >= 30`,
       [wallet]
     );
-    return res.rows[0].count > 0;
+    return res[0].count > 0;
   }
 
   private async evaluateNegative10Survivor(
@@ -539,13 +532,13 @@ export class BadgeTemplateService {
     config: RuleConfig
   ): Promise<boolean> {
     // Held single position 60+ days
-    const res = await this.pool.query(
+    const res = await query(
       `SELECT COUNT(*) as count FROM positions
        WHERE wallet = $1
        AND EXTRACT(DAY FROM (closed_at - opened_at)) >= 60`,
       [wallet]
     );
-    return res.rows[0].count > 0;
+    return res[0].count > 0;
   }
 
   private async evaluateLongHauler(
@@ -553,13 +546,13 @@ export class BadgeTemplateService {
     config: RuleConfig
   ): Promise<boolean> {
     // Held single position 90+ days
-    const res = await this.pool.query(
+    const res = await query(
       `SELECT COUNT(*) as count FROM positions
        WHERE wallet = $1
        AND EXTRACT(DAY FROM (closed_at - opened_at)) >= 90`,
       [wallet]
     );
-    return res.rows[0].count > 0;
+    return res[0].count > 0;
   }
 
   private async evaluateTheBeliever(
@@ -567,13 +560,13 @@ export class BadgeTemplateService {
     config: RuleConfig
   ): Promise<boolean> {
     // Held single position 180+ days
-    const res = await this.pool.query(
+    const res = await query(
       `SELECT COUNT(*) as count FROM positions
        WHERE wallet = $1
        AND EXTRACT(DAY FROM (closed_at - opened_at)) >= 180`,
       [wallet]
     );
-    return res.rows[0].count > 0;
+    return res[0].count > 0;
   }
 
   private async evaluateMultiEarningsHolder(
@@ -589,12 +582,12 @@ export class BadgeTemplateService {
     config: RuleConfig
   ): Promise<boolean> {
     // Cumulative volume ≥ $10,000
-    const res = await this.pool.query(
+    const res = await query(
       `SELECT COALESCE(SUM(amount), 0) as total_volume FROM positions
        WHERE wallet = $1`,
       [wallet]
     );
-    return res.rows[0].total_volume >= 10000;
+    return res[0].total_volume >= 10000;
   }
 
   private async evaluateVolumeVeteranII(
@@ -602,12 +595,12 @@ export class BadgeTemplateService {
     config: RuleConfig
   ): Promise<boolean> {
     // Cumulative volume ≥ $100,000
-    const res = await this.pool.query(
+    const res = await query(
       `SELECT COALESCE(SUM(amount), 0) as total_volume FROM positions
        WHERE wallet = $1`,
       [wallet]
     );
-    return res.rows[0].total_volume >= 100000;
+    return res[0].total_volume >= 100000;
   }
 
   private async evaluateVolumeVeteranIII(
@@ -615,12 +608,12 @@ export class BadgeTemplateService {
     config: RuleConfig
   ): Promise<boolean> {
     // Cumulative volume ≥ $1,000,000
-    const res = await this.pool.query(
+    const res = await query(
       `SELECT COALESCE(SUM(amount), 0) as total_volume FROM positions
        WHERE wallet = $1`,
       [wallet]
     );
-    return res.rows[0].total_volume >= 1000000;
+    return res[0].total_volume >= 1000000;
   }
 
   private async evaluateTheOg(
@@ -631,12 +624,12 @@ export class BadgeTemplateService {
     const launchDate = new Date(process.env.NEXT_PUBLIC_LAUNCH_START_DATE || '2026-05-26');
     const thirtyDaysLater = new Date(launchDate.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-    const res = await this.pool.query(
+    const res = await query(
       `SELECT COUNT(*) as count FROM positions
        WHERE wallet = $1 AND opened_at <= $2`,
       [wallet, thirtyDaysLater]
     );
-    return res.rows[0].count > 0;
+    return res[0].count > 0;
   }
 }
 

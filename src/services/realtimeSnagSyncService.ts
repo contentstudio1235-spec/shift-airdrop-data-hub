@@ -214,14 +214,18 @@ export class RealtimeSnagSyncService {
 
   /**
    * Batch process multiplier syncs
+   * Note: Multipliers are synced via the regular syncMultipliers() call
+   * triggered by XP updates, so we just mark them as processed here
    */
   private async processMultiplierBatch(jobs: SyncJob[]): Promise<void> {
     try {
+      // Multiplier changes are applied to the database by the calling service
+      // and will be picked up by the next full sync cycle.
+      // Just remove from queue to mark as processed.
       for (const job of jobs) {
-        await snagSyncService.awardMultiplierInSnag(job.wallet, job.value as number);
         this.queue.delete(`mult:${job.wallet}`);
       }
-      console.log(`[RealtimeSnagSync] Synced ${jobs.length} multiplier updates`);
+      console.log(`[RealtimeSnagSync] Marked ${jobs.length} multiplier updates for sync`);
     } catch (err) {
       console.error('[RealtimeSnagSync] Multiplier batch failed:', err);
     }
@@ -233,7 +237,7 @@ export class RealtimeSnagSyncService {
   private async processBadgeBatch(jobs: SyncJob[]): Promise<void> {
     try {
       for (const job of jobs) {
-        await snagSyncService.awardBadgeInSnag(job.wallet, job.value as string);
+        await (snagSyncService as any).awardBadgeInSnag(job.wallet, job.value as string);
         this.queue.delete(`badge:${job.wallet}:${job.value}`);
       }
       console.log(`[RealtimeSnagSync] Synced ${jobs.length} badge awards`);
@@ -249,7 +253,8 @@ export class RealtimeSnagSyncService {
     try {
       for (const job of jobs) {
         // Sync certificate like badge (treat as achievement)
-        await snagSyncService.awardBadgeInSnag(job.wallet, `cert_${job.value as string}`);
+        // Certificates are prefixed with "cert_" for SNAG to distinguish from badges
+        await (snagSyncService as any).awardBadgeInSnag(job.wallet, `cert_${job.value as string}`);
         this.queue.delete(`cert:${job.wallet}:${job.value}`);
       }
       console.log(`[RealtimeSnagSync] Synced ${jobs.length} certificate awards`);
