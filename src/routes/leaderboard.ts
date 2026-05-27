@@ -9,17 +9,22 @@ router.get('/', async (req, res) => {
 
   try {
     const rows = await query(
-      `SELECT u.wallet,
-              u.total_xp,
-              COALESCE(u.snag_points, 0) as snag_total,
-              COALESCE(s.last_synced_xp, 0) as last_synced_xp,
-              u.claim_multiplier,
-              COUNT(b.id) as badge_count
-       FROM users u
-       LEFT JOIN badges b ON u.wallet = b.wallet
-       LEFT JOIN xp_sync_log s ON u.wallet = s.wallet
-       GROUP BY u.wallet, u.total_xp, u.snag_points, s.last_synced_xp, u.claim_multiplier
-       ORDER BY (u.total_xp + GREATEST(0, COALESCE(u.snag_points, 0) - COALESCE(s.last_synced_xp, 0))) DESC
+      `WITH ranked_users AS (
+        SELECT u.wallet,
+               CAST(u.total_xp AS DECIMAL) as total_xp,
+               CAST(COALESCE(u.snag_points, 0) AS DECIMAL) as snag_total,
+               CAST(COALESCE(s.last_synced_xp, 0) AS DECIMAL) as last_synced_xp,
+               u.claim_multiplier,
+               COUNT(DISTINCT b.id) as badge_count,
+               CAST(u.total_xp AS DECIMAL) + GREATEST(0, CAST(COALESCE(u.snag_points, 0) AS DECIMAL) - CAST(COALESCE(s.last_synced_xp, 0) AS DECIMAL)) as combined_score
+        FROM users u
+        LEFT JOIN badges b ON u.wallet = b.wallet
+        LEFT JOIN xp_sync_log s ON u.wallet = s.wallet
+        GROUP BY u.wallet, u.total_xp, u.snag_points, s.last_synced_xp, u.claim_multiplier
+       )
+       SELECT wallet, total_xp, snag_total, last_synced_xp, claim_multiplier, badge_count, combined_score
+       FROM ranked_users
+       ORDER BY combined_score DESC
        LIMIT $1`,
       [limit]
     );
@@ -29,7 +34,7 @@ router.get('/', async (req, res) => {
       const snagTotal  = Number(row.snag_total);
       const lastSynced = Number(row.last_synced_xp);
       const socialSp   = Math.max(0, snagTotal - lastSynced);
-      const totalSp    = positionSp + socialSp;
+      const totalSp    = Number(row.combined_score);
 
       return {
         rank: index + 1,
