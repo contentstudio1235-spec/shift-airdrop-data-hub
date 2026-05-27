@@ -9,6 +9,7 @@ import morgan from 'morgan';
 import { config, validateSnagConfig } from './config';
 import { initCronJobs } from './cron/jobs';
 import { pool } from './db/pool';
+import { runMigrations } from './db/migrationRunner';
 
 // Routes
 import webhookRoutes from './routes/webhook';
@@ -134,6 +135,14 @@ async function startServer() {
     const client = await Promise.race([connectionPromise, timeoutPromise]) as any;
     console.log('[Database] ✅ Connected successfully');
     client.release();
+
+    // Run pending migrations automatically on every deploy
+    try {
+      await runMigrations();
+      console.log('[Database] ✅ Migrations applied');
+    } catch (migErr) {
+      console.warn('[Database] ⚠️  Migration warning:', migErr);
+    }
   } catch (err) {
     console.warn('[Database] ⚠️  Connection test failed, but continuing:', err);
     // Don't exit - let the app start and retry connections on demand
