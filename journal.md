@@ -16,3 +16,26 @@
 - **Git**: Updated remote origin and pushed the codebase to the dedicated [Shift_airdrop-backend](https://github.com/contentstudio1235-spec/Shift_airdrop-backend) repository.
 - **Documentation**: Created a production deployment guide for Railway (backend) and Vercel (frontend).
 - **Next Steps**: Execute the deployment plan and perform end-to-end production verification.
+
+## 2026-05-27
+- **Bug Fix**: Fixed critical issue where sold/closed token positions were still showing as active positions and earning Shift Points.
+  - Root Cause: Holdings tab was rendering all positions without filtering by status.
+  - Solution: Added position filtering (`activePositions` = status 'open', `closedPositions` = status 'closed').
+  - Result: Holdings tab now displays only active open positions; closed positions no longer earn SP.
+- **Feature**: Added History tab to Airdrop Dashboard.
+  - Displays closed/sold positions with complete breakdown: weeks held, final multiplier, total SP earned.
+  - Total SP per position calculated as: `xpPerWeek × weeksHeld`.
+  - Shows aggregate summary: count of closed positions and total SP earned across all closed positions.
+  - Proper empty state messaging when no closed positions exist.
+- **UI Cleanup**: Removed tier system cosmetics from Register page.
+  - Deleted ProgressBar component reference and all tier-related calculations.
+  - Simplified register page to show only queue position without tier badges.
+- **Favicon**: Updated app favicon from shift-logo.svg to shift_favicon.png.
+  - Modified `frontend/app/layout.tsx` metadata configuration.
+  - PNG file (5.1KB) already in place and ready to serve.
+- **Build & Deployment**:
+  - Build verification: ✓ Compiled successfully in 11.5s, TypeScript checks passed, 22/22 pages generated.
+  - Commits pushed to GitHub: 
+    - `b2ebd76`: feat: Fix sold token bug and add History tab to airdrop page
+    - `b3227b4`: chore: Update favicon to shift_favicon.png
+- **Next Steps**: Monitor production deployment and verify all fixes work correctly in live environment.

@@ -1,14 +1,18 @@
 # Project Status: SHIFT Airdrop MVP
 
-**Status**: 🟡 **Code Pushed to GitHub, Ready for Production Deployment**
+**Status**: 🟢 **Frontend Bug Fixes & Features Complete, Code Pushed to GitHub**
 
 ## Overview
-The logic for the SHIFT behavioral airdrop system is built and operational. Recent updates include:
+The SHIFT behavioral airdrop system is built and operational. Recent updates include:
+- **Frontend Bug Fixes**: Fixed critical bug where sold/closed token positions were still showing as active and earning SP.
+- **History Tab**: Added new History tab to display closed positions with total SP calculations (xpPerWeek × weeksHeld).
+- **Tier System Cleanup**: Removed tier system cosmetics from register page for simplified UX.
+- **Favicon Update**: Updated app favicon to shift_favicon.png for improved branding.
 - **SHIFT Token Integration**: Added $0.50 nominal price fallback and dust filter bypass for testing.
 - **On-Chain Holding Checks**: Implemented `HoldingService` for real-time wallet balance verification.
 - **Badge Engine**: Added "SHIFT Holder" badge and integrated it into the evaluation pipeline.
 - **SNAG Integration**: Updated with latest staging IDs for XP and badges (First Trade, Diamond Hands, etc.).
-- **Codebase Readiness**: Backend codebase pushed to [Shift_airdrop-backend](https://github.com/contentstudio1235-spec/Shift_airdrop-backend).
+- **Codebase Readiness**: Both backend and frontend codebases pushed to GitHub.
 
 ## Current Status
 - **Backend**: Ready for Railway deployment.
