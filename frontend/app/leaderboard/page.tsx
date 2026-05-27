@@ -36,6 +36,14 @@ export default function LeaderboardPage() {
     const data = [...leaderboard];
     if (mode === 'Multiplier') {
       data.sort((a, b) => (b.multiplier ?? 0) - (a.multiplier ?? 0));
+    } else {
+      // Sort by total SP (totalXP is legacy field name for position SP)
+      // Use totalSp if available, fallback to totalXP for backwards compat
+      data.sort((a, b) => {
+        const aScore = (a as any).totalSp ?? a.totalXP ?? 0;
+        const bScore = (b as any).totalSp ?? b.totalXP ?? 0;
+        return bScore - aScore;
+      });
     }
     return data.map((e, i) => ({ ...e, rank: i + 1 }));
   }, [leaderboard, mode]);
