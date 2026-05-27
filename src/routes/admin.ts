@@ -1780,4 +1780,80 @@ router.post('/fix-zero-positions', verifyAdminSecret, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/admin/force-resync/:wallet
+ * Properly re-syncs a wallet by:
+ * 1. Clearing processed_transactions for its open position tx signatures
+ * 2. Deleting its open positions
+ * 3. Re-running walletSyncService.syncWallet() with the fixed USDC extraction
+ * This gets the correct position sizes from USDC swap inputs instead of $0.
+ */
+router.post('/force-resync/:wallet', verifyAdminSecret, async (req, res) => {
+  const { wallet } = req.params;
+
+  try {
+    console.log(`[Admin] Force re-sync for wallet: ${wallet}`);
+    const startTime = Date.now();
+
+    // Step 1: Get open position tx signatures for this wallet
+    const openTxs = await pool.query(
+      `SELECT tx_signature_open FROM positions
+       WHERE wallet = $1 AND status = 'open' AND tx_signature_open IS NOT NULL`,
+      [wallet]
+    );
+    const signatures = openTxs.rows.map((r: any) => r.tx_signature_open);
+
+    // Step 2: Remove those tx signatures from processed_transactions so they can be re-played
+    if (signatures.length > 0) {
+      await pool.query(
+        `DELETE FROM processed_transactions WHERE tx_signature = ANY($1::text[])`,
+        [signatures]
+      );
+    }
+
+    // Step 3: Delete open positions for this wallet (will be re-created by sync)
+    const deletedPositions = await pool.query(
+      `DELETE FROM positions WHERE wallet = $1 AND status = 'open' RETURNING id, asset`,
+      [wallet]
+    );
+
+    // Step 4: Re-sync wallet — will replay tx history with correct USDC extraction
+    const syncResult = await walletSyncService.syncWallet(wallet);
+
+    // Step 5: Force XP recalculation
+    const xpResult = await xpEngine.recalculateAllXP();
+
+    // Step 6: Get updated stats
+    const user = await pool.query(
+      'SELECT total_xp, claim_multiplier FROM users WHERE wallet = $1',
+      [wallet]
+    );
+    const positions = await pool.query(
+      `SELECT asset, position_size_usd, status, opened_at FROM positions
+       WHERE wallet = $1 ORDER BY opened_at DESC LIMIT 20`,
+      [wallet]
+    );
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    res.json({
+      success: true,
+      wallet,
+      duration: `${duration}s`,
+      clearedTxs: signatures.length,
+      deletedPositions: deletedPositions.rows.length,
+      syncResult,
+      xpResult,
+      currentStats: {
+        totalXp: user.rows[0]?.total_xp ?? 0,
+        claimMultiplier: user.rows[0]?.claim_multiplier ?? 1.0,
+        positions: positions.rows,
+      },
+    });
+  } catch (error) {
+    console.error('[Admin] Force re-sync failed:', error);
+    res.status(500).json({ error: 'Force re-sync failed', message: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
 export default router;
