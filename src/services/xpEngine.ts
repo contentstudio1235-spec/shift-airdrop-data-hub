@@ -76,23 +76,24 @@ export class XPEngine {
     const walletXPDeltas: Map<string, number> = new Map();
 
     for (const position of openPositions) {
-      // Skip positions under minimum hold
-      if (antiFarmService.isUnderMinHold(position.opened_at, now)) {
-        continue;
-      }
+      // XP accrues from the moment of purchase (on-chain tx timestamp in opened_at).
+      // No minimum hold gate — the claw-back on early sell (<24h) is handled at closePosition().
+      // Late connectors get retroactive XP: when last_xp_calc is NULL, we calculate
+      // from opened_at to now, giving them all earned XP in one shot.
 
-      // Calculate age
+      // Calculate age from on-chain open time
       const { weeks } = positionService.getPositionAge(position.opened_at, now);
 
       // Calculate multiplier (with RWA token bonus if applicable)
       const multiplier = this.calculatePositionMultiplier(weeks, position.asset_mint);
 
-      // Calculate hours since last XP calc (or since opened)
+      // Calculate hours since last XP calc (or since opened — retroactive for new syncs)
       const lastCalc = position.last_xp_calc ? new Date(position.last_xp_calc) : new Date(position.opened_at);
       const hoursSinceLastCalc = (now.getTime() - lastCalc.getTime()) / (1000 * 60 * 60);
 
-      // Skip if less than 0.5 hours since last calc
-      if (hoursSinceLastCalc < 0.5) continue;
+      // Throttle to max once per 30 min to avoid micro-updates (except first-time / retroactive)
+      const isFirstCalc = !position.last_xp_calc;
+      if (!isFirstCalc && hoursSinceLastCalc < 0.5) continue;
 
       // Calculate new XP earned (now includes launch event multiplier)
       const xpDelta = this.calculateXPSinceLastCalc(

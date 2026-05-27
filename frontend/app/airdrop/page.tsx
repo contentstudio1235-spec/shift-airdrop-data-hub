@@ -26,7 +26,7 @@ const FAQ = [
   { q: 'What is the Claim Multiplier?', a: 'Your personal airdrop multiplier (1.0–5.0x). Increases with weekly activity, badges earned, referrals, and time on platform.' },
   { q: 'How do badges work?', a: 'Badges are earned by hitting milestones (volume, hold duration) or trading during special events (FOMC, earnings). Each grants bonus Shift Points multiplier.' },
   { q: 'What happens at TGE?', a: 'At Token Generation Event, your total Shift Points are converted to a SHIFT token allocation based on your rank and Claim Multiplier. Higher rank = bigger airdrop.' },
-  { q: 'Can I lose Shift Points?', a: 'No. Shift Points are cumulative and never decrease. However, positions shorter than 24h or flagged as wash trades are not counted.' },
+  { q: 'Can I lose Shift Points?', a: 'Shift Points start accruing the moment you buy. If you sell within 24h of buying, those points are forfeited. Hold beyond 24h and you keep all earned points permanently.' },
 ];
 
 export default function AirdropPage() {
@@ -231,7 +231,7 @@ export default function AirdropPage() {
           }}
         >
           {[
-            { label: 'Total SP', value: dashboard ? dashboard.totalXp.toLocaleString(undefined, { maximumFractionDigits: 0 }) : (wallet ? '—' : '0'), color: 'var(--mint)' },
+            { label: 'Total SP', value: dashboard ? (dashboard.totalSp ?? dashboard.totalXp).toLocaleString(undefined, { maximumFractionDigits: 0 }) : (wallet ? '—' : '0'), color: 'var(--mint)' },
             { label: 'Your Rank', value: dashboard ? `#${dashboard.rank}` : '—', color: 'var(--text)' },
             { label: 'Claim Multiplier', value: dashboard ? `${dashboard.claimMultiplier.toFixed(2)}x` : '—', color: 'var(--amber)' },
             { label: 'Weekly SP', value: totalWeeklyXP > 0 ? `+${totalWeeklyXP.toLocaleString()}` : '—', color: 'var(--mint)' },
@@ -584,33 +584,52 @@ export default function AirdropPage() {
                   color: 'var(--mint)',
                 }}
               >
-                {dashboard ? Math.round(dashboard.totalXp).toLocaleString() : '—'}
+                {dashboard ? Math.round(dashboard.totalSp ?? dashboard.totalXp).toLocaleString() : '—'}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 16 }}>Total PTS</div>
+              <div style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 16 }}>Total Shift Points</div>
 
-              {/* Breakdown */}
+              {/* SP Breakdown */}
               <div className="hr" style={{ marginBottom: 12 }} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <div className="kv" style={{ padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
-                  <span className="k">On-chain SP</span>
-                  <span className="v mint">{dashboard ? Math.round(dashboard.totalXp * 0.7).toLocaleString() : '—'}</span>
-                </div>
-                <div className="kv" style={{ padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
-                  <span className="k">Referral SP</span>
-                  <span className="v" style={{ color: 'var(--amber)' }}>
-                    {dashboard ? Math.round(dashboard.totalXp * 0.3).toLocaleString() : '—'}
+                  <span className="k">📈 Position SP</span>
+                  <span className="v mint">
+                    {dashboard ? Math.round(dashboard.positionSp ?? dashboard.totalXp).toLocaleString() : '—'}
                   </span>
                 </div>
                 <div className="kv" style={{ padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
-                  <span className="k">Pending unlock</span>
-                  <span className="v" style={{ color: 'var(--text-dim)' }}>—</span>
+                  <span className="k">🎯 Social & Referral SP</span>
+                  <span className="v" style={{ color: 'var(--amber)' }}>
+                    {dashboard ? Math.round(dashboard.socialSp ?? 0).toLocaleString() : '—'}
+                  </span>
                 </div>
-                {dashboard?.loyaltyPoints != null && dashboard.loyaltyPoints > 0 && (
-                  <div className="kv" style={{ padding: '5px 0', borderBottom: 'none' }}>
-                    <span className="k">SNAG Loyalty PTS</span>
-                    <span className="v" style={{ color: 'var(--amber)' }}>
-                      {dashboard.loyaltyPoints.toLocaleString()}
-                    </span>
+                {/* SNAG account nudge — shown when wallet has no SNAG tasks done */}
+                {dashboard && !dashboard.hasSnagAccount && (
+                  <div style={{
+                    marginTop: 8,
+                    padding: '8px 10px',
+                    background: 'rgba(255,179,0,0.08)',
+                    border: '1px solid var(--amber)',
+                    borderRadius: 8,
+                    fontSize: 11,
+                    color: 'var(--amber)',
+                    lineHeight: 1.5,
+                  }}>
+                    🔗 Complete quests on the Loyalty page to earn bonus SP
+                    <a
+                      href="https://app.shiftrwa.xyz"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'block',
+                        marginTop: 4,
+                        color: 'var(--amber)',
+                        fontWeight: 700,
+                        textDecoration: 'underline',
+                      }}
+                    >
+                      Visit Loyalty Page →
+                    </a>
                   </div>
                 )}
               </div>

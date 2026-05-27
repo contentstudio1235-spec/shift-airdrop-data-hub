@@ -94,8 +94,8 @@ export class PositionService {
 
     // Close it
     await execute(
-      `UPDATE positions 
-       SET closed_at = $1, status = 'closed', tx_signature_close = $2 
+      `UPDATE positions
+       SET closed_at = $1, status = 'closed', tx_signature_close = $2
        WHERE id = $3`,
       [timestamp, txSignature, position.id]
     );
@@ -106,7 +106,30 @@ export class PositionService {
       [txSignature]
     );
 
-    console.log(`[Position] Closed: ${wallet.slice(0, 8)}... | ${asset} | held ${this.formatDuration(position.opened_at, timestamp)}`);
+    // ── 24h early-sell claw-back ──
+    // If sold within 24h of the on-chain buy, zero out all XP earned on this position.
+    const holdMs = timestamp.getTime() - new Date(position.opened_at).getTime();
+    const holdHours = holdMs / (1000 * 60 * 60);
+
+    if (holdHours < 24) {
+      const xpEarned = Number(position.xp_generated);
+      if (xpEarned > 0) {
+        // Subtract from users.total_xp (floor at 0)
+        await execute(
+          `UPDATE users SET total_xp = GREATEST(0, total_xp - $1), updated_at = NOW()
+           WHERE wallet = $2`,
+          [xpEarned, wallet]
+        );
+        console.log(`[Position] ⚠️  Early sell claw-back: ${wallet.slice(0, 8)}... | ${asset} | -${xpEarned.toFixed(2)} XP (held ${holdHours.toFixed(1)}h < 24h)`);
+      }
+      // Zero out xp_generated on the position record
+      await execute(
+        `UPDATE positions SET xp_generated = 0 WHERE id = $1`,
+        [position.id]
+      );
+    }
+
+    console.log(`[Position] Closed: ${wallet.slice(0, 8)}... | ${asset} | held ${this.formatDuration(position.opened_at, timestamp)}${holdHours < 24 ? ' ⚠️ early sell — XP clawed back' : ''}`);
     return position;
   }
 

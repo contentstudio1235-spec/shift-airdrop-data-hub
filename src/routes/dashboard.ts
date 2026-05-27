@@ -17,9 +17,9 @@ router.get('/:wallet', async (req, res) => {
 
   try {
     // 1. Get user stats & SNAG points in parallel
-    const [user, loyaltyPoints] = await Promise.all([
+    const [user, snagBalance] = await Promise.all([
       queryOne(
-        'SELECT total_xp, claim_multiplier, current_streak FROM users WHERE wallet = $1',
+        'SELECT total_xp, claim_multiplier, current_streak, snag_user_id, snag_points FROM users WHERE wallet = $1',
         [wallet]
       ),
       snagSyncService.getUserPoints(wallet)
@@ -29,10 +29,35 @@ router.get('/:wallet', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // 2. Get local rank
+    // Determine how much of the SNAG balance is from social tasks/referrals (not our pushed XP)
+    const positionSp = Number(user.total_xp);
+    const snagTotal = Number(snagBalance);
+
+    // snag_bonus = SNAG balance minus the position XP we pushed (from xp_sync_log)
+    const syncLog = await queryOne<{ last_synced_xp: string }>(
+      'SELECT last_synced_xp FROM xp_sync_log WHERE wallet = $1',
+      [wallet]
+    );
+    const lastSyncedXp = Number(syncLog?.last_synced_xp || 0);
+    // Social & referral SP = anything in SNAG beyond what we pushed from positions
+    const socialSp = Math.max(0, snagTotal - lastSyncedXp);
+    const totalSp = positionSp + socialSp;
+
+    // Cache snag_points in DB so leaderboard can use it without per-request SNAG calls
+    if (snagTotal > 0) {
+      await queryOne(
+        `UPDATE users SET snag_points = $1, updated_at = NOW() WHERE wallet = $2`,
+        [snagTotal, wallet]
+      ).catch(() => {}); // non-fatal
+    }
+
+    const hasSnagAccount = !!(user.snag_user_id || snagTotal > 0);
+
+    // 2. Get combined rank (position SP + social SP)
     const rankResult = await queryOne(
-      'SELECT COUNT(*) + 1 as rank FROM users WHERE total_xp > $1',
-      [user.total_xp]
+      `SELECT COUNT(*) + 1 as rank FROM users
+       WHERE (total_xp + COALESCE(snag_points, 0)) > $1`,
+      [totalSp]
     );
 
     // 3. Get active positions count
@@ -43,11 +68,19 @@ router.get('/:wallet', async (req, res) => {
 
     res.json({
       wallet,
-      totalXp: Number(user.total_xp),
-      loyaltyPoints: Number(loyaltyPoints),
+      // Combined SP (main display value)
+      totalSp,
+      // Breakdown for tooltip/modal
+      positionSp,
+      socialSp,
+      // Legacy fields kept for backwards-compat
+      totalXp: positionSp,
+      loyaltyPoints: snagTotal,
+      // SNAG account status
+      hasSnagAccount,
       claimMultiplier: Number(user.claim_multiplier),
       currentStreak: user.current_streak,
-      rank: parseInt(rankResult?.rank || '0', 10),
+      rank: parseInt(rankResult?.rank || '1', 10),
       activePositions: parseInt(positionsResult?.count || '0', 10),
       projectedAllocation: 'TBD'
     });

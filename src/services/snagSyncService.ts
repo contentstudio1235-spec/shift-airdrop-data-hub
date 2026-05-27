@@ -143,24 +143,38 @@ export class SnagSyncService {
        LEFT JOIN xp_sync_log s ON u.wallet = s.wallet`
     );
 
+    // Handle both credits (positive delta) and debits (claw-backs from early sell)
     const entriesToSync = users
       .map(u => ({
         wallet: u.wallet,
         xpDelta: Number(u.total_xp) - Number(u.last_synced_xp || 0),
         currentXP: Number(u.total_xp),
       }))
-      .filter(e => e.xpDelta > 0);
+      .filter(e => e.xpDelta !== 0);
 
     if (entriesToSync.length === 0) {
       console.log('[SnagSync] No XP deltas to sync');
       return;
     }
 
-    console.log(`[SnagSync] Syncing XP for ${entriesToSync.length} users...`);
-    const { succeeded } = await this.batchPushXP(entriesToSync);
+    // Split into credits and debits
+    const credits = entriesToSync.filter(e => e.xpDelta > 0);
+    const debits  = entriesToSync.filter(e => e.xpDelta < 0);
 
-    // Update sync log only for wallets that succeeded
-    for (const wallet of succeeded) {
+    console.log(`[SnagSync] Syncing XP: ${credits.length} credits, ${debits.length} debits`);
+
+    const { succeeded: creditSucceeded } = credits.length > 0
+      ? await this.batchPushXP(credits)
+      : { succeeded: [] as string[] };
+
+    const { succeeded: debitSucceeded } = debits.length > 0
+      ? await this.batchDebitXP(debits)
+      : { succeeded: [] as string[] };
+
+    const allSucceeded = [...creditSucceeded, ...debitSucceeded];
+
+    // Update sync log for succeeded wallets
+    for (const wallet of allSucceeded) {
       const entry = entriesToSync.find(e => e.wallet === wallet)!;
       try {
         await execute(
@@ -174,7 +188,51 @@ export class SnagSyncService {
       }
     }
 
-    console.log(`[SnagSync] XP sync: ${succeeded.length}/${entriesToSync.length} succeeded`);
+    console.log(`[SnagSync] XP sync: ${allSucceeded.length}/${entriesToSync.length} succeeded`);
+  }
+
+  /**
+   * Debit XP from SNAG accounts (for early-sell claw-backs).
+   * Mirror of batchPushXP but uses direction: 'debit'.
+   */
+  async batchDebitXP(
+    entries: Array<{ wallet: string; xpDelta: number }>
+  ): Promise<{ succeeded: string[]; failed: string[] }> {
+    if (!this.checkCircuit() || !config.snagLoyaltyCurrencyId) {
+      return { succeeded: [], failed: entries.map(e => e.wallet) };
+    }
+
+    const batchId = `debit-${Date.now()}`;
+    const succeeded: string[] = [];
+    const failed: string[] = [];
+
+    for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+      const chunk = entries.slice(i, i + BATCH_SIZE);
+      try {
+        await this.client.post('/api/loyalty/transactions', {
+          websiteId: config.snagWebsiteId,
+          organizationId: config.snagOrganizationId,
+          description: `SHIFT early-sell XP claw-back — ${batchId}`,
+          entries: chunk.map((e, idx) => ({
+            walletAddress: e.wallet,
+            loyaltyCurrencyId: config.snagLoyaltyCurrencyId,
+            direction: 'debit',
+            amount: Math.ceil(Math.abs(e.xpDelta)),
+            idempotencyKey: `${batchId}-${i + idx}`.slice(0, 32),
+          })),
+        });
+        this.recordSuccess();
+        succeeded.push(...chunk.map(e => e.wallet));
+        console.log(`[SnagSync] 📉 Debit batch pushed ${chunk.length} claw-backs`);
+      } catch (error: any) {
+        this.recordFailure();
+        const errMsg = error?.response?.data ? JSON.stringify(error.response.data) : error.message;
+        console.error(`[SnagSync] ❌ Debit batch failed:`, errMsg);
+        failed.push(...chunk.map(e => e.wallet));
+      }
+    }
+
+    return { succeeded, failed };
   }
 
   /**

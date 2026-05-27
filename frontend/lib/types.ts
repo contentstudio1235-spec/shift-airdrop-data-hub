@@ -4,6 +4,12 @@
 
 export interface DashboardResponse {
   wallet: string;
+  // Combined SP (position holding + social/referral)
+  totalSp: number;
+  positionSp: number;
+  socialSp: number;
+  hasSnagAccount: boolean;
+  // Legacy fields kept for backwards-compat
   totalXp: number;
   loyaltyPoints: number;
   claimMultiplier: number;
