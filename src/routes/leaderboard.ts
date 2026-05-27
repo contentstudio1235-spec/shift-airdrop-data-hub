@@ -24,6 +24,7 @@ router.get('/', async (req, res) => {
        )
        SELECT wallet, total_xp, snag_total, last_synced_xp, claim_multiplier, badge_count, combined_score
        FROM ranked_users
+       WHERE combined_score > 0
        ORDER BY combined_score DESC
        LIMIT $1`,
       [limit]
