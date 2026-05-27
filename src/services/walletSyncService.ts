@@ -146,10 +146,18 @@ export class WalletSyncService {
     }
 
     if (shiftToken.direction === 'buy') {
-      // Get USD value
-      const priceData = await jupiterPriceService.calculateUSDValue(shiftToken.mint, shiftToken.amount);
-      const usdValue = priceData?.usdValue ?? 0;
-      const price = priceData?.price ?? null;
+      // Use stablecoin USD value extracted from the swap (reliable for RWA tokens)
+      // Fall back to Jupiter pricing only if stablecoin amount is unavailable
+      let usdValue = shiftToken.usdValue;
+      let price: number | null = null;
+
+      if (!usdValue) {
+        const priceData = await jupiterPriceService.calculateUSDValue(shiftToken.mint, shiftToken.amount);
+        usdValue = priceData?.usdValue ?? 0;
+        price = priceData?.price ?? null;
+      } else {
+        price = shiftToken.amount > 0 ? usdValue / shiftToken.amount : null;
+      }
 
       await positionService.openPosition(
         wallet, tokenInfo.symbol, shiftToken.mint,
@@ -170,10 +178,11 @@ export class WalletSyncService {
   }
 
   /**
-   * Extract the SHIFT token being bought or sold from an enhanced tx.
-   * Handles both structured swap events and raw token transfer fallback.
+   * Extract the SHIFT token being bought or sold from an enhanced tx,
+   * plus the USD value derived from the stablecoin side of the swap.
+   * Using stablecoin input is more reliable than pricing RWA tokens via Jupiter.
    */
-  private extractShiftToken(tx: any): { mint: string; amount: number; direction: 'buy' | 'sell' } | null {
+  private extractShiftToken(tx: any): { mint: string; amount: number; direction: 'buy' | 'sell'; usdValue: number } | null {
     // ── Structured swap event ──
     const swap = tx.events?.swap;
     if (swap) {
@@ -182,7 +191,23 @@ export class WalletSyncService {
         if (SHIFT_MINTS.has(out.mint)) {
           const decimals = out.rawTokenAmount?.decimals ?? 0;
           const amount = parseFloat(out.rawTokenAmount?.tokenAmount || '0') / Math.pow(10, decimals);
-          return { mint: out.mint, amount, direction: 'buy' };
+
+          // Extract USD value from stablecoin input
+          let usdValue = 0;
+          for (const inp of swap.tokenInputs || []) {
+            if (STABLECOIN_MINTS.has(inp.mint)) {
+              const inDecimals = inp.rawTokenAmount?.decimals ?? 6;
+              usdValue = parseFloat(inp.rawTokenAmount?.tokenAmount || '0') / Math.pow(10, inDecimals);
+              break;
+            }
+          }
+          // SOL native input fallback (approximate at $150 SOL if no price available)
+          if (!usdValue && swap.nativeInput) {
+            const solAmount = parseFloat(swap.nativeInput.amount || '0') / 1e9;
+            usdValue = solAmount * 150; // rough fallback; will be corrected on next sync
+          }
+
+          return { mint: out.mint, amount, direction: 'buy', usdValue };
         }
       }
       // Check inputs (user sent SHIFT = sell)
@@ -190,7 +215,7 @@ export class WalletSyncService {
         if (SHIFT_MINTS.has(inp.mint)) {
           const decimals = inp.rawTokenAmount?.decimals ?? 0;
           const amount = parseFloat(inp.rawTokenAmount?.tokenAmount || '0') / Math.pow(10, decimals);
-          return { mint: inp.mint, amount, direction: 'sell' };
+          return { mint: inp.mint, amount, direction: 'sell', usdValue: 0 };
         }
       }
     }
@@ -200,10 +225,10 @@ export class WalletSyncService {
     for (const t of transfers) {
       if (!SHIFT_MINTS.has(t.mint)) continue;
       if (t.toUserAccount === tx.feePayer) {
-        return { mint: t.mint, amount: t.tokenAmount || 0, direction: 'buy' };
+        return { mint: t.mint, amount: t.tokenAmount || 0, direction: 'buy', usdValue: 0 };
       }
       if (t.fromUserAccount === tx.feePayer) {
-        return { mint: t.mint, amount: t.tokenAmount || 0, direction: 'sell' };
+        return { mint: t.mint, amount: t.tokenAmount || 0, direction: 'sell', usdValue: 0 };
       }
     }
 

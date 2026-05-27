@@ -1697,4 +1697,87 @@ router.post('/force-badge-check', verifyAdminSecret, async (req, res) => {
   }
 });
 
+/**
+ * POST /api/admin/wallet-resync/:wallet
+ * Re-syncs a wallet's transaction history and fixes $0 position sizes
+ * by re-reading stablecoin amounts from Helius enhanced transactions.
+ * Also forces an immediate XP recalculation for that wallet.
+ */
+import { walletSyncService } from '../services/walletSyncService';
+import { xpEngine } from '../services/xpEngine';
+import { execute, query } from '../db/pool';
+
+router.post('/wallet-resync/:wallet', verifyAdminSecret, async (req, res) => {
+  const { wallet } = req.params;
+
+  try {
+    console.log(`[Admin] Re-syncing wallet: ${wallet}`);
+    const startTime = Date.now();
+
+    // Step 1: Run the wallet sync (replays tx history with correct USD values)
+    const syncResult = await walletSyncService.syncWallet(wallet);
+
+    // Step 2: Force XP recalculation
+    const xpResult = await xpEngine.recalculateAllXP();
+
+    // Step 3: Get updated totals
+    const user = await pool.query(
+      'SELECT total_xp, claim_multiplier FROM users WHERE wallet = $1',
+      [wallet]
+    );
+    const positions = await pool.query(
+      `SELECT asset, position_size_usd, status FROM positions WHERE wallet = $1 ORDER BY opened_at DESC`,
+      [wallet]
+    );
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    res.json({
+      success: true,
+      wallet,
+      duration: `${duration}s`,
+      syncResult,
+      xpResult,
+      currentStats: {
+        totalXp: user.rows[0]?.total_xp ?? 0,
+        claimMultiplier: user.rows[0]?.claim_multiplier ?? 1.0,
+        positions: positions.rows,
+      },
+    });
+  } catch (error) {
+    console.error('[Admin] Wallet re-sync failed:', error);
+    res.status(500).json({ error: 'Wallet re-sync failed', message: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+/**
+ * POST /api/admin/fix-zero-positions
+ * Fixes all positions with position_size_usd = 0 by setting a minimum
+ * floor of $10 so XP accumulation can start immediately.
+ * NOTE: A proper fix requires walletSync per wallet to get real amounts.
+ */
+router.post('/fix-zero-positions', verifyAdminSecret, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE positions
+       SET position_size_usd = 10, updated_at = NOW()
+       WHERE position_size_usd = 0 AND status = 'open'
+       RETURNING id, wallet, asset`
+    );
+
+    // Force XP recalculation after fixing sizes
+    await xpEngine.recalculateAllXP();
+
+    res.json({
+      success: true,
+      fixed: result.rows.length,
+      positions: result.rows,
+      message: `Fixed ${result.rows.length} positions with $0 size. XP recalculation triggered.`,
+    });
+  } catch (error) {
+    console.error('[Admin] Fix zero positions failed:', error);
+    res.status(500).json({ error: 'Failed to fix zero positions' });
+  }
+});
+
 export default router;

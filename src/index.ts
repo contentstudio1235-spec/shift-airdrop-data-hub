@@ -154,6 +154,29 @@ async function startServer() {
 
     // Initialize cron jobs
     initCronJobs();
+
+    // ── Render free-tier keepalive ──
+    // Render spins down free services after 15min of inactivity.
+    // Self-ping every 10 minutes prevents spindown so cron keeps running.
+    if (config.nodeEnv === 'production') {
+      const backendUrl = config.backendUrl || `http://localhost:${config.port}`;
+      setInterval(async () => {
+        try {
+          const http = await import('http');
+          const url = new URL(`${backendUrl}/health`);
+          const options = { hostname: url.hostname, port: url.port || 443, path: '/health', method: 'GET' };
+          const proto = url.protocol === 'https:' ? await import('https') : http;
+          (proto as any).get(`${backendUrl}/health`, (res: any) => {
+            console.log(`[Keepalive] Self-ping /health → ${res.statusCode}`);
+          }).on('error', (e: any) => {
+            console.warn(`[Keepalive] Self-ping failed: ${e.message}`);
+          });
+        } catch (e) {
+          // Non-fatal — cron will still run
+        }
+      }, 10 * 60 * 1000); // every 10 minutes
+      console.log('[Keepalive] Self-ping enabled (every 10min) to prevent Render spindown');
+    }
   });
 }
 
