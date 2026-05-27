@@ -1916,4 +1916,61 @@ router.get('/snag-config', verifyAdminSecret, async (_req, res) => {
   });
 });
 
+/**
+ * GET /api/admin/snag-probe/:wallet
+ * Directly queries SNAG production API for a wallet — raw response,
+ * shows exactly what SNAG knows about the user and whether transactions landed.
+ */
+router.get('/snag-probe/:wallet', verifyAdminSecret, async (req, res) => {
+  const wallet = req.params.wallet as string;
+
+  try {
+    const axios = (await import('axios')).default;
+    const client = axios.create({
+      baseURL: config.snagBaseUrl,
+      headers: { 'x-api-key': config.snagApiKey, 'Content-Type': 'application/json' },
+      timeout: 10000,
+    });
+
+    // 1. Look up the account in SNAG
+    const accountSearch = await client.get('/api/loyalty/accounts', {
+      params: { websiteId: config.snagWebsiteId, walletAddress: wallet, limit: 1 },
+    }).catch(e => ({ data: null, error: e?.response?.data || e.message }));
+
+    const account = (accountSearch as any).data?.data?.[0];
+
+    // 2. If found, get their full balance
+    let balance = null;
+    let balanceRaw = null;
+    if (account?.id) {
+      const balRes = await client.get(`/api/loyalty/accounts/${account.id}`, {
+        params: { websiteId: config.snagWebsiteId },
+      }).catch(e => ({ data: null, error: e?.response?.data || e.message }));
+      balanceRaw = (balRes as any).data;
+      balance = balanceRaw?.points ?? balanceRaw?.loyaltyBalance ?? balanceRaw?.balance;
+    }
+
+    // 3. Get recent transactions for this wallet
+    const txSearch = account?.id
+      ? await client.get('/api/loyalty/transactions', {
+          params: { websiteId: config.snagWebsiteId, accountId: account.id, limit: 5 },
+        }).catch(e => ({ data: null, error: e?.response?.data || e.message }))
+      : null;
+
+    res.json({
+      wallet,
+      snagAccount: account || null,
+      pointsBalance: balance,
+      balanceRawFields: balanceRaw ? Object.keys(balanceRaw) : null,
+      recentTransactions: (txSearch as any)?.data?.data || [],
+      accountSearchError: !(accountSearch as any).data ? (accountSearch as any).error : null,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      error: 'SNAG probe failed',
+      message: error?.response?.data || error.message,
+    });
+  }
+});
+
 export default router;
