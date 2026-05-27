@@ -1708,7 +1708,7 @@ import { xpEngine } from '../services/xpEngine';
 import { execute, query } from '../db/pool';
 
 router.post('/wallet-resync/:wallet', verifyAdminSecret, async (req, res) => {
-  const { wallet } = req.params;
+  const wallet = req.params.wallet as string;
 
   try {
     console.log(`[Admin] Re-syncing wallet: ${wallet}`);
@@ -1789,7 +1789,7 @@ router.post('/fix-zero-positions', verifyAdminSecret, async (req, res) => {
  * This gets the correct position sizes from USDC swap inputs instead of $0.
  */
 router.post('/force-resync/:wallet', verifyAdminSecret, async (req, res) => {
-  const { wallet } = req.params;
+  const wallet = req.params.wallet as string;
 
   try {
     console.log(`[Admin] Force re-sync for wallet: ${wallet}`);
