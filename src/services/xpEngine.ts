@@ -26,10 +26,12 @@ export class XPEngine {
 
   /**
    * Weekly XP for a single position (includes launch event multiplier).
-   * weekly_position_XP = log₁₀(max(position_size_USD, 10)) × 100 × position_multiplier × launch_multiplier
+   * weekly_position_XP = log₁₀(position_size_USD) × 100 × position_multiplier × launch_multiplier
+   * Returns 0 for positions with $0 or negative size (no artificial floor).
    */
   calculateWeeklyXP(positionSizeUSD: number, multiplier: number, launchMultiplier: number = 1.0): number {
-    return Math.log10(Math.max(positionSizeUSD, 10)) * 100 * multiplier * launchMultiplier;
+    if (positionSizeUSD <= 0) return 0;
+    return Math.log10(positionSizeUSD) * 100 * multiplier * launchMultiplier;
   }
 
   /**

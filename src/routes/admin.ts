@@ -3,6 +3,7 @@
 // ============================================================
 
 import express from 'express';
+import { config } from '../config';
 import { snagSyncService } from '../services/snagSyncService';
 import { referralService } from '../services/referralService';
 import { holdingService } from '../services/holdingService';
@@ -1854,6 +1855,65 @@ router.post('/force-resync/:wallet', verifyAdminSecret, async (req, res) => {
     console.error('[Admin] Force re-sync failed:', error);
     res.status(500).json({ error: 'Force re-sync failed', message: error instanceof Error ? error.message : 'Unknown error' });
   }
+});
+
+/**
+ * POST /api/admin/snag-sync
+ * Triggers a full SNAG production sync immediately and returns diagnostic info.
+ * Useful to verify SNAG_API_KEY + SNAG_LOYALTY_CURRENCY_ID are working.
+ */
+
+router.post('/snag-sync', verifyAdminSecret, async (req, res) => {
+  try {
+    const startTime = Date.now();
+    console.log('[Admin] Manual SNAG sync triggered');
+
+    // Config check
+    const snagConfigured = !!(config.snagApiKey && config.snagLoyaltyCurrencyId);
+
+    if (!snagConfigured) {
+      return res.status(400).json({
+        success: false,
+        error: 'SNAG not fully configured',
+        snagApiKey: config.snagApiKey ? '✅ set' : '❌ missing',
+        snagLoyaltyCurrencyId: config.snagLoyaltyCurrencyId ? '✅ set' : '❌ missing',
+      });
+    }
+
+    await snagSyncService.fullSync();
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    res.json({
+      success: true,
+      message: 'SNAG full sync completed',
+      duration: `${duration}s`,
+      snagApiKey: '✅ set',
+      snagLoyaltyCurrencyId: '✅ set',
+      snagBaseUrl: config.snagBaseUrl,
+    });
+  } catch (error) {
+    console.error('[Admin] SNAG sync failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'SNAG sync failed',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/admin/snag-config
+ * Returns SNAG config status (keys masked) — quick health check.
+ */
+router.get('/snag-config', verifyAdminSecret, async (_req, res) => {
+  res.json({
+    snagApiKey: config.snagApiKey ? `${config.snagApiKey.slice(0, 8)}…` : '❌ not set',
+    snagLoyaltyCurrencyId: config.snagLoyaltyCurrencyId ? `${config.snagLoyaltyCurrencyId.slice(0, 8)}…` : '❌ not set',
+    snagBaseUrl: config.snagBaseUrl || '❌ not set',
+    orgId: config.snagOrganizationId ? `${config.snagOrganizationId.slice(0, 8)}…` : '❌ not set',
+    websiteId: config.snagWebsiteId ? `${config.snagWebsiteId.slice(0, 8)}…` : '❌ not set',
+  });
 });
 
 export default router;

@@ -37,9 +37,9 @@ router.get('/:wallet/active', async (req, res) => {
         ? `+0.1x in ${daysToNext} days`
         : `Max Multiplier Reached`;
 
-      // XP calculations with launch event multiplier
-      const baseSize = Math.max(Number(pos.position_size_usd), 10);
-      const baseXpPerWeek = Math.log10(baseSize) * 100 * currentMultiplier;
+      // XP calculations with launch event multiplier — no artificial floor
+      const posSize = Number(pos.position_size_usd);
+      const baseXpPerWeek = posSize > 0 ? Math.log10(posSize) * 100 * currentMultiplier : 0;
       const xpPerWeek = Math.floor(baseXpPerWeek * launchPhase.multiplier);
       const xpPerHour = Math.floor((baseXpPerWeek * launchPhase.multiplier) / (7 * 24));
 
@@ -106,8 +106,10 @@ router.get('/:wallet/history', async (req, res) => {
       const timeMultiplier = Math.min(1.0 + (weeksHeld * 0.10), 3.0);
       const finalMultiplier = baseMultiplier * timeMultiplier;
 
-      const baseSize = Math.max(Number(pos.position_size_usd), 10);
-      const xpPerWeek = Math.floor(Math.log10(baseSize) * 100 * finalMultiplier);
+      const histPosSize = Number(pos.position_size_usd);
+      const xpPerWeek = histPosSize > 0
+        ? Math.floor(Math.log10(histPosSize) * 100 * finalMultiplier)
+        : 0;
       const totalSpEarned = Number(pos.xp_generated) > 0
         ? Math.floor(Number(pos.xp_generated))
         : Math.floor(xpPerWeek * Math.max(weeksHeld, 1));
