@@ -13,9 +13,9 @@ import ConnectWalletModal from '@/components/ConnectWalletModal';
 import { useWallet } from '@/components/WalletContext';
 import { useToast } from '@/components/ToastContext';
 import { useLaunchConfig } from '@/hooks/useLaunchConfig';
-import { fetchDashboard, fetchPositions, fetchBadges, fetchEvents, fetchReferralLinks, setCustomReferralCode } from '@/lib/api';
+import { fetchDashboard, fetchPositions, fetchPositionHistory, fetchBadges, fetchEvents, fetchReferralLinks, setCustomReferralCode } from '@/lib/api';
 import { mergeBadges } from '@/lib/badges';
-import type { DashboardResponse, Position, ShiftEvent } from '@/lib/types';
+import type { DashboardResponse, Position, HistoryPosition, ShiftEvent } from '@/lib/types';
 
 type MainTab = 'Holdings' | 'History' | 'Badges' | 'Events';
 type BadgeSub = 'Activity' | 'Events';
@@ -48,6 +48,7 @@ export default function AirdropPage() {
 
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [positionHistory, setPositionHistory] = useState<HistoryPosition[]>([]);
   const [events, setEvents] = useState<ShiftEvent[]>([]);
   const [earnedBadges, setEarnedBadges] = useState<{ id?: string; name?: string; badge_name?: string; earned_at?: string }[]>([]);
 
@@ -80,14 +81,16 @@ export default function AirdropPage() {
       else setLoading(true);
 
       try {
-        const [dash, pos, bdg, links] = await Promise.all([
+        const [dash, pos, history, bdg, links] = await Promise.all([
           fetchDashboard(wallet),
           fetchPositions(wallet),
+          fetchPositionHistory(wallet),
           fetchBadges(wallet),
           fetchReferralLinks(wallet), // Fetch referral links together to prevent race condition
         ]);
         if (dash) setDashboard(dash);
         if (pos?.positions) setPositions(pos.positions);
+        if (history?.positions) setPositionHistory(history.positions);
         if (bdg?.badges) setEarnedBadges(bdg.badges as never[]);
         if (links) setReferralLinks(links); // Set referral links atomically with dashboard data
       } catch (error) {
@@ -104,9 +107,10 @@ export default function AirdropPage() {
     loadUserData();
   }, [loadUserData]);
 
-  // Filter: only show open positions (exclude sold/closed positions)
-  const activePositions = positions.filter(p => p.status === 'open');
-  const closedPositions = positions.filter(p => p.status === 'closed');
+  // Active positions come from /active endpoint (always open status)
+  const activePositions = positions;
+  // Closed positions come from /history endpoint (always closed status)
+  const closedPositions = positionHistory;
   const totalWeeklyXP = activePositions.reduce((s, p) => s + (p.xpPerWeek ?? 0), 0);
 
   const filteredActivity = activityBadges.filter(
@@ -444,9 +448,9 @@ export default function AirdropPage() {
                           </div>
                         </div>
                         <div style={{ fontSize: 12, fontWeight: 600 }}>{p.weeksHeld}w</div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--amber)' }}>{p.currentMultiplier.toFixed(2)}x</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--amber)' }}>{p.finalMultiplier.toFixed(2)}x</div>
                         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--mint)' }}>
-                          {p.xpPerWeek > 0 ? `${(p.xpPerWeek * p.weeksHeld).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+                          {p.totalSpEarned > 0 ? p.totalSpEarned.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>
                           <span style={{ padding: '2px 6px', background: 'rgba(107,114,128,0.2)', borderRadius: 4, fontSize: 9, fontWeight: 600 }}>
@@ -468,7 +472,7 @@ export default function AirdropPage() {
                     >
                       <span>{closedPositions.length} closed position{closedPositions.length !== 1 ? 's' : ''}</span>
                       <span style={{ color: 'var(--text-mute)', fontWeight: 700 }}>
-                        Total earned: {closedPositions.reduce((sum, p) => sum + (p.xpPerWeek * p.weeksHeld || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} SP
+                        Total earned: {closedPositions.reduce((sum, p) => sum + (p.totalSpEarned || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} SP
                       </span>
                     </div>
                   </>

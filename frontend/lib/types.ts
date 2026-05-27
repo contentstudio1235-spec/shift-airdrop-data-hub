@@ -31,6 +31,23 @@ export interface PositionsResponse {
   positions: Position[];
 }
 
+export interface HistoryPosition {
+  id: string;
+  asset: string;
+  positionSizeUsd: number;
+  openedAt: string;
+  closedAt: string | null;
+  weeksHeld: number;
+  finalMultiplier: number;
+  xpPerWeek: number;
+  totalSpEarned: number;
+  status: 'closed';
+}
+
+export interface PositionHistoryResponse {
+  positions: HistoryPosition[];
+}
+
 export type BadgeRarity = 'COMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
 export type BadgeCategory = 'activity' | 'event';
 

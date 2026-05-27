@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/react';
+import Script from 'next/script';
 import './globals.css';
 import { WalletProvider } from '@/components/WalletContext';
 import { ToastProvider } from '@/components/ToastContext';
@@ -41,12 +42,32 @@ export const metadata: Metadata = {
   },
 };
 
+const GA_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
       className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
+      <head>
+        {GA_ID && (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
+              strategy="afterInteractive"
+            />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${GA_ID}', { page_path: window.location.pathname });
+              `}
+            </Script>
+          </>
+        )}
+      </head>
       <body>
         <WalletProvider>
           <ToastProvider>

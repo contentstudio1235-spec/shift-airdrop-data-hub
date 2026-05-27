@@ -5,6 +5,7 @@
 import type {
   DashboardResponse,
   PositionsResponse,
+  PositionHistoryResponse,
   BadgesResponse,
   LeaderboardResponse,
   EventsResponse,
@@ -66,6 +67,11 @@ export async function fetchDashboard(wallet: string): Promise<DashboardResponse 
 export async function fetchPositions(wallet: string): Promise<PositionsResponse | null> {
   if (!wallet) return null;
   return apiFetch<PositionsResponse>(`/api/positions/${wallet}/active`);
+}
+
+export async function fetchPositionHistory(wallet: string): Promise<PositionHistoryResponse | null> {
+  if (!wallet) return null;
+  return apiFetch<PositionHistoryResponse>(`/api/positions/${wallet}/history`);
 }
 
 export async function fetchBadges(wallet: string): Promise<BadgesResponse | null> {
