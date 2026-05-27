@@ -53,10 +53,11 @@ router.get('/:wallet', async (req, res) => {
 
     const hasSnagAccount = !!(user.snag_user_id || snagTotal > 0);
 
-    // 2. Get combined rank (position SP + social SP)
+    // 2. Get combined rank (position SP + social SP) — must match leaderboard scoring
     const rankResult = await queryOne(
-      `SELECT COUNT(*) + 1 as rank FROM users
-       WHERE (total_xp + COALESCE(snag_points, 0)) > $1`,
+      `SELECT COUNT(*) + 1 as rank FROM users u
+       LEFT JOIN xp_sync_log s ON u.wallet = s.wallet
+       WHERE (u.total_xp + GREATEST(0, COALESCE(u.snag_points, 0) - COALESCE(s.last_synced_xp, 0))) > $1`,
       [totalSp]
     );
 
