@@ -617,37 +617,27 @@ export class SnagSyncService {
     if (!config.snagApiKey || !config.snagWebsiteId) return 0;
 
     try {
-      let user = await queryOne<{ snag_user_id: string }>(
-        'SELECT snag_user_id FROM users WHERE wallet = $1',
-        [wallet]
-      );
+      // Always search by walletAddress — SNAG account search returns the balance in `amount`
+      const searchResponse = await this.client.get('/api/loyalty/accounts', {
+        params: {
+          websiteId: config.snagWebsiteId,
+          walletAddress: wallet,
+          limit: 1,
+        },
+      });
 
-      let snagUserId = user?.snag_user_id;
-
-      if (!snagUserId) {
-        const searchResponse = await this.client.get('/api/loyalty/accounts', {
-          params: {
-            websiteId: config.snagWebsiteId,
-            walletAddress: wallet,
-            limit: 1,
-          },
-        });
-
-        const foundAccount = searchResponse.data?.data?.[0];
-        if (foundAccount) {
-          snagUserId = foundAccount.id;
+      const foundAccount = searchResponse.data?.data?.[0];
+      if (foundAccount) {
+        // Cache snag_user_id for other calls
+        if (foundAccount.id) {
           await execute(
-            'UPDATE users SET snag_user_id = $1 WHERE wallet = $2',
-            [snagUserId, wallet]
-          );
+            `UPDATE users SET snag_user_id = $1 WHERE wallet = $2 AND (snag_user_id IS NULL OR snag_user_id != $1)`,
+            [foundAccount.id, wallet]
+          ).catch(() => {}); // non-fatal
         }
-      }
-
-      if (snagUserId) {
-        const response = await this.client.get(`/api/loyalty/accounts/${snagUserId}`, {
-          params: { websiteId: config.snagWebsiteId },
-        });
-        return response.data?.points || 0;
+        // SNAG returns balance as `amount` in the account search result
+        const points = Number(foundAccount.amount ?? foundAccount.points ?? foundAccount.balance ?? 0);
+        return isNaN(points) ? 0 : points;
       }
     } catch (error) {
       console.error('[SnagSync] Failed to fetch user points from SNAG:', error);

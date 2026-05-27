@@ -1917,6 +1917,29 @@ router.get('/snag-config', verifyAdminSecret, async (_req, res) => {
 });
 
 /**
+ * POST /api/admin/snag-reset-sync-log/:wallet
+ * Resets xp_sync_log for a wallet to 0, forcing the next full sync to push
+ * the complete total_xp as a single transaction to SNAG (rebuilds balance).
+ */
+router.post('/snag-reset-sync-log/:wallet', verifyAdminSecret, async (req, res) => {
+  const wallet = req.params.wallet as string;
+  try {
+    await pool.query(
+      `DELETE FROM xp_sync_log WHERE wallet = $1`,
+      [wallet]
+    );
+    const user = await pool.query('SELECT total_xp FROM users WHERE wallet = $1', [wallet]);
+    res.json({
+      success: true,
+      message: `Sync log cleared for ${wallet}. Next snag-sync will push full total_xp.`,
+      total_xp: user.rows[0]?.total_xp ?? 0,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/admin/snag-probe/:wallet
  * Directly queries SNAG production API for a wallet — raw response,
  * shows exactly what SNAG knows about the user and whether transactions landed.
