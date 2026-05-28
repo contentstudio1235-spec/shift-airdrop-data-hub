@@ -25,7 +25,8 @@ router.get('/user/:wallet', async (req, res) => {
          u.permanent_multiplier, u.dynamic_multiplier,
          u.referral_code, u.referred_by_wallet, u.referred_by_code,
          u.invite_bonus_xp,
-         ROW_NUMBER() OVER (ORDER BY u.created_at ASC) as queue_position
+         -- Count wallets registered before this one + 1 to get true queue position
+         (SELECT COUNT(*) + 1 FROM users WHERE created_at < u.created_at) as queue_position
        FROM users u
        WHERE u.wallet = $1`,
       [wallet]

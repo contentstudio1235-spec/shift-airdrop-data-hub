@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import BadgeCard from '@/components/BadgeCard';
 import EventCard from '@/components/EventCard';
@@ -45,6 +45,8 @@ export default function AirdropPage() {
 
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -93,6 +95,7 @@ export default function AirdropPage() {
         if (history?.positions) setPositionHistory(history.positions);
         if (bdg?.badges) setEarnedBadges(bdg.badges as never[]);
         if (links) setReferralLinks(links); // Set referral links atomically with dashboard data
+        setLastUpdated(new Date());
       } catch (error) {
         console.error('Failed to fetch user data:', error);
       } finally {
@@ -106,6 +109,17 @@ export default function AirdropPage() {
   useEffect(() => {
     loadUserData();
   }, [loadUserData]);
+
+  // Auto-refresh every 60 seconds when wallet is connected (keeps SP live)
+  useEffect(() => {
+    if (!wallet) return;
+    autoRefreshRef.current = setInterval(() => {
+      loadUserData(true);
+    }, 60_000);
+    return () => {
+      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+    };
+  }, [wallet, loadUserData]);
 
   // Active positions come from /active endpoint (always open status)
   const activePositions = positions;
@@ -294,15 +308,22 @@ export default function AirdropPage() {
                   </button>
                 ))}
               </div>
-              {tab === 'Holdings' && wallet && (
-                <button
-                  className="btn ghost sm"
-                  onClick={() => loadUserData(true)}
-                  disabled={refreshing}
-                >
-                  <Icon name="refresh" size={13} className={refreshing ? 'spin' : ''} />
-                  Refresh
-                </button>
+              {wallet && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {lastUpdated && (
+                    <span style={{ fontSize: 11, color: 'var(--text-mute)' }}>
+                      Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                  <button
+                    className="btn ghost sm"
+                    onClick={() => loadUserData(true)}
+                    disabled={refreshing}
+                  >
+                    <Icon name="refresh" size={13} className={refreshing ? 'spin' : ''} />
+                    {refreshing ? 'Updating…' : 'Refresh'}
+                  </button>
+                </div>
               )}
             </div>
 
@@ -382,100 +403,126 @@ export default function AirdropPage() {
 
             {/* History tab */}
             {tab === 'History' && (
-              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                {/* Table header */}
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '2fr 80px 80px 80px 1fr',
-                    gap: 12,
-                    padding: '10px 12px',
-                    borderBottom: '1px solid var(--border)',
-                    background: 'var(--panel)',
-                  }}
-                >
-                  {['Asset', 'Weeks Held', 'Final Mult', 'Total SP', 'Status'].map((h) => (
-                    <div key={h} style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-mute)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      {h}
-                    </div>
-                  ))}
-                </div>
-
+              <div>
                 {!wallet ? (
-                  <div className="empty-state">
+                  <div className="card empty-state">
                     <Icon name="wallet" size={32} color="var(--text-mute)" />
                     <p>Connect your wallet to view position history</p>
-                    <button className="btn primary" onClick={() => setShowConnectPrompt(true)}>
-                      Connect Wallet
-                    </button>
+                    <button className="btn primary" onClick={() => setShowConnectPrompt(true)}>Connect Wallet</button>
                   </div>
                 ) : loading ? (
-                  <div style={{ padding: 24 }}>
+                  <div className="card" style={{ padding: 24 }}>
                     {[1, 2, 3].map((i) => (
-                      <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 80px 80px 80px 1fr', gap: 12, padding: '14px 12px', borderBottom: '1px solid var(--border)' }}>
-                        <div className="skeleton" style={{ height: 14, width: '70%' }} />
-                        <div className="skeleton" style={{ height: 14 }} />
-                        <div className="skeleton" style={{ height: 14 }} />
-                        <div className="skeleton" style={{ height: 14 }} />
-                        <div className="skeleton" style={{ height: 14 }} />
+                      <div key={i} style={{ height: 80, marginBottom: 12 }}>
+                        <div className="skeleton" style={{ height: 14, width: '40%', marginBottom: 8 }} />
+                        <div className="skeleton" style={{ height: 12, width: '70%' }} />
                       </div>
                     ))}
                   </div>
-                ) : closedPositions.length === 0 ? (
-                  <div className="empty-state">
+                ) : closedPositions.length === 0 && activePositions.length === 0 ? (
+                  <div className="card empty-state">
                     <Icon name="history" size={32} color="var(--text-mute)" />
-                    <p>No closed positions yet</p>
-                    <p className="hint">Positions you've sold will appear in your history</p>
+                    <p>No position history yet</p>
+                    <p className="hint">Buy and sell SHIFT tokens to see your SP history here</p>
                   </div>
                 ) : (
-                  <>
-                    {closedPositions.map((p) => (
-                      <div
-                        key={p.id}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '2fr 80px 80px 80px 1fr',
-                          gap: 12,
-                          padding: '14px 12px',
-                          borderBottom: '1px solid var(--border)',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>{p.asset}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 2 }}>
-                            {p.positionSizeUsd ? `$${(p.positionSizeUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'N/A'}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {/* Active positions shown in history with live SP */}
+                    {activePositions.map((p) => {
+                      const daysHeld = p.daysHeld ?? 0;
+                      const holdingOk = daysHeld >= 1;
+                      return (
+                        <div key={p.id} className="card" style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                <span style={{ fontSize: 14, fontWeight: 700 }}>{p.asset}</span>
+                                <span style={{
+                                  padding: '2px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700,
+                                  background: 'rgba(38,200,184,0.15)', color: 'var(--mint)',
+                                }}>▶ OPEN</span>
+                                {!holdingOk && (
+                                  <span style={{
+                                    padding: '2px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700,
+                                    background: 'rgba(239,68,68,0.15)', color: '#ef4444',
+                                  }}>⚠ SELL = FORFEIT</span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>
+                                ${p.positionSizeUsd?.toLocaleString(undefined, { maximumFractionDigits: 0 }) ?? '—'} · Opened {new Date(p.openedAt).toLocaleDateString()}
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--mint)' }}>
+                                +{(p.xpPerWeek ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} SP/wk
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>{p.currentMultiplier?.toFixed(2)}x mult</div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 20, fontSize: 11, color: 'var(--text-mute)', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                            <span>📅 <strong>{daysHeld}</strong> days held</span>
+                            <span>📈 <strong style={{ color: 'var(--mint)' }}>{p.progressionHook}</strong></span>
+                            {holdingOk
+                              ? <span style={{ color: '#22c55e' }}>✅ Safe to sell — points locked</span>
+                              : <span style={{ color: '#ef4444' }}>⏳ Hold {Math.ceil(1 - (daysHeld / 1))}+ more day to keep SP</span>}
                           </div>
                         </div>
-                        <div style={{ fontSize: 12, fontWeight: 600 }}>{p.weeksHeld}w</div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--amber)' }}>{p.finalMultiplier.toFixed(2)}x</div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--mint)' }}>
-                          {p.totalSpEarned > 0 ? p.totalSpEarned.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
+                      );
+                    })}
+
+                    {/* Closed positions */}
+                    {closedPositions.map((p) => {
+                      const kept = (p.totalSpEarned ?? 0) > 0;
+                      const daysHeld = p.weeksHeld != null ? (p.weeksHeld * 7) : null;
+                      return (
+                        <div key={p.id} className="card" style={{ padding: '14px 16px', opacity: 0.9 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                <span style={{ fontSize: 14, fontWeight: 700 }}>{p.asset}</span>
+                                <span style={{
+                                  padding: '2px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700,
+                                  background: 'rgba(107,114,128,0.2)', color: 'var(--text-mute)',
+                                }}>■ SOLD</span>
+                                {kept
+                                  ? <span style={{ padding: '2px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700, background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>✅ SP KEPT</span>
+                                  : <span style={{ padding: '2px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700, background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>❌ SP FORFEITED</span>
+                                }
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>
+                                ${p.positionSizeUsd?.toLocaleString(undefined, { maximumFractionDigits: 0 }) ?? '—'}
+                                {p.openedAt && ` · Bought ${new Date(p.openedAt).toLocaleDateString()}`}
+                                {p.closedAt && ` → Sold ${new Date(p.closedAt).toLocaleDateString()}`}
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontSize: 16, fontWeight: 700, color: kept ? 'var(--mint)' : '#ef4444' }}>
+                                {kept ? `+${p.totalSpEarned.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '0'} SP
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>{p.finalMultiplier?.toFixed(2)}x final mult</div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 20, fontSize: 11, color: 'var(--text-mute)', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                            {daysHeld != null && <span>📅 Held <strong>{Math.round(daysHeld)}</strong> days</span>}
+                            <span>🔢 <strong>{p.weeksHeld}w</strong> position</span>
+                            {!kept && <span style={{ color: '#ef4444' }}>Sold &lt;24h after buy — all SP forfeited</span>}
+                          </div>
                         </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-mute)' }}>
-                          <span style={{ padding: '2px 6px', background: 'rgba(107,114,128,0.2)', borderRadius: 4, fontSize: 9, fontWeight: 600 }}>
-                            CLOSED
-                          </span>
-                        </div>
+                      );
+                    })}
+
+                    {/* Summary footer */}
+                    <div className="card" style={{ padding: '12px 16px', background: 'var(--panel)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                        <span style={{ color: 'var(--text-mute)' }}>
+                          {activePositions.length} open · {closedPositions.length} closed
+                        </span>
+                        <span style={{ color: 'var(--mint)', fontWeight: 700 }}>
+                          Total kept: {closedPositions.reduce((s, p) => s + (p.totalSpEarned || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} SP
+                        </span>
                       </div>
-                    ))}
-                    <div
-                      style={{
-                        padding: '10px 14px',
-                        background: 'var(--panel)',
-                        borderTop: '1px solid var(--border)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        fontSize: 12,
-                        color: 'var(--text-dim)',
-                      }}
-                    >
-                      <span>{closedPositions.length} closed position{closedPositions.length !== 1 ? 's' : ''}</span>
-                      <span style={{ color: 'var(--text-mute)', fontWeight: 700 }}>
-                        Total earned: {closedPositions.reduce((sum, p) => sum + (p.totalSpEarned || 0), 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} SP
-                      </span>
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
             )}

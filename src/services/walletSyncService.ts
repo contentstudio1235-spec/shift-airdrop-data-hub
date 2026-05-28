@@ -192,13 +192,14 @@ export class WalletSyncService {
           const decimals = out.rawTokenAmount?.decimals ?? 0;
           const amount = parseFloat(out.rawTokenAmount?.tokenAmount || '0') / Math.pow(10, decimals);
 
-          // Extract USD value from stablecoin input
+          // Extract USD value from stablecoin inputs.
+          // Jupiter multi-hop swaps may emit multiple inputs from the same stablecoin
+          // mint (routing legs). Sum them ALL to get the true USD value paid.
           let usdValue = 0;
           for (const inp of swap.tokenInputs || []) {
             if (STABLECOIN_MINTS.has(inp.mint)) {
               const inDecimals = inp.rawTokenAmount?.decimals ?? 6;
-              usdValue = parseFloat(inp.rawTokenAmount?.tokenAmount || '0') / Math.pow(10, inDecimals);
-              break;
+              usdValue += parseFloat(inp.rawTokenAmount?.tokenAmount || '0') / Math.pow(10, inDecimals);
             }
           }
           // SOL native input fallback (approximate at $150 SOL if no price available)
