@@ -37,11 +37,11 @@ export default function LeaderboardPage() {
     if (mode === 'Multiplier') {
       data.sort((a, b) => (b.multiplier ?? 0) - (a.multiplier ?? 0));
     } else {
-      // Sort by total SP (totalXP is legacy field name for position SP)
-      // Use totalSp if available, fallback to totalXP for backwards compat
+      // Sort by total SP (combined: position + social)
+      // Falls back to legacy totalXP for backwards compat
       data.sort((a, b) => {
-        const aScore = (a as any).totalSp ?? a.totalXP ?? 0;
-        const bScore = (b as any).totalSp ?? b.totalXP ?? 0;
+        const aScore = a.totalSp ?? a.totalXP ?? 0;
+        const bScore = b.totalSp ?? b.totalXP ?? 0;
         return bScore - aScore;
       });
     }
@@ -161,7 +161,9 @@ export default function LeaderboardPage() {
             </div>
           </div>
           <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 14 }}>
-            {mode === 'Multiplier' ? `${(userEntry.multiplier ?? 1).toFixed(2)}x` : (userEntry.totalXP ?? 0).toLocaleString()} {mode === 'Points' ? 'SP' : ''}
+            {mode === 'Multiplier'
+              ? `${(userEntry.multiplier ?? 1).toFixed(2)}x`
+              : Math.round((userEntry as LeaderboardEntry).totalSp ?? userEntry.totalXP ?? 0).toLocaleString()} {mode === 'Points' ? 'SP' : ''}
           </div>
           <span className="badge mint" style={{ fontSize: 10 }}>You</span>
         </div>
@@ -216,7 +218,7 @@ export default function LeaderboardPage() {
                     >
                       {mode === 'Multiplier'
                         ? `${(entry.multiplier ?? 1).toFixed(2)}x`
-                        : (entry.totalXP ?? 0).toLocaleString()}
+                        : Math.round((entry as LeaderboardEntry).totalSp ?? entry.totalXP ?? 0).toLocaleString()}
                     </div>
                     <div style={{ fontSize: 10, color: 'var(--text-mute)', marginTop: 2 }}>
                       {mode === 'Multiplier' ? 'multiplier' : 'SP'}

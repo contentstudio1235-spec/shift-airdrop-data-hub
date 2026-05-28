@@ -26,7 +26,9 @@ export default function LeaderboardRow({ entry, mode = 'Points', isCurrentUser }
   const wallet = entry.wallet ?? '';
   const initials = wallet.slice(0, 2).toUpperCase();
   const shortAddr = wallet.length > 12 ? `${wallet.slice(0, 4)}…${wallet.slice(-4)}` : wallet;
-  const tier = getTier(entry.totalXP ?? 0);
+  // Use combined SP (totalSp) for tier — matches ranking criteria
+  const displaySp = entry.totalSp ?? entry.totalXP ?? 0;
+  const tier = getTier(displaySp);
 
   const rankColors: Record<number, string> = {
     1: '#f7a23b',
@@ -112,7 +114,7 @@ export default function LeaderboardRow({ entry, mode = 'Points', isCurrentUser }
       >
         {mode === 'Multiplier'
           ? `${(entry.multiplier ?? 1).toFixed(2)}x`
-          : (entry.totalXP ?? 0).toLocaleString()}
+          : Math.round(displaySp).toLocaleString()}
       </div>
 
       {/* Tier */}

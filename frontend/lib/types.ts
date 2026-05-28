@@ -77,7 +77,10 @@ export interface BadgesResponse {
 export interface LeaderboardEntry {
   rank: number;
   wallet: string;
-  totalXP: number;
+  totalSp?: number;       // Combined score (positionSp + socialSp) — main display
+  positionSp?: number;    // From holding SHIFT positions
+  socialSp?: number;      // From SNAG tasks + referrals
+  totalXP: number;        // Legacy: same as positionSp
   multiplier: number;
   badgeCount: number;
   tier?: string;
