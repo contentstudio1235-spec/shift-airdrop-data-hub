@@ -22,6 +22,7 @@ interface AirdropUser {
   referralLink: string;
   referralCode: string;
   registeredAt: string;
+  rank?: number; // Leaderboard rank by SP (fetched separately from dashboard API)
 }
 
 interface ReferralBonusInfo {
@@ -135,6 +136,20 @@ export default function RegisterContent() {
 
         if (!res.ok) throw new Error('Failed to fetch user data');
         const data: AirdropUser = await res.json();
+
+        // Fetch leaderboard rank (position by SP, not registration order)
+        try {
+          const dashRes = await fetch(`${API_URL}/api/dashboard/${wallet}`);
+          if (dashRes.ok) {
+            const dashData = await dashRes.json();
+            data.rank = dashData.rank; // Actual leaderboard rank
+          }
+        } catch (e) {
+          console.warn('[Register] Could not fetch dashboard rank:', e);
+          // Fallback: if rank fetch fails, show queue position
+          data.rank = data.queuePosition;
+        }
+
         setUserData(data);
       } catch (error) {
         console.error('[Register] Failed to fetch user data:', error);
@@ -318,7 +333,7 @@ export default function RegisterContent() {
           <ShiftIdCard
             handle={userData.wallet.slice(0, 6).toUpperCase()}
             ticker="SHIFT"
-            rank={userData.queuePosition}
+            rank={userData.rank || userData.queuePosition}
             points={userData.totalXp}
             status="FOUNDING MEMBER"
           />
