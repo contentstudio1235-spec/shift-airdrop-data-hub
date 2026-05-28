@@ -1,0 +1,18 @@
+name: Notify fork on push
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger fork sync
+        run: |
+          curl -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: token ${{ secrets.FORK_DISPATCH_TOKEN }}" \
+            https://api.github.com/repos/contentstudio1235-spec/Shift-Airdrop-Backend/dispatches \
+            -d '{"event_type":"upstream-push"}'
