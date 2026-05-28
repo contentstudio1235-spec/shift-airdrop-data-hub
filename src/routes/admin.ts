@@ -1663,6 +1663,48 @@ router.post('/recalculate-xp', verifyAdminSecret, async (req, res) => {
 });
 
 /**
+ * GET /api/admin/position-diagnostic/:wallet
+ * Diagnostic endpoint to check position data for a wallet
+ */
+router.get('/position-diagnostic/:wallet', verifyAdminSecret, async (req, res) => {
+  const wallet = req.params.wallet as string;
+
+  try {
+    const positions = await pool.query(
+      `SELECT id, asset, asset_mint, position_size_usd, status, created_at, opened_at, xp_generated, last_xp_calc, current_multiplier
+       FROM positions WHERE wallet = $1 ORDER BY created_at DESC`,
+      [wallet]
+    );
+
+    const user = await pool.query(
+      `SELECT wallet, total_xp, snag_points FROM users WHERE wallet = $1`,
+      [wallet]
+    );
+
+    res.json({
+      wallet,
+      userStats: user.rows[0] || null,
+      positionsCount: positions.rows.length,
+      positions: positions.rows.map((p: any) => ({
+        id: p.id,
+        asset: p.asset,
+        assetMint: p.asset_mint,
+        positionSizeUsd: p.position_size_usd,
+        status: p.status,
+        xpGenerated: p.xp_generated,
+        lastXpCalc: p.last_xp_calc,
+        currentMultiplier: p.current_multiplier,
+        openedAt: p.opened_at,
+        createdAt: p.created_at
+      }))
+    });
+  } catch (error) {
+    console.error('[Admin] Diagnostic query failed:', error);
+    res.status(500).json({ error: 'Failed to fetch diagnostic data' });
+  }
+});
+
+/**
  * POST /api/admin/force-badge-check
  * Force a badge eligibility check for a specific wallet
  * Body: { wallet: string }
