@@ -3,7 +3,7 @@ import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/react';
 import Script from 'next/script';
 import './globals.css';
-import { WalletProvider } from '@/components/WalletContext';
+import { AdapterProvider } from '@/components/AdapterProvider';
 import { ToastProvider } from '@/components/ToastContext';
 import NavBar from '@/components/NavBar';
 
@@ -69,13 +69,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         )}
       </head>
       <body>
-        <WalletProvider>
+        <AdapterProvider>
           <ToastProvider>
             <NavBar />
             <main>{children}</main>
             <Analytics />
           </ToastProvider>
-        </WalletProvider>
+        </AdapterProvider>
       </body>
     </html>
   );

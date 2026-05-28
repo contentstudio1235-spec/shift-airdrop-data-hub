@@ -1,14 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useWallet as useSolanaWallet } from '@solana/wallet-adapter-react';
 import { useWallet } from './WalletContext';
+import { hasMetaMask, getLastUsedWallet, WALLET_METADATA } from '@/lib/walletConfig';
 
 interface ConnectWalletModalProps {
   onClose: () => void;
 }
 
-// ── Official brand SVG icons ───────────────────────────────────────────────
-// Each icon uses the exact brand colors from official guidelines.
+// ── Wallet SVG Icons (matching official brands) ───────────────────────────
 
 function PhantomIcon() {
   return (
@@ -20,29 +21,11 @@ function PhantomIcon() {
           <stop offset="1" stopColor="#551BF9"/>
         </linearGradient>
       </defs>
-      {/* Ghost body */}
       <path d="M78 50c0-15.5-12.5-28-28-28S22 34.5 22 50v24.5c0 .8.7 1.5 1.5 1.5h7c.8 0 1.5-.7 1.5-1.5v-6c0-1.7 1.3-3 3-3s3 1.3 3 3v6c0 .8.7 1.5 1.5 1.5h7c.8 0 1.5-.7 1.5-1.5v-6c0-1.7 1.3-3 3-3s3 1.3 3 3v6c0 .8.7 1.5 1.5 1.5h7c.8 0 1.5-.7 1.5-1.5V50h7z" fill="white"/>
-      {/* Eyes */}
       <ellipse cx="40" cy="48" rx="5" ry="6.5" fill="#534BB1"/>
       <ellipse cx="60" cy="48" rx="5" ry="6.5" fill="#534BB1"/>
       <circle cx="42" cy="46" r="1.8" fill="white"/>
       <circle cx="62" cy="46" r="1.8" fill="white"/>
-    </svg>
-  );
-}
-
-function BackpackIcon() {
-  return (
-    <svg width="36" height="36" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100" height="100" rx="22" fill="#111111"/>
-      {/* Strap loop top */}
-      <path d="M38 32V26c0-1.7 1.3-3 3-3h18c1.7 0 3 1.3 3 3v6" stroke="#E33E3F" strokeWidth="4" strokeLinecap="round" fill="none"/>
-      {/* Main bag */}
-      <rect x="26" y="32" width="48" height="44" rx="8" fill="#E33E3F"/>
-      {/* Front pocket */}
-      <rect x="34" y="50" width="32" height="18" rx="5" fill="rgba(0,0,0,0.3)"/>
-      {/* Pocket divider */}
-      <line x1="34" y1="59" x2="66" y2="59" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5"/>
     </svg>
   );
 }
@@ -57,12 +40,21 @@ function SolflareIcon() {
           <stop offset="1" stopColor="#FF5500"/>
         </linearGradient>
       </defs>
-      {/* Outer sunburst diamond */}
       <path d="M50 14L78 50L50 86L22 50Z" fill="white" fillOpacity="0.95"/>
-      {/* Inner diamond cutout */}
       <path d="M50 30L66 50L50 70L34 50Z" fill="#FF6600"/>
-      {/* Core */}
       <circle cx="50" cy="50" r="8" fill="white"/>
+    </svg>
+  );
+}
+
+function BackpackIcon() {
+  return (
+    <svg width="36" height="36" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" rx="22" fill="#111111"/>
+      <path d="M38 32V26c0-1.7 1.3-3 3-3h18c1.7 0 3 1.3 3 3v6" stroke="#E33E3F" strokeWidth="4" strokeLinecap="round" fill="none"/>
+      <rect x="26" y="32" width="48" height="44" rx="8" fill="#E33E3F"/>
+      <rect x="34" y="50" width="32" height="18" rx="5" fill="rgba(0,0,0,0.3)"/>
+      <line x1="34" y1="59" x2="66" y2="59" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5"/>
     </svg>
   );
 }
@@ -77,36 +69,17 @@ function MagicEdenIcon() {
           <stop offset="1" stopColor="#FF6DC6"/>
         </linearGradient>
       </defs>
-      {/* Diamond */}
       <path d="M50 16L80 50L50 84L20 50Z" fill="url(#me-g)"/>
-      {/* M letter */}
       <path d="M37 43v14l5-7 5 7 5-7 5 7V43" stroke="white" strokeWidth="3.5" strokeLinejoin="round" strokeLinecap="round" fill="none"/>
     </svg>
   );
 }
 
-function MetaMaskIcon() {
-  // Accurate MetaMask fox using official brand geometry
+function JupiterIcon() {
   return (
     <svg width="36" height="36" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100" height="100" rx="22" fill="#FFFFFF"/>
-      {/* Fox ears */}
-      <polygon points="16,14 38,45 28,22" fill="#E17726"/>
-      <polygon points="84,14 72,22 62,45" fill="#E17726"/>
-      {/* Face outline */}
-      <path d="M38 45L50 55L62 45L72 22L28 22Z" fill="#E17726"/>
-      {/* Cheeks */}
-      <path d="M28 60L35 78L50 73L65 78L72 60L62 45L50 55L38 45Z" fill="#E17726"/>
-      {/* Chin / muzzle */}
-      <path d="M38 67h24l-3 11-9 3-9-3z" fill="#D5621A"/>
-      {/* Inner nose bridge */}
-      <path d="M44 53h12l-6 6z" fill="#C45F18"/>
-      {/* Eyes */}
-      <ellipse cx="38" cy="49" rx="4" ry="5" fill="#1C1C1C"/>
-      <ellipse cx="62" cy="49" rx="4" ry="5" fill="#1C1C1C"/>
-      {/* Eye shine */}
-      <circle cx="40" cy="47" r="1.5" fill="white"/>
-      <circle cx="64" cy="47" r="1.5" fill="white"/>
+      <rect width="100" height="100" rx="22" fill="#00D4AA"/>
+      <path d="M28 28h44v12H40v44H28V28Z" fill="white"/>
     </svg>
   );
 }
@@ -121,10 +94,26 @@ function TrustWalletIcon() {
           <stop offset="1" stopColor="#1CE4FF"/>
         </linearGradient>
       </defs>
-      {/* Shield shape */}
       <path d="M50 16L22 28V52C22 67 35 80 50 85C65 80 78 67 78 52V28L50 16Z" fill="white" fillOpacity="0.95"/>
-      {/* Inner shield lines — Trust Wallet logo pattern */}
       <path d="M38 46h24M38 52h24M38 58h18" stroke="url(#tw-bg)" strokeWidth="4" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function MetaMaskIcon() {
+  return (
+    <svg width="36" height="36" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100" height="100" rx="22" fill="#FFFFFF"/>
+      <polygon points="16,14 38,45 28,22" fill="#E17726"/>
+      <polygon points="84,14 72,22 62,45" fill="#E17726"/>
+      <path d="M38 45L50 55L62 45L72 22L28 22Z" fill="#E17726"/>
+      <path d="M28 60L35 78L50 73L65 78L72 60L62 45L50 55L38 45Z" fill="#E17726"/>
+      <path d="M38 67h24l-3 11-9 3-9-3z" fill="#D5621A"/>
+      <path d="M44 53h12l-6 6z" fill="#C45F18"/>
+      <ellipse cx="38" cy="49" rx="4" ry="5" fill="#1C1C1C"/>
+      <ellipse cx="62" cy="49" rx="4" ry="5" fill="#1C1C1C"/>
+      <circle cx="40" cy="47" r="1.5" fill="white"/>
+      <circle cx="64" cy="47" r="1.5" fill="white"/>
     </svg>
   );
 }
@@ -133,30 +122,13 @@ function WalletConnectIcon() {
   return (
     <svg width="36" height="36" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
       <rect width="100" height="100" rx="22" fill="#3B99FC"/>
-      {/* WalletConnect "W" wave logo */}
-      <path
-        d="M29 43c11.7-11.4 30.6-11.4 42.4 0l1.4 1.4c.6.6.6 1.5 0 2.1L67 52.3c-.3.3-.8.3-1.1 0l-1.9-1.9c-8.1-7.9-21.3-7.9-29.4 0l-2 2c-.3.3-.8.3-1.1 0l-5.7-5.7c-.6-.6-.6-1.5 0-2.1L29 43z"
-        fill="white"
-      />
-      <path
-        d="M50 54.5l4.8 4.7c.3.3.8.3 1.1 0l9.6-9.4c.3-.3.8-.3 1.1 0l5.7 5.6c.6.6.6 1.5 0 2.1L60.6 69c-.6.6-1.5.6-2.1 0L50 60.8l-8.5 8.3c-.6.6-1.5.6-2.1 0L27.7 57.5c-.6-.6-.6-1.5 0-2.1l5.7-5.6c.3-.3.8-.3 1.1 0l9.6 9.4c.3.3.8.3 1.1 0L50 54.5z"
-        fill="white"
-      />
+      <path d="M29 43c11.7-11.4 30.6-11.4 42.4 0l1.4 1.4c.6.6.6 1.5 0 2.1L67 52.3c-.3.3-.8.3-1.1 0l-1.9-1.9c-8.1-7.9-21.3-7.9-29.4 0l-2 2c-.3.3-.8.3-1.1 0l-5.7-5.7c-.6-.6-.6-1.5 0-2.1L29 43z" fill="white"/>
+      <path d="M50 54.5l4.8 4.7c.3.3.8.3 1.1 0l9.6-9.4c.3-.3.8-.3 1.1 0l5.7 5.6c.6.6.6 1.5 0 2.1L60.6 69c-.6.6-1.5.6-2.1 0L50 60.8l-8.5 8.3c-.6.6-1.5.6-2.1 0L27.7 57.5c-.6-.6-.6-1.5 0-2.1l5.7-5.6c.3-.3.8-.3 1.1 0l9.6 9.4c.3.3.8.3 1.1 0L50 54.5z" fill="white"/>
     </svg>
   );
 }
 
-function JupiterIcon() {
-  return (
-    <svg width="36" height="36" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100" height="100" rx="22" fill="#00D4AA"/>
-      {/* Jupiter "J" stylized */}
-      <path d="M28 28h44v12H40v44H28V28Z" fill="white"/>
-    </svg>
-  );
-}
-
-// ── Wallet row component ───────────────────────────────────────────────────
+// ── Wallet Row Component ───────────────────────────────────────────────
 
 interface WalletRowProps {
   icon: React.ReactNode;
@@ -194,10 +166,8 @@ function WalletRow({ icon, name, hint, tag, onClick, disabled, loading }: Wallet
         opacity: disabled && !loading ? 0.5 : 1,
       }}
     >
-      {/* Icon */}
       <span style={{ flexShrink: 0, lineHeight: 0, borderRadius: 8, overflow: 'hidden' }}>{icon}</span>
 
-      {/* Name + hint */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-space)', display: 'block' }}>
           {name}
@@ -209,7 +179,6 @@ function WalletRow({ icon, name, hint, tag, onClick, disabled, loading }: Wallet
         )}
       </div>
 
-      {/* Status tag / spinner */}
       {loading ? (
         <span style={{ fontSize: 11, color: 'var(--mint)', whiteSpace: 'nowrap' }}>Connecting…</span>
       ) : tag === 'recommended' ? (
@@ -235,66 +204,41 @@ function WalletRow({ icon, name, hint, tag, onClick, disabled, loading }: Wallet
   );
 }
 
-// ── Modal ──────────────────────────────────────────────────────────────────
+// ── Modal ──────────────────────────────────────────────────────────────
 
 export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps) {
-  const {
-    connectPhantom, connectBackpack, connectSolflare, connectMagicEden,
-    connectMetaMask, connectMetaMaskSolana, connectTrustWallet, connectJupiter,
-    connecting, walletType,
-  } = useWallet();
+  const solanaWallet = useSolanaWallet();
+  const { select: selectWallet, wallets: availableWallets } = solanaWallet;
+  const { connecting, connectMetaMask, connectMetaMaskSolana } = useWallet();
 
-  const [hasPhantom, setHasPhantom] = useState(false);
-  const [hasBackpack, setHasBackpack] = useState(false);
-  const [hasSolflare, setHasSolflare] = useState(false);
-  const [hasMagicEden, setHasMagicEden] = useState(false);
-  const [hasMetaMask, setHasMetaMask] = useState(false);
-  const [hasMetaMaskSolana, setHasMetaMaskSolana] = useState(false);
-  const [hasTrustWallet, setHasTrustWallet] = useState(false);
-  const [hasJupiter, setHasJupiter] = useState(false);
+  const [walletStates, setWalletStates] = useState<Record<string, boolean>>({});
 
+  // Detect installed wallets
   useEffect(() => {
-    setHasPhantom(!!(window.phantom?.solana?.isPhantom || window.solana?.isPhantom));
-    setHasBackpack(!!window.backpack?.solana);
-    setHasSolflare(!!window.solflare?.isSolflare);
-    setHasMagicEden(!!window.magicEden?.isMagicEden);
-    setHasMetaMask(!!window.ethereum?.isMetaMask);
-    setHasTrustWallet(!!(window.trustwallet?.solana || window.trustwallet?.isTrustWallet || (window.ethereum as any)?.isTrust));
-    setHasJupiter(!!window.jupiter?.solana);
-    if (typeof window.getWallets === 'function') {
-      const wallets = window.getWallets().get();
-      setHasMetaMaskSolana(!!wallets.find(
-        (w: { name: string; chains: string[] }) =>
-          w.name === 'MetaMask' && w.chains.some((c: string) => c.startsWith('solana:'))
-      ));
-    }
-  }, []);
+    setWalletStates({
+      phantom: availableWallets.some(w => w.adapter.name === 'Phantom'),
+      solflare: availableWallets.some(w => w.adapter.name === 'Solflare'),
+      trustwallet: availableWallets.some(w => w.adapter.name === 'Trust Wallet'),
+      metamask: hasMetaMask(),
+    });
+  }, [availableWallets]);
 
-  // Smart MetaMask: one click, prefers Solana if available
-  const handleMetaMask = () => {
-    if (hasMetaMaskSolana) {
-      connectMetaMaskSolana().then(onClose);
-    } else {
-      connectMetaMask().then(onClose);
-    }
+  const lastUsed = getLastUsedWallet();
+
+  const tagFor = (id: string, installed: boolean) => {
+    if (lastUsed === id) return 'last-used' as const;
+    if (id === 'phantom' && !lastUsed && installed) return 'recommended' as const;
+    if (installed) return 'installed' as const;
+    return undefined;
   };
 
-  const wrap = (fn: () => Promise<void>) => () => fn().then(onClose);
-
-  // Which wallets are installed vs need install
-  // Put installed ones first, then install ones
-  const metaMaskInstalled = hasMetaMask || hasMetaMaskSolana;
-
-  // Last used wallet gets a "last used" tag
-  const lastUsed = typeof window !== 'undefined'
-    ? localStorage.getItem('shift_wallet_type')
-    : null;
-
-  const tagFor = (id: string, installed: boolean): 'recommended' | 'installed' | 'last-used' | undefined => {
-    if (lastUsed === id) return 'last-used';
-    if (id === 'phantom' && !lastUsed && installed) return 'recommended';
-    if (installed) return 'installed';
-    return undefined;
+  // Solana wallet connection handler
+  const handleSolanaWallet = (adapterName: string) => {
+    const wallet = availableWallets.find(w => w.adapter.name === adapterName);
+    if (wallet) {
+      selectWallet(wallet.adapter.name);
+      setTimeout(onClose, 500); // Wait for connection to happen
+    }
   };
 
   return (
@@ -338,69 +282,54 @@ export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps)
           SHIFT trades on Solana via Jupiter. Connect a Solana wallet to track XP, positions, and badges.
         </p>
 
-        {/* Wallet list — flat single list */}
+        {/* Wallet List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
 
+          {/* Phantom */}
           <WalletRow
             icon={<PhantomIcon />}
             name="Phantom"
             hint="Most popular Solana wallet"
-            tag={tagFor('phantom', hasPhantom)}
-            onClick={wrap(connectPhantom)}
+            tag={tagFor('phantom', walletStates.phantom)}
+            onClick={() => handleSolanaWallet('Phantom')}
             disabled={connecting}
-            loading={connecting && walletType === 'phantom'}
+            loading={connecting && solanaWallet.wallet?.adapter.name === 'Phantom'}
           />
 
-          <WalletRow
-            icon={<BackpackIcon />}
-            name="Backpack"
-            hint="Multi-chain · xNFT wallet"
-            tag={tagFor('backpack', hasBackpack)}
-            onClick={wrap(connectBackpack)}
-            disabled={connecting}
-            loading={connecting && walletType === 'backpack'}
-          />
-
+          {/* Solflare */}
           <WalletRow
             icon={<SolflareIcon />}
             name="Solflare"
             hint="Native Solana wallet"
-            tag={tagFor('solflare', hasSolflare)}
-            onClick={wrap(connectSolflare)}
+            tag={tagFor('solflare', walletStates.solflare)}
+            onClick={() => handleSolanaWallet('Solflare')}
             disabled={connecting}
-            loading={connecting && walletType === 'solflare'}
+            loading={connecting && solanaWallet.wallet?.adapter.name === 'Solflare'}
           />
 
+          {/* MetaMask */}
           <WalletRow
             icon={<MetaMaskIcon />}
             name="MetaMask"
-            hint={hasMetaMaskSolana ? 'MetaMask · Solana & EVM' : 'MetaMask · Ethereum & EVM'}
-            tag={tagFor('metamask', metaMaskInstalled)}
-            onClick={handleMetaMask}
+            hint="Ethereum & EVM · Solana optional"
+            tag={tagFor('metamask', walletStates.metamask)}
+            onClick={connectMetaMask}
             disabled={connecting}
-            loading={connecting && (walletType === 'metamask' || walletType === 'metamask-solana')}
+            loading={connecting}
           />
 
+          {/* Trust Wallet */}
           <WalletRow
             icon={<TrustWalletIcon />}
             name="Trust Wallet"
             hint="Multi-chain mobile wallet"
-            tag={tagFor('trustwallet', hasTrustWallet)}
-            onClick={wrap(connectTrustWallet)}
+            tag={tagFor('trustwallet', walletStates.trustwallet)}
+            onClick={() => handleSolanaWallet('Trust Wallet')}
             disabled={connecting}
-            loading={connecting && walletType === 'trustwallet'}
+            loading={connecting && solanaWallet.wallet?.adapter.name === 'Trust Wallet'}
           />
 
-          <WalletRow
-            icon={<JupiterIcon />}
-            name="Jupiter"
-            hint="Solana native wallet"
-            tag={tagFor('jupiter', hasJupiter)}
-            onClick={wrap(connectJupiter)}
-            disabled={connecting}
-            loading={connecting && walletType === 'jupiter'}
-          />
-
+          {/* WalletConnect */}
           <WalletRow
             icon={<WalletConnectIcon />}
             name="WalletConnect"
@@ -408,16 +337,6 @@ export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps)
             tag={undefined}
             onClick={() => window.open('https://walletconnect.com', '_blank')}
             disabled={connecting}
-          />
-
-          <WalletRow
-            icon={<MagicEdenIcon />}
-            name="Magic Eden"
-            hint="Multi-chain wallet by ME"
-            tag={tagFor('magiceden', hasMagicEden)}
-            onClick={wrap(connectMagicEden)}
-            disabled={connecting}
-            loading={connecting && walletType === 'magiceden'}
           />
 
         </div>
