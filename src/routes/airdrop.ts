@@ -3,6 +3,7 @@
 // ============================================================
 
 import express from 'express';
+import axios from 'axios';
 import { pool } from '../db/pool';
 import { snagSyncService } from '../services/snagSyncService';
 import { referralService, resolveReferralCode } from '../services/referralService';
@@ -103,6 +104,36 @@ router.get('/ref/:code', async (req, res) => {
   } catch (error) {
     console.error('[Airdrop] Error resolving ref code:', error);
     res.status(500).json({ error: 'Failed to resolve referral code' });
+  }
+});
+
+// ── GET /api/airdrop/loyalty-proxy ─────────────────────────────────────────
+// Proxy the external loyalty page for embedding (same-origin, no CORS issues)
+// This lets us embed it in iframe/modal without X-Frame-Options blocking us.
+// The external site may block direct iframe access, so we fetch server-side.
+router.get('/loyalty-proxy', async (_req, res) => {
+  try {
+    const loyaltyUrl = 'https://loyalty.shiftrwa.xyz/loyalty';
+    const response = await axios.get(loyaltyUrl, {
+      timeout: 15000,
+      headers: { 'User-Agent': 'Mozilla/5.0 (Shift Backend Proxy)' },
+    });
+
+    // Return with headers that allow embedding
+    res.set({
+      'Content-Type': 'text/html; charset=utf-8',
+      'X-Frame-Options': 'SAMEORIGIN',
+      'Cache-Control': 'public, max-age=300',
+    });
+
+    res.send(response.data);
+  } catch (error: any) {
+    console.error('[Airdrop] Loyalty proxy error:', error?.message);
+    res.status(503).json({
+      error: 'Failed to fetch loyalty page',
+      message: error?.message,
+      hint: 'Check if https://loyalty.shiftrwa.xyz/loyalty is accessible and returns HTML',
+    });
   }
 });
 

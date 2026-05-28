@@ -13,6 +13,17 @@ export declare class SnagSyncService {
     fullSync(): Promise<void>;
     syncAllXP(): Promise<void>;
     /**
+     * Debit XP from SNAG accounts (for early-sell claw-backs).
+     * Mirror of batchPushXP but uses direction: 'debit'.
+     */
+    batchDebitXP(entries: Array<{
+        wallet: string;
+        xpDelta: number;
+    }>): Promise<{
+        succeeded: string[];
+        failed: string[];
+    }>;
+    /**
      * Push XP entries to SNAG in batches via POST /api/loyalty/transactions.
      * Uses idempotency keys to prevent double-crediting on retry.
      */

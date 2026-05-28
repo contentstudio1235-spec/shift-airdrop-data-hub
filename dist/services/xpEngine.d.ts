@@ -7,7 +7,8 @@ export declare class XPEngine {
     calculatePositionMultiplier(weeksOpen: number, assetMint?: string | null): number;
     /**
      * Weekly XP for a single position (includes launch event multiplier).
-     * weekly_position_XP = log₁₀(max(position_size_USD, 10)) × 100 × position_multiplier × launch_multiplier
+     * weekly_position_XP = log₁₀(position_size_USD) × 100 × position_multiplier × launch_multiplier
+     * Returns 0 for positions under $1 (log₁₀ is negative below $1 which would subtract XP).
      */
     calculateWeeklyXP(positionSizeUSD: number, multiplier: number, launchMultiplier?: number): number;
     /**

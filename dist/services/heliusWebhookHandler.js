@@ -73,6 +73,8 @@ class HeliusWebhookHandler {
         let assetMint = null;
         let assetAmount = 0;
         let direction = 'buy';
+        // USD value derived from stablecoin side of the swap (more reliable than pricing RWA tokens)
+        let stablecoinUsdValue = null;
         // Check outputs first (what user received = buy)
         for (const output of tokenOutputs) {
             if (!STABLECOIN_MINTS.has(output.mint)) {
@@ -80,6 +82,23 @@ class HeliusWebhookHandler {
                 assetAmount = parseFloat(output.rawTokenAmount.tokenAmount) / Math.pow(10, output.rawTokenAmount.decimals);
                 direction = 'buy';
                 break;
+            }
+        }
+        // On a buy, extract the stablecoin INPUT amount as the USD position size
+        // This is far more reliable than trying to price the RWA token via Jupiter
+        if (direction === 'buy' && assetMint) {
+            for (const input of tokenInputs) {
+                if (STABLECOIN_MINTS.has(input.mint)) {
+                    const decimals = input.rawTokenAmount?.decimals ?? 6;
+                    stablecoinUsdValue = parseFloat(input.rawTokenAmount.tokenAmount) / Math.pow(10, decimals);
+                    break;
+                }
+            }
+            // Fallback: SOL native input → fetch SOL price
+            if (stablecoinUsdValue === null && swap.nativeInput) {
+                const solAmount = parseFloat(swap.nativeInput.amount) / 1e9;
+                const solPrice = await jupiterPriceService_1.jupiterPriceService.getPrice('So11111111111111111111111111111111111111112');
+                stablecoinUsdValue = solAmount * (solPrice ?? 0);
             }
         }
         // If no non-stable output, check inputs (what user sent = sell)
@@ -110,7 +129,7 @@ class HeliusWebhookHandler {
         }
         const assetSymbol = jupiterPriceService_1.jupiterPriceService.getSymbol(assetMint);
         if (direction === 'buy') {
-            await this.handleBuy(wallet, assetSymbol, assetMint, assetAmount, signature, timestamp);
+            await this.handleBuy(wallet, assetSymbol, assetMint, assetAmount, signature, timestamp, stablecoinUsdValue ?? undefined);
         }
         else {
             await this.handleSell(wallet, assetSymbol, signature, timestamp);
@@ -141,12 +160,21 @@ class HeliusWebhookHandler {
     }
     /**
      * Handle a buy (open position).
+     * precomputedUsdValue: stablecoin amount paid (preferred over Jupiter pricing for RWA tokens)
      */
-    async handleBuy(wallet, asset, assetMint, tokenAmount, txSignature, timestamp) {
-        // Get USD price from Jupiter
-        const priceData = await jupiterPriceService_1.jupiterPriceService.calculateUSDValue(assetMint, tokenAmount);
-        const positionSizeUSD = priceData?.usdValue || 0;
-        const priceAtOpen = priceData?.price || null;
+    async handleBuy(wallet, asset, assetMint, tokenAmount, txSignature, timestamp, precomputedUsdValue) {
+        // Prefer the stablecoin input amount — Jupiter cannot price most RWA tokens
+        let positionSizeUSD = precomputedUsdValue ?? 0;
+        let priceAtOpen = null;
+        if (!positionSizeUSD) {
+            // Fallback: try Jupiter pricing (works for SOL, SOL-paired tokens)
+            const priceData = await jupiterPriceService_1.jupiterPriceService.calculateUSDValue(assetMint, tokenAmount);
+            positionSizeUSD = priceData?.usdValue || 0;
+            priceAtOpen = priceData?.price || null;
+        }
+        else {
+            priceAtOpen = tokenAmount > 0 ? positionSizeUSD / tokenAmount : null;
+        }
         // Anti-farm check
         const farmCheck = await antiFarmService_1.antiFarmService.shouldFilter(wallet, asset, positionSizeUSD, timestamp);
         if (farmCheck.filtered) {

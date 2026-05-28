@@ -114,21 +114,31 @@ class SnagSyncService {
               COALESCE(s.last_synced_xp, 0) as last_synced_xp
        FROM users u
        LEFT JOIN xp_sync_log s ON u.wallet = s.wallet`);
+        // Handle both credits (positive delta) and debits (claw-backs from early sell)
         const entriesToSync = users
             .map(u => ({
             wallet: u.wallet,
             xpDelta: Number(u.total_xp) - Number(u.last_synced_xp || 0),
             currentXP: Number(u.total_xp),
         }))
-            .filter(e => e.xpDelta > 0);
+            .filter(e => e.xpDelta !== 0);
         if (entriesToSync.length === 0) {
             console.log('[SnagSync] No XP deltas to sync');
             return;
         }
-        console.log(`[SnagSync] Syncing XP for ${entriesToSync.length} users...`);
-        const { succeeded } = await this.batchPushXP(entriesToSync);
-        // Update sync log only for wallets that succeeded
-        for (const wallet of succeeded) {
+        // Split into credits and debits
+        const credits = entriesToSync.filter(e => e.xpDelta > 0);
+        const debits = entriesToSync.filter(e => e.xpDelta < 0);
+        console.log(`[SnagSync] Syncing XP: ${credits.length} credits, ${debits.length} debits`);
+        const { succeeded: creditSucceeded } = credits.length > 0
+            ? await this.batchPushXP(credits)
+            : { succeeded: [] };
+        const { succeeded: debitSucceeded } = debits.length > 0
+            ? await this.batchDebitXP(debits)
+            : { succeeded: [] };
+        const allSucceeded = [...creditSucceeded, ...debitSucceeded];
+        // Update sync log for succeeded wallets
+        for (const wallet of allSucceeded) {
             const entry = entriesToSync.find(e => e.wallet === wallet);
             try {
                 await (0, pool_1.execute)(`INSERT INTO xp_sync_log (wallet, last_synced_xp, last_synced_at)
@@ -139,7 +149,46 @@ class SnagSyncService {
                 console.error('[SnagSync] Failed to update xp_sync_log:', err);
             }
         }
-        console.log(`[SnagSync] XP sync: ${succeeded.length}/${entriesToSync.length} succeeded`);
+        console.log(`[SnagSync] XP sync: ${allSucceeded.length}/${entriesToSync.length} succeeded`);
+    }
+    /**
+     * Debit XP from SNAG accounts (for early-sell claw-backs).
+     * Mirror of batchPushXP but uses direction: 'debit'.
+     */
+    async batchDebitXP(entries) {
+        if (!this.checkCircuit() || !config_1.config.snagLoyaltyCurrencyId) {
+            return { succeeded: [], failed: entries.map(e => e.wallet) };
+        }
+        const batchId = `debit-${Date.now()}`;
+        const succeeded = [];
+        const failed = [];
+        for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+            const chunk = entries.slice(i, i + BATCH_SIZE);
+            try {
+                await this.client.post('/api/loyalty/transactions', {
+                    websiteId: config_1.config.snagWebsiteId,
+                    organizationId: config_1.config.snagOrganizationId,
+                    description: `SHIFT early-sell XP claw-back — ${batchId}`,
+                    entries: chunk.map((e, idx) => ({
+                        walletAddress: e.wallet,
+                        loyaltyCurrencyId: config_1.config.snagLoyaltyCurrencyId,
+                        direction: 'debit',
+                        amount: Math.ceil(Math.abs(e.xpDelta)),
+                        idempotencyKey: `${batchId}-${i + idx}`.slice(0, 32),
+                    })),
+                });
+                this.recordSuccess();
+                succeeded.push(...chunk.map(e => e.wallet));
+                console.log(`[SnagSync] 📉 Debit batch pushed ${chunk.length} claw-backs`);
+            }
+            catch (error) {
+                this.recordFailure();
+                const errMsg = error?.response?.data ? JSON.stringify(error.response.data) : error.message;
+                console.error(`[SnagSync] ❌ Debit batch failed:`, errMsg);
+                failed.push(...chunk.map(e => e.wallet));
+            }
+        }
+        return { succeeded, failed };
     }
     /**
      * Push XP entries to SNAG in batches via POST /api/loyalty/transactions.
@@ -501,27 +550,23 @@ class SnagSyncService {
         if (!config_1.config.snagApiKey || !config_1.config.snagWebsiteId)
             return 0;
         try {
-            let user = await (0, pool_1.queryOne)('SELECT snag_user_id FROM users WHERE wallet = $1', [wallet]);
-            let snagUserId = user?.snag_user_id;
-            if (!snagUserId) {
-                const searchResponse = await this.client.get('/api/loyalty/accounts', {
-                    params: {
-                        websiteId: config_1.config.snagWebsiteId,
-                        walletAddress: wallet,
-                        limit: 1,
-                    },
-                });
-                const foundAccount = searchResponse.data?.data?.[0];
-                if (foundAccount) {
-                    snagUserId = foundAccount.id;
-                    await (0, pool_1.execute)('UPDATE users SET snag_user_id = $1 WHERE wallet = $2', [snagUserId, wallet]);
+            // Always search by walletAddress — SNAG account search returns the balance in `amount`
+            const searchResponse = await this.client.get('/api/loyalty/accounts', {
+                params: {
+                    websiteId: config_1.config.snagWebsiteId,
+                    walletAddress: wallet,
+                    limit: 1,
+                },
+            });
+            const foundAccount = searchResponse.data?.data?.[0];
+            if (foundAccount) {
+                // Cache snag_user_id for other calls
+                if (foundAccount.id) {
+                    await (0, pool_1.execute)(`UPDATE users SET snag_user_id = $1 WHERE wallet = $2 AND (snag_user_id IS NULL OR snag_user_id != $1)`, [foundAccount.id, wallet]).catch(() => { }); // non-fatal
                 }
-            }
-            if (snagUserId) {
-                const response = await this.client.get(`/api/loyalty/accounts/${snagUserId}`, {
-                    params: { websiteId: config_1.config.snagWebsiteId },
-                });
-                return response.data?.points || 0;
+                // SNAG returns balance as `amount` in the account search result
+                const points = Number(foundAccount.amount ?? foundAccount.points ?? foundAccount.balance ?? 0);
+                return isNaN(points) ? 0 : points;
             }
         }
         catch (error) {

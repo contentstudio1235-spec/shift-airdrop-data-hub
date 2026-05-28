@@ -7,6 +7,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
+const axios_1 = __importDefault(require("axios"));
 const pool_1 = require("../db/pool");
 const snagSyncService_1 = require("../services/snagSyncService");
 const referralService_1 = require("../services/referralService");
@@ -25,7 +26,8 @@ router.get('/user/:wallet', async (req, res) => {
          u.permanent_multiplier, u.dynamic_multiplier,
          u.referral_code, u.referred_by_wallet, u.referred_by_code,
          u.invite_bonus_xp,
-         ROW_NUMBER() OVER (ORDER BY u.created_at ASC) as queue_position
+         -- Count wallets registered before this one + 1 to get true queue position
+         (SELECT COUNT(*) + 1 FROM users WHERE created_at < u.created_at) as queue_position
        FROM users u
        WHERE u.wallet = $1`, [wallet]);
         const user = userQuery.rows[0];
@@ -89,6 +91,34 @@ router.get('/ref/:code', async (req, res) => {
     catch (error) {
         console.error('[Airdrop] Error resolving ref code:', error);
         res.status(500).json({ error: 'Failed to resolve referral code' });
+    }
+});
+// ── GET /api/airdrop/loyalty-proxy ─────────────────────────────────────────
+// Proxy the external loyalty page for embedding (same-origin, no CORS issues)
+// This lets us embed it in iframe/modal without X-Frame-Options blocking us.
+// The external site may block direct iframe access, so we fetch server-side.
+router.get('/loyalty-proxy', async (_req, res) => {
+    try {
+        const loyaltyUrl = 'https://loyalty.shiftrwa.xyz/loyalty';
+        const response = await axios_1.default.get(loyaltyUrl, {
+            timeout: 15000,
+            headers: { 'User-Agent': 'Mozilla/5.0 (Shift Backend Proxy)' },
+        });
+        // Return with headers that allow embedding
+        res.set({
+            'Content-Type': 'text/html; charset=utf-8',
+            'X-Frame-Options': 'SAMEORIGIN',
+            'Cache-Control': 'public, max-age=300',
+        });
+        res.send(response.data);
+    }
+    catch (error) {
+        console.error('[Airdrop] Loyalty proxy error:', error?.message);
+        res.status(503).json({
+            error: 'Failed to fetch loyalty page',
+            message: error?.message,
+            hint: 'Check if https://loyalty.shiftrwa.xyz/loyalty is accessible and returns HTML',
+        });
     }
 });
 // ── GET /api/airdrop/referrals/:wallet ────────────────────────────────────

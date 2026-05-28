@@ -20,8 +20,9 @@ export declare class WalletSyncService {
     private replayTransactionHistory;
     private processTx;
     /**
-     * Extract the SHIFT token being bought or sold from an enhanced tx.
-     * Handles both structured swap events and raw token transfer fallback.
+     * Extract the SHIFT token being bought or sold from an enhanced tx,
+     * plus the USD value derived from the stablecoin side of the swap.
+     * Using stablecoin input is more reliable than pricing RWA tokens via Jupiter.
      */
     private extractShiftToken;
     private backfillLiveHoldings;

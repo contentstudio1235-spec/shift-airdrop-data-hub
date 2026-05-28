@@ -6,7 +6,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.xpEngine = exports.XPEngine = void 0;
 const pool_1 = require("../db/pool");
 const positionService_1 = require("./positionService");
-const antiFarmService_1 = require("./antiFarmService");
 const realtimeSnagSyncService_1 = require("./realtimeSnagSyncService");
 const tokens_1 = require("../config/tokens");
 const launchMultipliers_1 = require("../config/launchMultipliers");
@@ -24,10 +23,13 @@ class XPEngine {
     }
     /**
      * Weekly XP for a single position (includes launch event multiplier).
-     * weekly_position_XP = log₁₀(max(position_size_USD, 10)) × 100 × position_multiplier × launch_multiplier
+     * weekly_position_XP = log₁₀(position_size_USD) × 100 × position_multiplier × launch_multiplier
+     * Returns 0 for positions under $1 (log₁₀ is negative below $1 which would subtract XP).
      */
     calculateWeeklyXP(positionSizeUSD, multiplier, launchMultiplier = 1.0) {
-        return Math.log10(Math.max(positionSizeUSD, 10)) * 100 * multiplier * launchMultiplier;
+        if (positionSizeUSD < 1)
+            return 0; // log₁₀(x) < 0 for x < 1 → would reduce XP
+        return Math.log10(positionSizeUSD) * 100 * multiplier * launchMultiplier;
     }
     /**
      * Calculate XP earned since last calculation for a position.
@@ -60,19 +62,20 @@ class XPEngine {
         // 2. Process each position
         const walletXPDeltas = new Map();
         for (const position of openPositions) {
-            // Skip positions under minimum hold
-            if (antiFarmService_1.antiFarmService.isUnderMinHold(position.opened_at, now)) {
-                continue;
-            }
-            // Calculate age
+            // XP accrues from the moment of purchase (on-chain tx timestamp in opened_at).
+            // No minimum hold gate — the claw-back on early sell (<24h) is handled at closePosition().
+            // Late connectors get retroactive XP: when last_xp_calc is NULL, we calculate
+            // from opened_at to now, giving them all earned XP in one shot.
+            // Calculate age from on-chain open time
             const { weeks } = positionService_1.positionService.getPositionAge(position.opened_at, now);
             // Calculate multiplier (with RWA token bonus if applicable)
             const multiplier = this.calculatePositionMultiplier(weeks, position.asset_mint);
-            // Calculate hours since last XP calc (or since opened)
+            // Calculate hours since last XP calc (or since opened — retroactive for new syncs)
             const lastCalc = position.last_xp_calc ? new Date(position.last_xp_calc) : new Date(position.opened_at);
             const hoursSinceLastCalc = (now.getTime() - lastCalc.getTime()) / (1000 * 60 * 60);
-            // Skip if less than 0.5 hours since last calc
-            if (hoursSinceLastCalc < 0.5)
+            // Throttle to max once per 30 min to avoid micro-updates (except first-time / retroactive)
+            const isFirstCalc = !position.last_xp_calc;
+            if (!isFirstCalc && hoursSinceLastCalc < 0.5)
                 continue;
             // Calculate new XP earned (now includes launch event multiplier)
             const xpDelta = this.calculateXPSinceLastCalc(Number(position.position_size_usd), multiplier, hoursSinceLastCalc, launchMultiplier);

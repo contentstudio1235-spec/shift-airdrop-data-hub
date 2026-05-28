@@ -23,7 +23,14 @@
       "Bash(killall node *)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(grep -E \"\\\\.\\(tsx|ts|jsx\\)$\")"
+      "Bash(grep -E \"\\\\.\\(tsx|ts|jsx\\)$\")",
+      "Bash(curl -sI https://loyalty.shiftrwa.xyz/loyalty)",
+      "Bash(Start-Sleep -Seconds 5)",
+      "Bash(netstat -ano)",
+      "Bash(Select-String \"3000\")",
+      "Bash(Select-Object -First 1)",
+      "Bash(curl -s \"https://shift-airdrop-backend.onrender.com/api/leaderboard?limit=10\")",
+      "Bash(python3 -c ' *)"
     ]
   }
 }

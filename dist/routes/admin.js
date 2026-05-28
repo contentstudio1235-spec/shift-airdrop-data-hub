@@ -40,6 +40,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
+const axios_1 = __importDefault(require("axios"));
+const config_1 = require("../config");
 const snagSyncService_1 = require("../services/snagSyncService");
 const referralService_1 = require("../services/referralService");
 const holdingService_1 = require("../services/holdingService");
@@ -1458,6 +1460,397 @@ router.post('/force-badge-check', verifyAdminSecret, async (req, res) => {
     catch (error) {
         console.error('[Admin] Failed to run badge check:', error);
         res.status(500).json({ error: 'Failed to run badge check' });
+    }
+});
+/**
+ * POST /api/admin/wallet-resync/:wallet
+ * Re-syncs a wallet's transaction history and fixes $0 position sizes
+ * by re-reading stablecoin amounts from Helius enhanced transactions.
+ * Also forces an immediate XP recalculation for that wallet.
+ */
+const walletSyncService_1 = require("../services/walletSyncService");
+const xpEngine_1 = require("../services/xpEngine");
+router.post('/wallet-resync/:wallet', verifyAdminSecret, async (req, res) => {
+    const wallet = req.params.wallet;
+    try {
+        console.log(`[Admin] Re-syncing wallet: ${wallet}`);
+        const startTime = Date.now();
+        // Step 1: Run the wallet sync (replays tx history with correct USD values)
+        const syncResult = await walletSyncService_1.walletSyncService.syncWallet(wallet);
+        // Step 2: Force XP recalculation
+        const xpResult = await xpEngine_1.xpEngine.recalculateAllXP();
+        // Step 3: Get updated totals
+        const user = await pool_1.pool.query('SELECT total_xp, claim_multiplier FROM users WHERE wallet = $1', [wallet]);
+        const positions = await pool_1.pool.query(`SELECT asset, position_size_usd, status FROM positions WHERE wallet = $1 ORDER BY opened_at DESC`, [wallet]);
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        res.json({
+            success: true,
+            wallet,
+            duration: `${duration}s`,
+            syncResult,
+            xpResult,
+            currentStats: {
+                totalXp: user.rows[0]?.total_xp ?? 0,
+                claimMultiplier: user.rows[0]?.claim_multiplier ?? 1.0,
+                positions: positions.rows,
+            },
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Wallet re-sync failed:', error);
+        res.status(500).json({ error: 'Wallet re-sync failed', message: error instanceof Error ? error.message : 'Unknown error' });
+    }
+});
+/**
+ * POST /api/admin/fix-zero-positions
+ * Fixes all positions with position_size_usd = 0 by setting a minimum
+ * floor of $10 so XP accumulation can start immediately.
+ * NOTE: A proper fix requires walletSync per wallet to get real amounts.
+ */
+router.post('/fix-zero-positions', verifyAdminSecret, async (req, res) => {
+    try {
+        const result = await pool_1.pool.query(`UPDATE positions
+       SET position_size_usd = 10, updated_at = NOW()
+       WHERE position_size_usd = 0 AND status = 'open'
+       RETURNING id, wallet, asset`);
+        // Force XP recalculation after fixing sizes
+        await xpEngine_1.xpEngine.recalculateAllXP();
+        res.json({
+            success: true,
+            fixed: result.rows.length,
+            positions: result.rows,
+            message: `Fixed ${result.rows.length} positions with $0 size. XP recalculation triggered.`,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Fix zero positions failed:', error);
+        res.status(500).json({ error: 'Failed to fix zero positions' });
+    }
+});
+/**
+ * POST /api/admin/fix-undersized-positions
+ * Bulk-fix wallets whose open positions were stored with position_size_usd < $1
+ * due to the Jupiter multi-hop USDC extraction bug (took first input instead of summing all).
+ * For each affected wallet: clears processed_transactions, deletes open positions, re-syncs.
+ */
+router.post('/fix-undersized-positions', verifyAdminSecret, async (req, res) => {
+    try {
+        // Find all distinct wallets with open positions under $1 (but > 0, to skip truly empty)
+        const affected = await pool_1.pool.query(`SELECT DISTINCT wallet FROM positions
+       WHERE status = 'open' AND position_size_usd > 0 AND position_size_usd < 1`);
+        const wallets = affected.rows.map((r) => r.wallet);
+        const results = [];
+        console.log(`[Admin] fix-undersized-positions: found ${wallets.length} affected wallets`);
+        for (const wallet of wallets) {
+            try {
+                // Get tx signatures for open positions of this wallet
+                const openPos = await pool_1.pool.query(`SELECT tx_signature_open FROM positions WHERE wallet = $1 AND status = 'open'`, [wallet]);
+                const sigs = openPos.rows.map((r) => r.tx_signature_open).filter(Boolean);
+                // Clear processed_transactions so they get re-replayed
+                if (sigs.length > 0) {
+                    await pool_1.pool.query(`DELETE FROM processed_transactions WHERE tx_signature = ANY($1)`, [sigs]);
+                }
+                // Delete open positions
+                await pool_1.pool.query(`DELETE FROM positions WHERE wallet = $1 AND status = 'open'`, [wallet]);
+                // Re-sync from Helius
+                const syncResult = await walletSyncService_1.walletSyncService.syncWallet(wallet);
+                results.push({ wallet: wallet.slice(0, 8) + '…', positionsCreated: syncResult.positionsCreated });
+                console.log(`[Admin] Re-synced ${wallet.slice(0, 8)}… → ${syncResult.positionsCreated} positions`);
+            }
+            catch (err) {
+                results.push({ wallet: wallet.slice(0, 8) + '…', error: err?.message });
+            }
+        }
+        // Trigger XP recalculation
+        const xpResult = await xpEngine_1.xpEngine.recalculateAllXP();
+        res.json({
+            success: true,
+            walletsFixed: wallets.length,
+            results,
+            xpResult,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] fix-undersized-positions failed:', error);
+        res.status(500).json({ error: 'Failed to fix undersized positions' });
+    }
+});
+/**
+ * POST /api/admin/force-resync/:wallet
+ * Properly re-syncs a wallet by:
+ * 1. Clearing processed_transactions for its open position tx signatures
+ * 2. Deleting its open positions
+ * 3. Re-running walletSyncService.syncWallet() with the fixed USDC extraction
+ * This gets the correct position sizes from USDC swap inputs instead of $0.
+ */
+router.post('/force-resync/:wallet', verifyAdminSecret, async (req, res) => {
+    const wallet = req.params.wallet;
+    try {
+        console.log(`[Admin] Force re-sync for wallet: ${wallet}`);
+        const startTime = Date.now();
+        // Step 1: Get open position tx signatures for this wallet
+        const openTxs = await pool_1.pool.query(`SELECT tx_signature_open FROM positions
+       WHERE wallet = $1 AND status = 'open' AND tx_signature_open IS NOT NULL`, [wallet]);
+        const signatures = openTxs.rows.map((r) => r.tx_signature_open);
+        // Step 2: Remove those tx signatures from processed_transactions so they can be re-played
+        if (signatures.length > 0) {
+            await pool_1.pool.query(`DELETE FROM processed_transactions WHERE tx_signature = ANY($1::text[])`, [signatures]);
+        }
+        // Step 3: Delete open positions for this wallet (will be re-created by sync)
+        const deletedPositions = await pool_1.pool.query(`DELETE FROM positions WHERE wallet = $1 AND status = 'open' RETURNING id, asset`, [wallet]);
+        // Step 4: Re-sync wallet — will replay tx history with correct USDC extraction
+        const syncResult = await walletSyncService_1.walletSyncService.syncWallet(wallet);
+        // Step 5: Force XP recalculation
+        const xpResult = await xpEngine_1.xpEngine.recalculateAllXP();
+        // Step 6: Get updated stats
+        const user = await pool_1.pool.query('SELECT total_xp, claim_multiplier FROM users WHERE wallet = $1', [wallet]);
+        const positions = await pool_1.pool.query(`SELECT asset, position_size_usd, status, opened_at FROM positions
+       WHERE wallet = $1 ORDER BY opened_at DESC LIMIT 20`, [wallet]);
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        res.json({
+            success: true,
+            wallet,
+            duration: `${duration}s`,
+            clearedTxs: signatures.length,
+            deletedPositions: deletedPositions.rows.length,
+            syncResult,
+            xpResult,
+            currentStats: {
+                totalXp: user.rows[0]?.total_xp ?? 0,
+                claimMultiplier: user.rows[0]?.claim_multiplier ?? 1.0,
+                positions: positions.rows,
+            },
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Force re-sync failed:', error);
+        res.status(500).json({ error: 'Force re-sync failed', message: error instanceof Error ? error.message : 'Unknown error' });
+    }
+});
+/**
+ * POST /api/admin/snag-sync
+ * Triggers a full SNAG production sync immediately and returns diagnostic info.
+ * Useful to verify SNAG_API_KEY + SNAG_LOYALTY_CURRENCY_ID are working.
+ */
+router.post('/snag-sync', verifyAdminSecret, async (req, res) => {
+    try {
+        const startTime = Date.now();
+        console.log('[Admin] Manual SNAG sync triggered');
+        // Config check
+        const snagConfigured = !!(config_1.config.snagApiKey && config_1.config.snagLoyaltyCurrencyId);
+        if (!snagConfigured) {
+            return res.status(400).json({
+                success: false,
+                error: 'SNAG not fully configured',
+                snagApiKey: config_1.config.snagApiKey ? '✅ set' : '❌ missing',
+                snagLoyaltyCurrencyId: config_1.config.snagLoyaltyCurrencyId ? '✅ set' : '❌ missing',
+            });
+        }
+        await snagSyncService_1.snagSyncService.fullSync();
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        res.json({
+            success: true,
+            message: 'SNAG full sync completed',
+            duration: `${duration}s`,
+            snagApiKey: '✅ set',
+            snagLoyaltyCurrencyId: '✅ set',
+            snagBaseUrl: config_1.config.snagBaseUrl,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] SNAG sync failed:', error);
+        res.status(500).json({
+            success: false,
+            error: 'SNAG sync failed',
+            message: error instanceof Error ? error.message : 'Unknown error',
+        });
+    }
+});
+/**
+ * GET /api/admin/snag-config
+ * Returns SNAG config status (keys masked) — quick health check.
+ */
+router.get('/snag-config', verifyAdminSecret, async (_req, res) => {
+    res.json({
+        snagApiKey: config_1.config.snagApiKey ? `${config_1.config.snagApiKey.slice(0, 8)}…` : '❌ not set',
+        snagLoyaltyCurrencyId: config_1.config.snagLoyaltyCurrencyId ? `${config_1.config.snagLoyaltyCurrencyId.slice(0, 8)}…` : '❌ not set',
+        snagBaseUrl: config_1.config.snagBaseUrl || '❌ not set',
+        orgId: config_1.config.snagOrganizationId ? `${config_1.config.snagOrganizationId.slice(0, 8)}…` : '❌ not set',
+        websiteId: config_1.config.snagWebsiteId ? `${config_1.config.snagWebsiteId.slice(0, 8)}…` : '❌ not set',
+    });
+});
+/**
+ * POST /api/admin/snag-reset-sync-log/:wallet
+ * Resets xp_sync_log for a wallet to 0, forcing the next full sync to push
+ * the complete total_xp as a single transaction to SNAG (rebuilds balance).
+ */
+router.post('/snag-reset-sync-log/:wallet', verifyAdminSecret, async (req, res) => {
+    const wallet = req.params.wallet;
+    try {
+        await pool_1.pool.query(`DELETE FROM xp_sync_log WHERE wallet = $1`, [wallet]);
+        const user = await pool_1.pool.query('SELECT total_xp FROM users WHERE wallet = $1', [wallet]);
+        res.json({
+            success: true,
+            message: `Sync log cleared for ${wallet}. Next snag-sync will push full total_xp.`,
+            total_xp: user.rows[0]?.total_xp ?? 0,
+        });
+    }
+    catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+/**
+ * GET /api/admin/snag-probe/:wallet
+ * Directly queries SNAG production API for a wallet — raw response,
+ * shows exactly what SNAG knows about the user and whether transactions landed.
+ */
+router.get('/snag-probe/:wallet', verifyAdminSecret, async (req, res) => {
+    const wallet = req.params.wallet;
+    try {
+        const axios = (await Promise.resolve().then(() => __importStar(require('axios')))).default;
+        const client = axios.create({
+            baseURL: config_1.config.snagBaseUrl,
+            headers: { 'x-api-key': config_1.config.snagApiKey, 'Content-Type': 'application/json' },
+            timeout: 10000,
+        });
+        // 1. Look up the account in SNAG
+        const accountSearch = await client.get('/api/loyalty/accounts', {
+            params: { websiteId: config_1.config.snagWebsiteId, walletAddress: wallet, limit: 1 },
+        }).catch(e => ({ data: null, error: e?.response?.data || e.message }));
+        const account = accountSearch.data?.data?.[0];
+        // 2. If found, get their full balance
+        let balance = null;
+        let balanceRaw = null;
+        if (account?.id) {
+            const balRes = await client.get(`/api/loyalty/accounts/${account.id}`, {
+                params: { websiteId: config_1.config.snagWebsiteId },
+            }).catch(e => ({ data: null, error: e?.response?.data || e.message }));
+            balanceRaw = balRes.data;
+            balance = balanceRaw?.points ?? balanceRaw?.loyaltyBalance ?? balanceRaw?.balance;
+        }
+        // 3. Get recent transactions for this wallet
+        const txSearch = account?.id
+            ? await client.get('/api/loyalty/transactions', {
+                params: { websiteId: config_1.config.snagWebsiteId, accountId: account.id, limit: 5 },
+            }).catch(e => ({ data: null, error: e?.response?.data || e.message }))
+            : null;
+        res.json({
+            wallet,
+            snagAccount: account || null,
+            pointsBalance: balance,
+            balanceRawFields: balanceRaw ? Object.keys(balanceRaw) : null,
+            recentTransactions: txSearch?.data?.data || [],
+            accountSearchError: !accountSearch.data ? accountSearch.error : null,
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            error: 'SNAG probe failed',
+            message: error?.response?.data || error.message,
+        });
+    }
+});
+// ── On-Chain Holders ─────────────────────────────────────────────────────────
+// Simple in-memory cache: refreshed at most every 5 minutes
+let holdersCache = null;
+const HOLDERS_CACHE_TTL_MS = 5 * 60 * 1000;
+/**
+ * Fetch all token account owners for a single mint via Helius DAS `getTokenAccounts`.
+ * Paginates automatically (1000 per page) and filters zero-balance accounts.
+ * Returns a Set of owner wallet addresses.
+ */
+async function fetchMintOwners(mint, heliusApiKey) {
+    const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`;
+    const owners = new Set();
+    let page = 1;
+    while (true) {
+        const resp = await axios_1.default.post(rpcUrl, {
+            jsonrpc: '2.0',
+            id: `holders-${mint.slice(0, 8)}-p${page}`,
+            method: 'getTokenAccounts',
+            params: { mint, limit: 1000, page },
+        }, { timeout: 20_000 });
+        const accounts = resp.data?.result?.token_accounts ?? [];
+        if (accounts.length === 0)
+            break;
+        for (const acct of accounts) {
+            // Only count accounts that actually hold tokens (amount > 0)
+            if (acct.owner && Number(acct.amount) > 0) {
+                owners.add(acct.owner);
+            }
+        }
+        // If fewer than 1000 returned, we've hit the last page
+        if (accounts.length < 1000)
+            break;
+        page++;
+    }
+    return owners;
+}
+/**
+ * GET /api/admin/onchain-holders
+ * Returns live on-chain holder counts for each of the 6 SHIFT trading tokens
+ * plus the total unique wallet count across all tokens.
+ * Results are cached for 5 minutes to avoid rate-limiting Helius.
+ * Pass ?force=1 to bypass cache and re-fetch immediately.
+ */
+router.get('/onchain-holders', verifyAdminSecret, async (req, res) => {
+    try {
+        // Return cached data if fresh enough (and not forcing refresh)
+        const forceRefresh = req.query.force === '1';
+        if (!forceRefresh && holdersCache && Date.now() - holdersCache.fetchedAt < HOLDERS_CACHE_TTL_MS) {
+            return res.json({ ...holdersCache.data, cached: true });
+        }
+        if (!config_1.config.heliusApiKey) {
+            return res.status(503).json({ error: 'Helius API key not configured' });
+        }
+        // Tokens to check (the 6 SHIFT trading assets — excludes governance SHIFT token)
+        const TRADING_TOKENS = [
+            { symbol: 'TSL2L', name: 'Shift Tesla 2x Long', mint: '6afjZE5Qv9WF5K1adBgTxtWyenJ7ZerH6BVAzmoSHFT' },
+            { symbol: 'TSL1S', name: 'Shift Tesla 1x Short', mint: 'bNPXng6hSVas7LWiNQyvpGcPYtY1ZmFY6WP49ymSHFT' },
+            { symbol: 'SOX3L', name: 'Shift Semiconductor 3x Long', mint: 'Hyhxfb6riaqCV333GynmnCXCEQK3goTznFj7k4dSHFT' },
+            { symbol: 'SOX3S', name: 'Shift Semiconductor 3x Short', mint: '7GoxZQ7gCh1mg1b3AUqd7cyPqiUp4y2NRxM9A5zSHFT' },
+            { symbol: 'SPX3S', name: 'Shift S&P500 3x Short', mint: '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT' },
+            { symbol: 'SPX3L', name: 'Shift S&P500 3x Long', mint: '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT' },
+        ];
+        // Fetch all token holders in parallel
+        const ownerSets = await Promise.all(TRADING_TOKENS.map(async (token) => {
+            try {
+                const owners = await fetchMintOwners(token.mint, config_1.config.heliusApiKey);
+                return { token, owners, error: undefined };
+            }
+            catch (err) {
+                console.warn(`[Admin] onchain-holders fetch failed for ${token.symbol}:`, err?.message);
+                return { token, owners: new Set(), error: err?.message };
+            }
+        }));
+        // Build per-token stats
+        const tokens = ownerSets.map(({ token, owners, error }) => ({
+            symbol: token.symbol,
+            name: token.name,
+            mint: token.mint,
+            holders: owners.size,
+            ...(error ? { error } : {}),
+        }));
+        // Compute unique holders across ALL tokens (set union)
+        const allOwners = new Set();
+        for (const { owners } of ownerSets) {
+            for (const o of owners)
+                allOwners.add(o);
+        }
+        const payload = {
+            tokens,
+            uniqueHolders: allOwners.size,
+            totalHolderSlots: tokens.reduce((sum, t) => sum + t.holders, 0),
+            fetchedAt: new Date().toISOString(),
+        };
+        // Cache it
+        holdersCache = { data: payload, fetchedAt: Date.now() };
+        console.log(`[Admin] onchain-holders: ${payload.uniqueHolders} unique across ${tokens.map(t => `${t.symbol}=${t.holders}`).join(', ')}`);
+        res.json({ ...payload, cached: false });
+    }
+    catch (error) {
+        console.error('[Admin] onchain-holders failed:', error);
+        res.status(500).json({ error: 'Failed to fetch on-chain holders', message: error?.message });
     }
 });
 exports.default = router;

@@ -17,7 +17,7 @@ import { fetchDashboard, fetchPositions, fetchPositionHistory, fetchBadges, fetc
 import { mergeBadges } from '@/lib/badges';
 import type { DashboardResponse, Position, HistoryPosition, ShiftEvent } from '@/lib/types';
 
-type MainTab = 'Holdings' | 'History' | 'Badges' | 'Events';
+type MainTab = 'Holdings' | 'History' | 'Badges' | 'Events' | 'Loyalty';
 type BadgeSub = 'Activity' | 'Events';
 
 const FAQ = [
@@ -268,7 +268,7 @@ export default function AirdropPage() {
             {/* Tab bar */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div className="text-tabs">
-                {(['Holdings', 'History', 'Badges', 'Events'] as MainTab[]).map((t) => (
+                {(['Holdings', 'History', 'Badges', 'Events', 'Loyalty'] as MainTab[]).map((t) => (
                   <button
                     key={t}
                     className={tab === t ? 'active' : ''}
@@ -604,6 +604,25 @@ export default function AirdropPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Loyalty tab — embedded iframe to loyalty dashboard */}
+            {tab === 'Loyalty' && (
+              <div className="card" style={{ padding: 0, overflow: 'hidden', minHeight: '600px' }}>
+                <iframe
+                  src={`${process.env.NEXT_PUBLIC_API_URL || 'https://shift-airdrop-backend.onrender.com'}/api/airdrop/loyalty-proxy`}
+                  style={{
+                    width: '100%',
+                    height: '800px',
+                    border: 'none',
+                    borderRadius: '10px',
+                  }}
+                  title="Loyalty & Rewards Dashboard"
+                  onError={(e) => {
+                    console.error('[Airdrop] Loyalty iframe load error:', e);
+                  }}
+                />
               </div>
             )}
           </div>
