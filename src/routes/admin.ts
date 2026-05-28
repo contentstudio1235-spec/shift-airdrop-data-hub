@@ -3,6 +3,7 @@
 // ============================================================
 
 import express from 'express';
+import axios from 'axios';
 import { config } from '../config';
 import { snagSyncService } from '../services/snagSyncService';
 import { referralService } from '../services/referralService';
@@ -2057,6 +2058,145 @@ router.get('/snag-probe/:wallet', verifyAdminSecret, async (req, res) => {
       error: 'SNAG probe failed',
       message: error?.response?.data || error.message,
     });
+  }
+});
+
+// ── On-Chain Holders ─────────────────────────────────────────────────────────
+
+// Simple in-memory cache: refreshed at most every 5 minutes
+let holdersCache: { data: OnChainHoldersResponse; fetchedAt: number } | null = null;
+const HOLDERS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface TokenHolderStats {
+  symbol: string;
+  name: string;
+  mint: string;
+  holders: number;
+  error?: string;
+}
+
+interface OnChainHoldersResponse {
+  tokens: TokenHolderStats[];
+  uniqueHolders: number;
+  totalHolderSlots: number;
+  fetchedAt: string;
+}
+
+/**
+ * Fetch all token account owners for a single mint via Helius DAS `getTokenAccounts`.
+ * Paginates automatically (1000 per page) and filters zero-balance accounts.
+ * Returns a Set of owner wallet addresses.
+ */
+async function fetchMintOwners(mint: string, heliusApiKey: string): Promise<Set<string>> {
+  const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${heliusApiKey}`;
+  const owners = new Set<string>();
+  let page = 1;
+
+  while (true) {
+    const resp = await axios.post(
+      rpcUrl,
+      {
+        jsonrpc: '2.0',
+        id: `holders-${mint.slice(0, 8)}-p${page}`,
+        method: 'getTokenAccounts',
+        params: { mint, limit: 1000, page },
+      },
+      { timeout: 20_000 }
+    );
+
+    const accounts: any[] = resp.data?.result?.token_accounts ?? [];
+    if (accounts.length === 0) break;
+
+    for (const acct of accounts) {
+      // Only count accounts that actually hold tokens (amount > 0)
+      if (acct.owner && Number(acct.amount) > 0) {
+        owners.add(acct.owner);
+      }
+    }
+
+    // If fewer than 1000 returned, we've hit the last page
+    if (accounts.length < 1000) break;
+    page++;
+  }
+
+  return owners;
+}
+
+/**
+ * GET /api/admin/onchain-holders
+ * Returns live on-chain holder counts for each of the 6 SHIFT trading tokens
+ * plus the total unique wallet count across all tokens.
+ * Results are cached for 5 minutes to avoid rate-limiting Helius.
+ * Pass ?force=1 to bypass cache and re-fetch immediately.
+ */
+router.get('/onchain-holders', verifyAdminSecret, async (req, res) => {
+  try {
+    // Return cached data if fresh enough (and not forcing refresh)
+    const forceRefresh = req.query.force === '1';
+    if (!forceRefresh && holdersCache && Date.now() - holdersCache.fetchedAt < HOLDERS_CACHE_TTL_MS) {
+      return res.json({ ...holdersCache.data, cached: true });
+    }
+
+    if (!config.heliusApiKey) {
+      return res.status(503).json({ error: 'Helius API key not configured' });
+    }
+
+    // Tokens to check (the 6 SHIFT trading assets — excludes governance SHIFT token)
+    const TRADING_TOKENS = [
+      { symbol: 'TSL2L', name: 'Shift Tesla 2x Long',        mint: '6afjZE5Qv9WF5K1adBgTxtWyenJ7ZerH6BVAzmoSHFT' },
+      { symbol: 'TSL1S', name: 'Shift Tesla 1x Short',       mint: 'bNPXng6hSVas7LWiNQyvpGcPYtY1ZmFY6WP49ymSHFT' },
+      { symbol: 'SOX3L', name: 'Shift Semiconductor 3x Long', mint: 'Hyhxfb6riaqCV333GynmnCXCEQK3goTznFj7k4dSHFT' },
+      { symbol: 'SOX3S', name: 'Shift Semiconductor 3x Short',mint: '7GoxZQ7gCh1mg1b3AUqd7cyPqiUp4y2NRxM9A5zSHFT' },
+      { symbol: 'SPX3S', name: 'Shift S&P500 3x Short',      mint: '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT' },
+      { symbol: 'SPX3L', name: 'Shift S&P500 3x Long',       mint: '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT' },
+    ];
+
+    // Fetch all token holders in parallel
+    const ownerSets = await Promise.all(
+      TRADING_TOKENS.map(async (token) => {
+        try {
+          const owners = await fetchMintOwners(token.mint, config.heliusApiKey!);
+          return { token, owners, error: undefined };
+        } catch (err: any) {
+          console.warn(`[Admin] onchain-holders fetch failed for ${token.symbol}:`, err?.message);
+          return { token, owners: new Set<string>(), error: err?.message as string };
+        }
+      })
+    );
+
+    // Build per-token stats
+    const tokens: TokenHolderStats[] = ownerSets.map(({ token, owners, error }) => ({
+      symbol: token.symbol,
+      name: token.name,
+      mint: token.mint,
+      holders: owners.size,
+      ...(error ? { error } : {}),
+    }));
+
+    // Compute unique holders across ALL tokens (set union)
+    const allOwners = new Set<string>();
+    for (const { owners } of ownerSets) {
+      for (const o of owners) allOwners.add(o);
+    }
+
+    const payload: OnChainHoldersResponse = {
+      tokens,
+      uniqueHolders: allOwners.size,
+      totalHolderSlots: tokens.reduce((sum, t) => sum + t.holders, 0),
+      fetchedAt: new Date().toISOString(),
+    };
+
+    // Cache it
+    holdersCache = { data: payload, fetchedAt: Date.now() };
+
+    console.log(
+      `[Admin] onchain-holders: ${payload.uniqueHolders} unique across ${tokens.map(t => `${t.symbol}=${t.holders}`).join(', ')}`
+    );
+
+    res.json({ ...payload, cached: false });
+  } catch (error: any) {
+    console.error('[Admin] onchain-holders failed:', error);
+    res.status(500).json({ error: 'Failed to fetch on-chain holders', message: error?.message });
   }
 });
 
