@@ -3,6 +3,7 @@ import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/react';
 import Script from 'next/script';
 import './globals.css';
+import '@solana/wallet-adapter-react-ui/styles.css';
 import { AdapterProvider } from '@/components/AdapterProvider';
 import { ToastProvider } from '@/components/ToastContext';
 import NavBar from '@/components/NavBar';
