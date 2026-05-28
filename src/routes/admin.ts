@@ -1804,10 +1804,10 @@ router.post('/fix-undersized-positions', verifyAdminSecret, async (req, res) => 
       try {
         // Get tx signatures for open positions of this wallet
         const openPos = await pool.query(
-          `SELECT tx_signature FROM positions WHERE wallet = $1 AND status = 'open'`,
+          `SELECT tx_signature_open FROM positions WHERE wallet = $1 AND status = 'open'`,
           [wallet]
         );
-        const sigs = openPos.rows.map((r: any) => r.tx_signature).filter(Boolean);
+        const sigs = openPos.rows.map((r: any) => r.tx_signature_open).filter(Boolean);
 
         // Clear processed_transactions so they get re-replayed
         if (sigs.length > 0) {
