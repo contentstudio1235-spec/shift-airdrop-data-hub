@@ -7,6 +7,14 @@ import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom';
 import { SolflareWalletAdapter } from '@solana/wallet-adapter-solflare';
 import { TrustWalletAdapter } from '@solana/wallet-adapter-trust';
+import { LedgerWalletAdapter } from '@solana/wallet-adapter-ledger';
+import { BackpackWalletAdapter } from '@solana/wallet-adapter-backpack';
+import { ExodusWalletAdapter } from '@solana/wallet-adapter-exodus';
+import { Coin98WalletAdapter } from '@solana/wallet-adapter-coin98';
+import { AvanaWalletAdapter } from '@solana/wallet-adapter-avana';
+import { BitpieWalletAdapter } from '@solana/wallet-adapter-bitpie';
+import { KeystoneWalletAdapter } from '@solana/wallet-adapter-keystone';
+import { WalletConnectWalletAdapter } from '@solana/wallet-adapter-walletconnect';
 import { clusterApiUrl } from '@solana/web3.js';
 import { WalletProvider } from './WalletContext';
 
@@ -24,9 +32,31 @@ export function AdapterProvider({ children }: { children: React.ReactNode }) {
   // All supported Solana wallet adapters
   const wallets = useMemo(
     () => [
+      // Most Popular
       new PhantomWalletAdapter(),
       new SolflareWalletAdapter({ network }),
       new TrustWalletAdapter(),
+
+      // Hardware & Exchange
+      new LedgerWalletAdapter(),
+
+      // Multi-Chain
+      new BackpackWalletAdapter(),
+      new ExodusWalletAdapter(),
+
+      // Regional/Community
+      new Coin98WalletAdapter(),
+      new AvanaWalletAdapter(),
+      new BitpieWalletAdapter(),
+      new KeystoneWalletAdapter(),
+
+      // QR-based (WalletConnect)
+      new WalletConnectWalletAdapter({
+        network,
+        options: {
+          projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '',
+        },
+      }),
     ],
     [network]
   );
