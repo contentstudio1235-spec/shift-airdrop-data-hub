@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback } from 'react';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { useCallback, useEffect } from 'react';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useWallet } from '@solana/wallet-adapter-react';
 
 interface ConnectWalletModalProps {
@@ -26,29 +26,24 @@ interface ConnectWalletModalProps {
  * - Responsive design
  */
 export default function ConnectWalletModal({ onClose }: ConnectWalletModalProps) {
-  const { wallet, connected } = useWallet();
+  const { connected } = useWallet();
+  const { setVisible } = useWalletModal();
 
-  const handleWalletConnect = useCallback(() => {
+  // Open wallet selection modal automatically when component mounts
+  useEffect(() => {
+    setVisible(true);
+  }, [setVisible]);
+
+  // Close parent modal when wallet connects
+  useEffect(() => {
     if (connected && onClose) {
+      // Close wallet modal first
+      setVisible(false);
+      // Then close parent modal
       onClose();
     }
-  }, [connected, onClose]);
+  }, [connected, onClose, setVisible]);
 
-  return (
-    <div className="flex items-center justify-center">
-      {/*
-        Official WalletMultiButton from @solana/wallet-adapter-react-ui
-        Includes:
-        - Official wallet logos (Phantom, Solflare, Trust, MetaMask, etc.)
-        - Automatic wallet detection
-        - Connected wallet display
-        - Disconnect functionality
-        - Mobile responsive
-      */}
-      <WalletMultiButton
-        className="wallet-adapter-button-trigger"
-        onClick={handleWalletConnect}
-      />
-    </div>
-  );
+  // Don't render anything - just trigger the modal via the hook
+  return null;
 }
