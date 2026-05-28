@@ -73,18 +73,18 @@ export class BadgeService {
   }
 
   /**
-   * Badge: Diamond Hands — any position held for 30+ days.
+   * Badge: Diamond Hands — any position held for 60+ days.
    */
   async checkDiamondHands(wallet: string): Promise<BadgeAward | null> {
     if (await this.hasBadge(wallet, 'diamond_hands')) return null;
 
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
 
     const position = await queryOne(
-      `SELECT id FROM positions 
-       WHERE wallet = $1 AND status = 'open' AND opened_at <= $2 
+      `SELECT id FROM positions
+       WHERE wallet = $1 AND status = 'open' AND opened_at <= $2
        LIMIT 1`,
-      [wallet, thirtyDaysAgo]
+      [wallet, sixtyDaysAgo]
     );
 
     if (position) {
@@ -351,8 +351,8 @@ export class BadgeService {
       );
       if (oldest) {
         const daysHeld = (now.getTime() - new Date(oldest.opened_at).getTime()) / (1000 * 60 * 60 * 24);
-        const progressPct = Math.min(daysHeld / 30, 1);
-        const remaining = Math.max(0, Math.ceil(30 - daysHeld));
+        const progressPct = Math.min(daysHeld / 60, 1);
+        const remaining = Math.max(0, Math.ceil(60 - daysHeld));
         progress.push({
           badge: 'diamond_hands',
           earned: false,
@@ -360,7 +360,7 @@ export class BadgeService {
           description: remaining > 0 ? `${remaining} days until Diamond Hands 💎` : 'Almost there!'
         });
       } else {
-        progress.push({ badge: 'diamond_hands', earned: false, progress: 0, description: 'Hold a position for 30 days' });
+        progress.push({ badge: 'diamond_hands', earned: false, progress: 0, description: 'Hold a position for 60 days' });
       }
     }
 
