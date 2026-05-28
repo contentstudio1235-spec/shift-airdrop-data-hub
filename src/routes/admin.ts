@@ -1782,6 +1782,70 @@ router.post('/fix-zero-positions', verifyAdminSecret, async (req, res) => {
 });
 
 /**
+ * POST /api/admin/fix-undersized-positions
+ * Bulk-fix wallets whose open positions were stored with position_size_usd < $1
+ * due to the Jupiter multi-hop USDC extraction bug (took first input instead of summing all).
+ * For each affected wallet: clears processed_transactions, deletes open positions, re-syncs.
+ */
+router.post('/fix-undersized-positions', verifyAdminSecret, async (req, res) => {
+  try {
+    // Find all distinct wallets with open positions under $1 (but > 0, to skip truly empty)
+    const affected = await pool.query(
+      `SELECT DISTINCT wallet FROM positions
+       WHERE status = 'open' AND position_size_usd > 0 AND position_size_usd < 1`
+    );
+
+    const wallets: string[] = affected.rows.map((r: any) => r.wallet);
+    const results: any[] = [];
+
+    console.log(`[Admin] fix-undersized-positions: found ${wallets.length} affected wallets`);
+
+    for (const wallet of wallets) {
+      try {
+        // Get tx signatures for open positions of this wallet
+        const openPos = await pool.query(
+          `SELECT tx_signature FROM positions WHERE wallet = $1 AND status = 'open'`,
+          [wallet]
+        );
+        const sigs = openPos.rows.map((r: any) => r.tx_signature).filter(Boolean);
+
+        // Clear processed_transactions so they get re-replayed
+        if (sigs.length > 0) {
+          await pool.query(
+            `DELETE FROM processed_transactions WHERE tx_signature = ANY($1)`,
+            [sigs]
+          );
+        }
+
+        // Delete open positions
+        await pool.query(`DELETE FROM positions WHERE wallet = $1 AND status = 'open'`, [wallet]);
+
+        // Re-sync from Helius
+        const syncResult = await walletSyncService.syncWallet(wallet);
+
+        results.push({ wallet: wallet.slice(0, 8) + '…', positionsCreated: syncResult.positionsCreated });
+        console.log(`[Admin] Re-synced ${wallet.slice(0, 8)}… → ${syncResult.positionsCreated} positions`);
+      } catch (err: any) {
+        results.push({ wallet: wallet.slice(0, 8) + '…', error: err?.message });
+      }
+    }
+
+    // Trigger XP recalculation
+    const xpResult = await xpEngine.recalculateAllXP();
+
+    res.json({
+      success: true,
+      walletsFixed: wallets.length,
+      results,
+      xpResult,
+    });
+  } catch (error) {
+    console.error('[Admin] fix-undersized-positions failed:', error);
+    res.status(500).json({ error: 'Failed to fix undersized positions' });
+  }
+});
+
+/**
  * POST /api/admin/force-resync/:wallet
  * Properly re-syncs a wallet by:
  * 1. Clearing processed_transactions for its open position tx signatures
