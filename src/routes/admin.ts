@@ -1742,6 +1742,51 @@ router.post('/force-badge-check', verifyAdminSecret, async (req, res) => {
 });
 
 /**
+ * POST /api/admin/fix-zero-positions
+ * Emergency fix: Updates positions with $0 size using Helius transaction data
+ * Body: { wallet: string, positionId: string, solAmount: number }
+ */
+router.post('/fix-zero-positions', verifyAdminSecret, async (req, res) => {
+  const wallet = asString(req.body.wallet);
+  const positionId = asString(req.body.positionId);
+  const solAmount = parseFloat(req.body.solAmount) || 0;
+
+  if (!wallet || !positionId || solAmount <= 0) {
+    return res.status(400).json({ error: 'Missing wallet, positionId, or solAmount' });
+  }
+
+  try {
+    // Get SOL price
+    const { jupiterPriceService } = await import('../services/jupiterPriceService');
+    const solPrice = await jupiterPriceService.getPrice('So11111111111111111111111111111111111111112');
+    const positionSizeUsd = solAmount * (solPrice ?? 0);
+
+    // Update position
+    await pool.query(
+      `UPDATE positions SET position_size_usd = $1 WHERE id = $2 AND wallet = $3`,
+      [positionSizeUsd, positionId, wallet]
+    );
+
+    // Trigger XP recalculation
+    const { xpEngine } = await import('../services/xpEngine');
+    await xpEngine.recalculateAllXP();
+
+    res.json({
+      success: true,
+      wallet,
+      positionId,
+      solAmount,
+      solPrice,
+      positionSizeUsd,
+      message: `Updated position size to $${positionSizeUsd.toFixed(2)}, XP recalculation queued`
+    });
+  } catch (error) {
+    console.error('[Admin] Failed to fix zero position:', error);
+    res.status(500).json({ error: 'Failed to fix position' });
+  }
+});
+
+/**
  * POST /api/admin/wallet-resync/:wallet
  * Re-syncs a wallet's transaction history and fixes $0 position sizes
  * by re-reading stablecoin amounts from Helius enhanced transactions.
