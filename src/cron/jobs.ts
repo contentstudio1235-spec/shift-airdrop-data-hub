@@ -1,5 +1,5 @@
 // ============================================================
-// Cron Jobs — Full sync every 10 min + queue retry every 2 min
+// Cron Jobs — Full sync every 5 min + queue retry every 2 min
 // ============================================================
 
 import cron from 'node-cron';
@@ -12,10 +12,10 @@ let isQueueRunning = false;
  * Initialize all cron jobs.
  */
 export function initCronJobs(): void {
-  // ── Full sync every minute ──
+  // ── Full sync every 5 minutes ──
   // Recalculates all XP/badges/multipliers with near-real-time updates.
   // (Keeps Render free-tier container active as bonus side effect)
-  cron.schedule('* * * * *', async () => {
+  cron.schedule('*/5 * * * *', async () => {
     if (isRunning) {
       console.log('[Cron] Previous sync job still running, skipping...');
       return;
@@ -51,7 +51,7 @@ export function initCronJobs(): void {
     }
   });
 
-  console.log('[Cron] ✅ Scheduled: full sync every 10 minutes, queue retry every 2 minutes');
+  console.log('[Cron] ✅ Scheduled: full sync every 5 minutes, queue retry every 2 minutes');
 }
 
 /**

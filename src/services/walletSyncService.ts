@@ -37,8 +37,11 @@ export interface WalletSyncResult {
   details: string[];
 }
 
+const SYNC_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+
 export class WalletSyncService {
   private heliusBase = `https://api.helius.xyz/v0`;
+  private lastSyncedAt = new Map<string, number>();
 
   /**
    * Full sync for a wallet:
@@ -61,6 +64,15 @@ export class WalletSyncService {
     // 1. Register / upsert user
     await positionService.ensureUserExists(wallet);
     result.registered = true;
+
+    // Skip expensive Helius calls if this wallet was synced recently
+    const lastSync = this.lastSyncedAt.get(wallet);
+    if (lastSync && Date.now() - lastSync < SYNC_COOLDOWN_MS) {
+      result.details.push(`Skipped Helius scan — synced ${Math.round((Date.now() - lastSync) / 60000)}m ago (cooldown 60m)`);
+      return result;
+    }
+
+    this.lastSyncedAt.set(wallet, Date.now());
 
     // 2. Replay transaction history
     await this.replayTransactionHistory(wallet, result);
