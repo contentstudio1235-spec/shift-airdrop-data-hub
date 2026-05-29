@@ -1742,6 +1742,177 @@ router.post('/force-badge-check', verifyAdminSecret, async (req, res) => {
 });
 
 /**
+ * POST /api/admin/retroactive-spx-fix
+ * Upgrades SPX3S/SPX3L multiplier from 1.15x → 1.25x retroactively.
+ * For every open SPX3 position:
+ *   1. Subtracts its xp_generated from users.total_xp (removes old 1.15x XP)
+ *   2. Resets xp_generated=0, last_xp_calc=NULL
+ *   3. Triggers full XP recalc — engine rebuilds from opened_at at 1.25x
+ */
+router.post('/retroactive-spx-fix', verifyAdminSecret, async (req, res) => {
+  try {
+    const SPX_MINTS = [
+      '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT', // SPX3S
+      '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT', // SPX3L
+    ];
+
+    // 1. Find all open SPX3 positions
+    const positions = await pool.query(
+      `SELECT id, wallet, asset, xp_generated FROM positions
+       WHERE status = 'open' AND asset_mint = ANY($1::text[])`,
+      [SPX_MINTS]
+    );
+
+    console.log(`[Admin] SPX retroactive fix: found ${positions.rows.length} open positions`);
+
+    let walletsAffected = 0;
+    const walletDeltas: Map<string, number> = new Map();
+
+    for (const pos of positions.rows) {
+      const oldXp = parseFloat(pos.xp_generated) || 0;
+      if (oldXp > 0) {
+        const prev = walletDeltas.get(pos.wallet) || 0;
+        walletDeltas.set(pos.wallet, prev + oldXp);
+      }
+    }
+
+    // 2. Subtract old XP from each wallet's total_xp
+    for (const [wallet, xpToRemove] of walletDeltas) {
+      await pool.query(
+        `UPDATE users SET total_xp = GREATEST(0, total_xp - $1) WHERE wallet = $2`,
+        [xpToRemove, wallet]
+      );
+      walletsAffected++;
+    }
+
+    // 3. Reset xp_generated and last_xp_calc so engine recalculates from scratch
+    await pool.query(
+      `UPDATE positions
+       SET xp_generated = 0, last_xp_calc = NULL
+       WHERE status = 'open' AND asset_mint = ANY($1::text[])`,
+      [SPX_MINTS]
+    );
+
+    // 4. Trigger full XP recalculation (now uses 1.25x baseMultiplier)
+    const xpResult = await xpEngine.recalculateAllXP();
+
+    res.json({
+      success: true,
+      positionsReset: positions.rows.length,
+      walletsAffected,
+      xpResult,
+      message: `Retroactive SPX3 fix complete — ${positions.rows.length} positions recalculated at 1.25x from their open date`,
+    });
+  } catch (error) {
+    console.error('[Admin] Retroactive SPX fix failed:', error);
+    res.status(500).json({ error: 'Retroactive fix failed' });
+  }
+});
+
+/**
+ * POST /api/admin/scan-spx-holders
+ * Scans Solana on-chain for all current SPX3S + SPX3L holders via Helius RPC,
+ * backfills any wallet that holds tokens but has no open position in the DB.
+ * Run this after retroactive-spx-fix to catch holders who never connected wallet.
+ */
+router.post('/scan-spx-holders', verifyAdminSecret, async (req, res) => {
+  if (!config.heliusApiKey) {
+    return res.status(400).json({ error: 'Helius API key not configured' });
+  }
+
+  const SPX_TOKENS = [
+    { symbol: 'SPX3S', mint: '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT' },
+    { symbol: 'SPX3L', mint: '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT' },
+  ];
+
+  const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${config.heliusApiKey}`;
+  const results: any[] = [];
+  let totalSynced = 0;
+  let totalNew = 0;
+
+  try {
+    for (const token of SPX_TOKENS) {
+      // getProgramAccounts filtered by SPL Token program + mint
+      const response = await axios.post(rpcUrl, {
+        jsonrpc: '2.0',
+        id: `scan-${token.symbol}`,
+        method: 'getProgramAccounts',
+        params: [
+          'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', // SPL Token program
+          {
+            encoding: 'jsonParsed',
+            filters: [
+              { dataSize: 165 }, // token account size
+              { memcmp: { offset: 0, bytes: token.mint } }, // filter by mint
+            ],
+          },
+        ],
+      }, { timeout: 30000 });
+
+      const accounts: any[] = response.data?.result || [];
+      // Filter to non-zero balances
+      const holders = accounts
+        .map((a: any) => ({
+          wallet: a.account.data.parsed.info.owner,
+          amount: a.account.data.parsed.info.tokenAmount.uiAmount || 0,
+        }))
+        .filter((h: any) => h.amount > 0);
+
+      console.log(`[Admin] ${token.symbol}: ${holders.length} on-chain holders found`);
+
+      let synced = 0;
+      let newPositions = 0;
+
+      for (const holder of holders) {
+        try {
+          // Check if already has open position
+          const existing = await pool.query(
+            `SELECT id FROM positions WHERE wallet = $1 AND asset = $2 AND status = 'open' LIMIT 1`,
+            [holder.wallet, token.symbol]
+          );
+          if (existing.rows.length > 0) continue;
+
+          // Sync from Helius tx history (creates position if not present)
+          const syncResult = await walletSyncService.syncWallet(holder.wallet);
+          synced++;
+          if (syncResult.positionsCreated > 0 || syncResult.holdingsBackfilled > 0) {
+            newPositions += syncResult.positionsCreated + syncResult.holdingsBackfilled;
+          }
+        } catch (err) {
+          // Non-fatal — log and continue
+          console.warn(`[Admin] scan-spx-holders: sync failed for ${holder.wallet.slice(0, 8)}:`, err);
+        }
+      }
+
+      totalSynced += synced;
+      totalNew += newPositions;
+      results.push({
+        token: token.symbol,
+        onChainHolders: holders.length,
+        walletsSynced: synced,
+        newPositionsCreated: newPositions,
+      });
+    }
+
+    // Final XP recalculation to include any newly created positions
+    if (totalNew > 0) {
+      await xpEngine.recalculateAllXP();
+    }
+
+    res.json({
+      success: true,
+      results,
+      totalSynced,
+      totalNewPositions: totalNew,
+      message: `On-chain scan complete — ${totalNew} new positions backfilled across ${totalSynced} wallets`,
+    });
+  } catch (error) {
+    console.error('[Admin] SPX holder scan failed:', error);
+    res.status(500).json({ error: 'Holder scan failed' });
+  }
+});
+
+/**
  * POST /api/admin/fix-zero-positions
  * Emergency fix: Updates positions with $0 size using Helius transaction data
  * Body: { wallet: string, positionId: string, solAmount: number }
