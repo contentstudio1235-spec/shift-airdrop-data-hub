@@ -13,6 +13,7 @@ import { config } from '../config';
 import { positionService } from './positionService';
 import { jupiterPriceService } from './jupiterPriceService';
 import { holdingService } from './holdingService';
+import { badgeService } from './badgeService';
 import { TRACKED_TOKENS, getTokenInfo } from '../config/tokens';
 import { pool } from '../db/pool';
 
@@ -79,6 +80,9 @@ export class WalletSyncService {
 
     // 3. Backfill live holdings not yet tracked
     await this.backfillLiveHoldings(wallet, result);
+
+    // 4. Check shift_holder badge (uses holdingService which has its own cache)
+    await badgeService.checkShiftHolder(wallet);
 
     console.log(
       `[WalletSync] ${wallet.slice(0, 8)}... | txs=${result.txsScanned} ` +

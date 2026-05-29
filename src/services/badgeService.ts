@@ -24,7 +24,8 @@ export class BadgeService {
       this.checkTheBeliever(wallet),
       this.checkEarningsReactor(wallet),
       this.checkFOMCTrader(wallet),
-      this.checkShiftHolder(wallet),
+      // shift_holder is checked on wallet connect only (not in cron) to avoid
+      // Helius RPC calls for every user every tick. See walletSyncService.
       // Event-based badges
       this.checkFedDayTrade(wallet),
       this.checkCPIBet(wallet),
