@@ -14,6 +14,7 @@ import { positionService } from './positionService';
 import { jupiterPriceService } from './jupiterPriceService';
 import { holdingService } from './holdingService';
 import { badgeService } from './badgeService';
+import { xpEngine } from './xpEngine';
 import { TRACKED_TOKENS, getTokenInfo } from '../config/tokens';
 import { pool } from '../db/pool';
 
@@ -83,6 +84,15 @@ export class WalletSyncService {
 
     // 4. Check shift_holder badge (uses holdingService which has its own cache)
     await badgeService.checkShiftHolder(wallet);
+
+    // 5. Trigger XP recalc immediately if any positions were created/closed
+    // This ensures new positions show XP and multipliers instantly
+    if (result.positionsCreated > 0 || result.positionsClosed > 0) {
+      // Fire-and-forget: don't wait for XP calc, but it runs right away
+      xpEngine.recalculateAllXP().catch(err =>
+        console.error('[WalletSync] XP recalc failed:', err)
+      );
+    }
 
     console.log(
       `[WalletSync] ${wallet.slice(0, 8)}... | txs=${result.txsScanned} ` +
