@@ -13,9 +13,17 @@ export declare class BadgeService {
      */
     checkFirstTrade(wallet: string): Promise<BadgeAward | null>;
     /**
-     * Badge: Diamond Hands — any position held for 30+ days.
+     * Badge: Diamond Hands — any position held for 60+ days.
      */
     checkDiamondHands(wallet: string): Promise<BadgeAward | null>;
+    /**
+     * Badge: Long-Hauler — any position held for 90+ days.
+     */
+    checkLongHauler(wallet: string): Promise<BadgeAward | null>;
+    /**
+     * Badge: The Believer — any position held for 180+ days.
+     */
+    checkTheBeliever(wallet: string): Promise<BadgeAward | null>;
     /**
      * Badge: Earnings Reactor — traded during an earnings event.
      */

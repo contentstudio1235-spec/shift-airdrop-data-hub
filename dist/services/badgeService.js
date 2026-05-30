@@ -19,9 +19,12 @@ class BadgeService {
         const checks = await Promise.all([
             this.checkFirstTrade(wallet),
             this.checkDiamondHands(wallet),
+            this.checkLongHauler(wallet),
+            this.checkTheBeliever(wallet),
             this.checkEarningsReactor(wallet),
             this.checkFOMCTrader(wallet),
-            this.checkShiftHolder(wallet),
+            // shift_holder is checked on wallet connect only (not in cron) to avoid
+            // Helius RPC calls for every user every tick. See walletSyncService.
             // Event-based badges
             this.checkFedDayTrade(wallet),
             this.checkCPIBet(wallet),
@@ -62,18 +65,50 @@ class BadgeService {
         return null;
     }
     /**
-     * Badge: Diamond Hands — any position held for 30+ days.
+     * Badge: Diamond Hands — any position held for 60+ days.
      */
     async checkDiamondHands(wallet) {
         if (await this.hasBadge(wallet, 'diamond_hands'))
             return null;
-        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-        const position = await (0, pool_1.queryOne)(`SELECT id FROM positions 
-       WHERE wallet = $1 AND status = 'open' AND opened_at <= $2 
-       LIMIT 1`, [wallet, thirtyDaysAgo]);
+        const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+        const position = await (0, pool_1.queryOne)(`SELECT id FROM positions
+       WHERE wallet = $1 AND status = 'open' AND opened_at <= $2
+       LIMIT 1`, [wallet, sixtyDaysAgo]);
         if (position) {
             await this.awardBadge(wallet, 'diamond_hands');
             return { badge_name: 'diamond_hands', wallet };
+        }
+        return null;
+    }
+    /**
+     * Badge: Long-Hauler — any position held for 90+ days.
+     */
+    async checkLongHauler(wallet) {
+        if (await this.hasBadge(wallet, 'long_hauler'))
+            return null;
+        const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+        const position = await (0, pool_1.queryOne)(`SELECT id FROM positions
+       WHERE wallet = $1 AND status = 'open' AND opened_at <= $2
+       LIMIT 1`, [wallet, ninetyDaysAgo]);
+        if (position) {
+            await this.awardBadge(wallet, 'long_hauler');
+            return { badge_name: 'long_hauler', wallet };
+        }
+        return null;
+    }
+    /**
+     * Badge: The Believer — any position held for 180+ days.
+     */
+    async checkTheBeliever(wallet) {
+        if (await this.hasBadge(wallet, 'the_believer'))
+            return null;
+        const oneEightyDaysAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000);
+        const position = await (0, pool_1.queryOne)(`SELECT id FROM positions
+       WHERE wallet = $1 AND status = 'open' AND opened_at <= $2
+       LIMIT 1`, [wallet, oneEightyDaysAgo]);
+        if (position) {
+            await this.awardBadge(wallet, 'the_believer');
+            return { badge_name: 'the_believer', wallet };
         }
         return null;
     }
@@ -276,8 +311,8 @@ class BadgeService {
             const oldest = await (0, pool_1.queryOne)(`SELECT opened_at FROM positions WHERE wallet = $1 AND status = 'open' ORDER BY opened_at ASC LIMIT 1`, [wallet]);
             if (oldest) {
                 const daysHeld = (now.getTime() - new Date(oldest.opened_at).getTime()) / (1000 * 60 * 60 * 24);
-                const progressPct = Math.min(daysHeld / 30, 1);
-                const remaining = Math.max(0, Math.ceil(30 - daysHeld));
+                const progressPct = Math.min(daysHeld / 60, 1);
+                const remaining = Math.max(0, Math.ceil(60 - daysHeld));
                 progress.push({
                     badge: 'diamond_hands',
                     earned: false,
@@ -286,7 +321,49 @@ class BadgeService {
                 });
             }
             else {
-                progress.push({ badge: 'diamond_hands', earned: false, progress: 0, description: 'Hold a position for 30 days' });
+                progress.push({ badge: 'diamond_hands', earned: false, progress: 0, description: 'Hold a position for 60 days' });
+            }
+        }
+        // Long-Hauler (90+ days)
+        if (earnedNames.has('long_hauler')) {
+            progress.push({ badge: 'long_hauler', earned: true, progress: 1, description: 'Long-Hauler achieved!' });
+        }
+        else {
+            const oldest = await (0, pool_1.queryOne)(`SELECT opened_at FROM positions WHERE wallet = $1 AND status = 'open' ORDER BY opened_at ASC LIMIT 1`, [wallet]);
+            if (oldest) {
+                const daysHeld = (now.getTime() - new Date(oldest.opened_at).getTime()) / (1000 * 60 * 60 * 24);
+                const progressPct = Math.min(daysHeld / 90, 1);
+                const remaining = Math.max(0, Math.ceil(90 - daysHeld));
+                progress.push({
+                    badge: 'long_hauler',
+                    earned: false,
+                    progress: progressPct,
+                    description: remaining > 0 ? `${remaining} days until Long-Hauler 🚀` : 'Almost there!'
+                });
+            }
+            else {
+                progress.push({ badge: 'long_hauler', earned: false, progress: 0, description: 'Hold a position for 90 days' });
+            }
+        }
+        // The Believer (180+ days)
+        if (earnedNames.has('the_believer')) {
+            progress.push({ badge: 'the_believer', earned: true, progress: 1, description: 'The Believer achieved!' });
+        }
+        else {
+            const oldest = await (0, pool_1.queryOne)(`SELECT opened_at FROM positions WHERE wallet = $1 AND status = 'open' ORDER BY opened_at ASC LIMIT 1`, [wallet]);
+            if (oldest) {
+                const daysHeld = (now.getTime() - new Date(oldest.opened_at).getTime()) / (1000 * 60 * 60 * 24);
+                const progressPct = Math.min(daysHeld / 180, 1);
+                const remaining = Math.max(0, Math.ceil(180 - daysHeld));
+                progress.push({
+                    badge: 'the_believer',
+                    earned: false,
+                    progress: progressPct,
+                    description: remaining > 0 ? `${remaining} days until The Believer 👑` : 'Almost there!'
+                });
+            }
+            else {
+                progress.push({ badge: 'the_believer', earned: false, progress: 0, description: 'Hold a position for 180 days' });
             }
         }
         // Earnings Reactor

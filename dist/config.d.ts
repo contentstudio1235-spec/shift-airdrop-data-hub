@@ -24,6 +24,8 @@ export declare const config: {
         readonly news_reactor: string;
         readonly earnings_conviction: string;
         readonly geopolitical_trade: string;
+        readonly long_hauler: string;
+        readonly the_believer: string;
     };
     readonly snagSocialRuleIds: {
         readonly follow_x: string;

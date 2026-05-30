@@ -19,6 +19,7 @@ export declare class HeliusWebhookHandler {
     /**
      * Handle a buy (open position).
      * precomputedUsdValue: stablecoin amount paid (preferred over Jupiter pricing for RWA tokens)
+     * nativeInputAmount: SOL amount spent (fallback for tokens without Jup pricing)
      */
     private handleBuy;
     /**

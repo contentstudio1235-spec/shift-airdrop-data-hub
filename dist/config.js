@@ -41,6 +41,8 @@ exports.config = {
         news_reactor: process.env.SNAG_NEWS_REACTOR_BADGE_ID || '',
         earnings_conviction: process.env.SNAG_EARNINGS_CONVICTION_BADGE_ID || '',
         geopolitical_trade: process.env.SNAG_GEOPOLITICAL_TRADE_BADGE_ID || '',
+        long_hauler: process.env.SNAG_LONG_HAULER_BADGE_ID || '',
+        the_believer: process.env.SNAG_THE_BELIEVER_BADGE_ID || '',
     },
     // SNAG Social Task Rule IDs (for inbound webhook task mapping)
     snagSocialRuleIds: {

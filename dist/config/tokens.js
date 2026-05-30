@@ -49,14 +49,14 @@ exports.TRACKED_TOKENS = {
         mint: '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT',
         symbol: 'SPX3S',
         name: 'Shift S&P500 3x Short',
-        baseMultiplier: 1.15, // 15% base bonus
+        baseMultiplier: 1.25, // 25% base bonus (upgraded from 15% to match semiconductor tier)
     },
     // S&P 500 3x Long
     SPX3L: {
         mint: '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT',
         symbol: 'SPX3L',
         name: 'Shift S&P500 3x Long',
-        baseMultiplier: 1.15, // 15% base bonus
+        baseMultiplier: 1.25, // 25% base bonus (upgraded from 15% to match semiconductor tier)
     },
 };
 // Get token info by mint address

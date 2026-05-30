@@ -34,7 +34,7 @@ export interface Badge {
     snag_badge_id: string | null;
     earned_at: Date;
 }
-export type BadgeName = 'first_trade' | 'diamond_hands' | 'earnings_reactor' | 'fomc_trader' | 'shift_holder' | 'fed_day_trade' | 'cpi_bet' | 'news_reactor' | 'earnings_conviction' | 'geopolitical_trade';
+export type BadgeName = 'first_trade' | 'diamond_hands' | 'earnings_reactor' | 'fomc_trader' | 'shift_holder' | 'fed_day_trade' | 'cpi_bet' | 'news_reactor' | 'earnings_conviction' | 'geopolitical_trade' | 'long_hauler' | 'the_believer';
 export interface Event {
     id: string;
     event_name: string;

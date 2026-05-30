@@ -18,6 +18,8 @@ const config_1 = require("../config");
 const positionService_1 = require("./positionService");
 const jupiterPriceService_1 = require("./jupiterPriceService");
 const holdingService_1 = require("./holdingService");
+const badgeService_1 = require("./badgeService");
+const xpEngine_1 = require("./xpEngine");
 const tokens_1 = require("../config/tokens");
 const pool_1 = require("../db/pool");
 // Stablecoin mints (same set as the webhook handler)
@@ -28,8 +30,10 @@ const STABLECOIN_MINTS = new Set([
 ]);
 // Only care about these mints for position tracking
 const SHIFT_MINTS = new Set(Object.values(tokens_1.TRACKED_TOKENS).map(t => t.mint));
+const SYNC_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
 class WalletSyncService {
     heliusBase = `https://api.helius.xyz/v0`;
+    lastSyncedAt = new Map();
     /**
      * Full sync for a wallet:
      *   1. Register user (upsert)
@@ -50,10 +54,25 @@ class WalletSyncService {
         // 1. Register / upsert user
         await positionService_1.positionService.ensureUserExists(wallet);
         result.registered = true;
+        // Skip expensive Helius calls if this wallet was synced recently
+        const lastSync = this.lastSyncedAt.get(wallet);
+        if (lastSync && Date.now() - lastSync < SYNC_COOLDOWN_MS) {
+            result.details.push(`Skipped Helius scan — synced ${Math.round((Date.now() - lastSync) / 60000)}m ago (cooldown 60m)`);
+            return result;
+        }
+        this.lastSyncedAt.set(wallet, Date.now());
         // 2. Replay transaction history
         await this.replayTransactionHistory(wallet, result);
         // 3. Backfill live holdings not yet tracked
         await this.backfillLiveHoldings(wallet, result);
+        // 4. Check shift_holder badge (uses holdingService which has its own cache)
+        await badgeService_1.badgeService.checkShiftHolder(wallet);
+        // 5. Trigger XP recalc immediately if any positions were created/closed
+        // This ensures new positions show XP and multipliers instantly
+        if (result.positionsCreated > 0 || result.positionsClosed > 0) {
+            // Fire-and-forget: don't wait for XP calc, but it runs right away
+            xpEngine_1.xpEngine.recalculateAllXP().catch(err => console.error('[WalletSync] XP recalc failed:', err));
+        }
         console.log(`[WalletSync] ${wallet.slice(0, 8)}... | txs=${result.txsScanned} ` +
             `created=${result.positionsCreated} closed=${result.positionsClosed} ` +
             `backfilled=${result.holdingsBackfilled} skipped=${result.skipped}`);

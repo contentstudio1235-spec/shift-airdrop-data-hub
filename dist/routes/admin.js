@@ -1431,6 +1431,39 @@ router.post('/recalculate-xp', verifyAdminSecret, async (req, res) => {
     }
 });
 /**
+ * GET /api/admin/position-diagnostic/:wallet
+ * Diagnostic endpoint to check position data for a wallet
+ */
+router.get('/position-diagnostic/:wallet', verifyAdminSecret, async (req, res) => {
+    const wallet = req.params.wallet;
+    try {
+        const positions = await pool_1.pool.query(`SELECT id, asset, asset_mint, position_size_usd, status, created_at, opened_at, xp_generated, last_xp_calc, current_multiplier
+       FROM positions WHERE wallet = $1 ORDER BY created_at DESC`, [wallet]);
+        const user = await pool_1.pool.query(`SELECT wallet, total_xp, snag_points FROM users WHERE wallet = $1`, [wallet]);
+        res.json({
+            wallet,
+            userStats: user.rows[0] || null,
+            positionsCount: positions.rows.length,
+            positions: positions.rows.map((p) => ({
+                id: p.id,
+                asset: p.asset,
+                assetMint: p.asset_mint,
+                positionSizeUsd: p.position_size_usd,
+                status: p.status,
+                xpGenerated: p.xp_generated,
+                lastXpCalc: p.last_xp_calc,
+                currentMultiplier: p.current_multiplier,
+                openedAt: p.opened_at,
+                createdAt: p.created_at
+            }))
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Diagnostic query failed:', error);
+        res.status(500).json({ error: 'Failed to fetch diagnostic data' });
+    }
+});
+/**
  * POST /api/admin/force-badge-check
  * Force a badge eligibility check for a specific wallet
  * Body: { wallet: string }
@@ -1460,6 +1493,185 @@ router.post('/force-badge-check', verifyAdminSecret, async (req, res) => {
     catch (error) {
         console.error('[Admin] Failed to run badge check:', error);
         res.status(500).json({ error: 'Failed to run badge check' });
+    }
+});
+/**
+ * POST /api/admin/retroactive-spx-fix
+ * Upgrades SPX3S/SPX3L multiplier from 1.15x → 1.25x retroactively.
+ * For every open SPX3 position:
+ *   1. Subtracts its xp_generated from users.total_xp (removes old 1.15x XP)
+ *   2. Resets xp_generated=0, last_xp_calc=NULL
+ *   3. Triggers full XP recalc — engine rebuilds from opened_at at 1.25x
+ */
+router.post('/retroactive-spx-fix', verifyAdminSecret, async (req, res) => {
+    try {
+        const SPX_MINTS = [
+            '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT', // SPX3S
+            '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT', // SPX3L
+        ];
+        // 1. Find all open SPX3 positions
+        const positions = await pool_1.pool.query(`SELECT id, wallet, asset, xp_generated FROM positions
+       WHERE status = 'open' AND asset_mint = ANY($1::text[])`, [SPX_MINTS]);
+        console.log(`[Admin] SPX retroactive fix: found ${positions.rows.length} open positions`);
+        let walletsAffected = 0;
+        const walletDeltas = new Map();
+        for (const pos of positions.rows) {
+            const oldXp = parseFloat(pos.xp_generated) || 0;
+            if (oldXp > 0) {
+                const prev = walletDeltas.get(pos.wallet) || 0;
+                walletDeltas.set(pos.wallet, prev + oldXp);
+            }
+        }
+        // 2. Subtract old XP from each wallet's total_xp
+        for (const [wallet, xpToRemove] of walletDeltas) {
+            await pool_1.pool.query(`UPDATE users SET total_xp = GREATEST(0, total_xp - $1) WHERE wallet = $2`, [xpToRemove, wallet]);
+            walletsAffected++;
+        }
+        // 3. Reset xp_generated and last_xp_calc so engine recalculates from scratch
+        await pool_1.pool.query(`UPDATE positions
+       SET xp_generated = 0, last_xp_calc = NULL
+       WHERE status = 'open' AND asset_mint = ANY($1::text[])`, [SPX_MINTS]);
+        // 4. Trigger full XP recalculation (now uses 1.25x baseMultiplier)
+        const xpResult = await xpEngine_1.xpEngine.recalculateAllXP();
+        res.json({
+            success: true,
+            positionsReset: positions.rows.length,
+            walletsAffected,
+            xpResult,
+            message: `Retroactive SPX3 fix complete — ${positions.rows.length} positions recalculated at 1.25x from their open date`,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Retroactive SPX fix failed:', error);
+        res.status(500).json({ error: 'Retroactive fix failed' });
+    }
+});
+/**
+ * POST /api/admin/scan-spx-holders
+ * Scans Solana on-chain for all current SPX3S + SPX3L holders via Helius RPC,
+ * backfills any wallet that holds tokens but has no open position in the DB.
+ * Run this after retroactive-spx-fix to catch holders who never connected wallet.
+ */
+router.post('/scan-spx-holders', verifyAdminSecret, async (req, res) => {
+    if (!config_1.config.heliusApiKey) {
+        return res.status(400).json({ error: 'Helius API key not configured' });
+    }
+    const SPX_TOKENS = [
+        { symbol: 'SPX3S', mint: '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT' },
+        { symbol: 'SPX3L', mint: '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT' },
+    ];
+    const rpcUrl = `https://mainnet.helius-rpc.com/?api-key=${config_1.config.heliusApiKey}`;
+    const results = [];
+    let totalSynced = 0;
+    let totalNew = 0;
+    try {
+        for (const token of SPX_TOKENS) {
+            // getProgramAccounts filtered by SPL Token program + mint
+            const response = await axios_1.default.post(rpcUrl, {
+                jsonrpc: '2.0',
+                id: `scan-${token.symbol}`,
+                method: 'getProgramAccounts',
+                params: [
+                    'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', // SPL Token program
+                    {
+                        encoding: 'jsonParsed',
+                        filters: [
+                            { dataSize: 165 }, // token account size
+                            { memcmp: { offset: 0, bytes: token.mint } }, // filter by mint
+                        ],
+                    },
+                ],
+            }, { timeout: 30000 });
+            const accounts = response.data?.result || [];
+            // Filter to non-zero balances
+            const holders = accounts
+                .map((a) => ({
+                wallet: a.account.data.parsed.info.owner,
+                amount: a.account.data.parsed.info.tokenAmount.uiAmount || 0,
+            }))
+                .filter((h) => h.amount > 0);
+            console.log(`[Admin] ${token.symbol}: ${holders.length} on-chain holders found`);
+            let synced = 0;
+            let newPositions = 0;
+            for (const holder of holders) {
+                try {
+                    // Check if already has open position
+                    const existing = await pool_1.pool.query(`SELECT id FROM positions WHERE wallet = $1 AND asset = $2 AND status = 'open' LIMIT 1`, [holder.wallet, token.symbol]);
+                    if (existing.rows.length > 0)
+                        continue;
+                    // Sync from Helius tx history (creates position if not present)
+                    const syncResult = await walletSyncService_1.walletSyncService.syncWallet(holder.wallet);
+                    synced++;
+                    if (syncResult.positionsCreated > 0 || syncResult.holdingsBackfilled > 0) {
+                        newPositions += syncResult.positionsCreated + syncResult.holdingsBackfilled;
+                    }
+                }
+                catch (err) {
+                    // Non-fatal — log and continue
+                    console.warn(`[Admin] scan-spx-holders: sync failed for ${holder.wallet.slice(0, 8)}:`, err);
+                }
+            }
+            totalSynced += synced;
+            totalNew += newPositions;
+            results.push({
+                token: token.symbol,
+                onChainHolders: holders.length,
+                walletsSynced: synced,
+                newPositionsCreated: newPositions,
+            });
+        }
+        // Final XP recalculation to include any newly created positions
+        if (totalNew > 0) {
+            await xpEngine_1.xpEngine.recalculateAllXP();
+        }
+        res.json({
+            success: true,
+            results,
+            totalSynced,
+            totalNewPositions: totalNew,
+            message: `On-chain scan complete — ${totalNew} new positions backfilled across ${totalSynced} wallets`,
+        });
+    }
+    catch (error) {
+        console.error('[Admin] SPX holder scan failed:', error);
+        res.status(500).json({ error: 'Holder scan failed' });
+    }
+});
+/**
+ * POST /api/admin/fix-zero-positions
+ * Emergency fix: Updates positions with $0 size using Helius transaction data
+ * Body: { wallet: string, positionId: string, solAmount: number }
+ */
+router.post('/fix-zero-positions', verifyAdminSecret, async (req, res) => {
+    const wallet = asString(req.body.wallet);
+    const positionId = asString(req.body.positionId);
+    const solAmount = parseFloat(req.body.solAmount) || 0;
+    if (!wallet || !positionId || solAmount <= 0) {
+        return res.status(400).json({ error: 'Missing wallet, positionId, or solAmount' });
+    }
+    try {
+        // Get SOL price
+        const { jupiterPriceService } = await Promise.resolve().then(() => __importStar(require('../services/jupiterPriceService')));
+        const solPrice = await jupiterPriceService.getPrice('So11111111111111111111111111111111111111112');
+        const positionSizeUsd = solAmount * (solPrice ?? 0);
+        // Update position
+        await pool_1.pool.query(`UPDATE positions SET position_size_usd = $1 WHERE id = $2 AND wallet = $3`, [positionSizeUsd, positionId, wallet]);
+        // Trigger XP recalculation
+        const { xpEngine } = await Promise.resolve().then(() => __importStar(require('../services/xpEngine')));
+        await xpEngine.recalculateAllXP();
+        res.json({
+            success: true,
+            wallet,
+            positionId,
+            solAmount,
+            solPrice,
+            positionSizeUsd,
+            message: `Updated position size to $${positionSizeUsd.toFixed(2)}, XP recalculation queued`
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Failed to fix zero position:', error);
+        res.status(500).json({ error: 'Failed to fix position' });
     }
 });
 /**
@@ -1851,6 +2063,163 @@ router.get('/onchain-holders', verifyAdminSecret, async (req, res) => {
     catch (error) {
         console.error('[Admin] onchain-holders failed:', error);
         res.status(500).json({ error: 'Failed to fetch on-chain holders', message: error?.message });
+    }
+});
+/**
+ * GET /api/admin/health-check
+ * Global health check: identify users with missing positions or zero-size positions
+ */
+router.get('/health-check', verifyAdminSecret, async (req, res) => {
+    try {
+        console.log('[Admin] Starting health check...');
+        // 1. Count total users and users with positions
+        const userStats = await pool_1.pool.query(`
+      SELECT
+        (SELECT COUNT(*) FROM users) as total_users,
+        (SELECT COUNT(DISTINCT wallet) FROM positions WHERE status = 'open') as users_with_open_positions,
+        (SELECT COUNT(*) FROM positions WHERE status = 'open') as total_open_positions,
+        (SELECT COUNT(*) FROM positions WHERE status = 'open' AND position_size_usd < 1) as zero_size_positions
+    `);
+        const stats = userStats.rows[0];
+        // 2. Find users with zero XP but have positions
+        const zeroXpPositions = await pool_1.pool.query(`
+      SELECT w.wallet, COUNT(p.id) as position_count, SUM(p.position_size_usd) as total_usd
+      FROM positions p
+      JOIN users w ON p.wallet = w.wallet
+      WHERE p.status = 'open' AND w.total_xp = 0 AND p.position_size_usd > 0
+      GROUP BY w.wallet
+      ORDER BY position_count DESC
+      LIMIT 20
+    `);
+        // 3. Find users with $0 positions (failed sync issue)
+        const zeroDollarPositions = await pool_1.pool.query(`
+      SELECT w.wallet, p.asset, p.position_size_usd, p.opened_at, p.created_at
+      FROM positions p
+      JOIN users w ON p.wallet = w.wallet
+      WHERE p.status = 'open' AND p.position_size_usd < 0.01
+      ORDER BY p.created_at DESC
+      LIMIT 30
+    `);
+        // 4. Find users with no positions but high XP (possible sync issue)
+        const highXpNoPositions = await pool_1.pool.query(`
+      SELECT u.wallet, u.total_xp, u.created_at
+      FROM users u
+      WHERE u.total_xp > 0
+      AND NOT EXISTS (SELECT 1 FROM positions WHERE wallet = u.wallet AND status = 'open')
+      ORDER BY u.total_xp DESC
+      LIMIT 10
+    `);
+        // 5. Check for duplicate transactions (sync issue)
+        const duplicateTxs = await pool_1.pool.query(`
+      SELECT tx_signature, COUNT(*) as count
+      FROM processed_transactions
+      GROUP BY tx_signature
+      HAVING COUNT(*) > 1
+      LIMIT 10
+    `);
+        // 6. Position size distribution
+        const sizeDistribution = await pool_1.pool.query(`
+      SELECT
+        SUM(CASE WHEN position_size_usd < 1 THEN 1 ELSE 0 END) as under_1,
+        SUM(CASE WHEN position_size_usd >= 1 AND position_size_usd < 10 THEN 1 ELSE 0 END) as range_1_10,
+        SUM(CASE WHEN position_size_usd >= 10 AND position_size_usd < 100 THEN 1 ELSE 0 END) as range_10_100,
+        SUM(CASE WHEN position_size_usd >= 100 THEN 1 ELSE 0 END) as over_100
+      FROM positions WHERE status = 'open'
+    `);
+        const result = {
+            timestamp: new Date().toISOString(),
+            summary: {
+                totalUsers: parseInt(stats.total_users),
+                usersWithOpenPositions: parseInt(stats.users_with_open_positions),
+                totalOpenPositions: parseInt(stats.total_open_positions),
+                zeroSizePositions: parseInt(stats.zero_size_positions),
+                usersWithoutPositions: parseInt(stats.total_users) - parseInt(stats.users_with_open_positions),
+            },
+            issues: {
+                zeroXpWithPositions: {
+                    count: zeroXpPositions.rows.length,
+                    details: zeroXpPositions.rows,
+                    description: 'Users with open positions but 0 XP — likely not synced yet or XP calculation failed',
+                },
+                zeroDollarPositions: {
+                    count: zeroDollarPositions.rows.length,
+                    details: zeroDollarPositions.rows,
+                    description: 'Positions with $0 size — trade likely not recognized by Helius or pricing failed',
+                },
+                highXpNoPositions: {
+                    count: highXpNoPositions.rows.length,
+                    details: highXpNoPositions.rows,
+                    description: 'Users with XP but no open positions — old positions closed or data inconsistency',
+                },
+                duplicateTransactions: {
+                    count: duplicateTxs.rows.length,
+                    details: duplicateTxs.rows,
+                    description: 'Transactions processed more than once — dedup logic may have failed',
+                },
+            },
+            positionSizeDistribution: {
+                under1Dollar: parseInt(sizeDistribution.rows[0]?.under_1 || 0),
+                oneToTenDollars: parseInt(sizeDistribution.rows[0]?.range_1_10 || 0),
+                tenTo100Dollars: parseInt(sizeDistribution.rows[0]?.range_10_100 || 0),
+                over100Dollars: parseInt(sizeDistribution.rows[0]?.over_100 || 0),
+            },
+        };
+        console.log('[Admin] Health check complete:', JSON.stringify(result.summary, null, 2));
+        res.json(result);
+    }
+    catch (error) {
+        console.error('[Admin] Health check failed:', error);
+        res.status(500).json({ error: 'Health check failed', message: error?.message });
+    }
+});
+/**
+ * POST /api/admin/sync-all-wallets
+ * Force-sync all wallets to pick up any missing positions and recalculate XP
+ * CAUTION: Heavy operation — should only be run during low-traffic periods
+ */
+router.post('/sync-all-wallets', verifyAdminSecret, async (req, res) => {
+    try {
+        console.log('[Admin] Starting force-sync for all wallets...');
+        // Get all unique wallets from users table
+        const wallets = await pool_1.pool.query('SELECT wallet FROM users ORDER BY created_at DESC');
+        const walletList = wallets.rows.map(r => r.wallet);
+        console.log(`[Admin] Syncing ${walletList.length} wallets...`);
+        // Import walletSyncService
+        const { walletSyncService } = await Promise.resolve().then(() => __importStar(require('../services/walletSyncService')));
+        const { xpEngine } = await Promise.resolve().then(() => __importStar(require('../services/xpEngine')));
+        let syncedCount = 0;
+        let positionsCreated = 0;
+        let errors = [];
+        for (const wallet of walletList) {
+            try {
+                const result = await walletSyncService.syncWallet(wallet);
+                if (!result.details[0]?.includes('Skipped')) {
+                    syncedCount++;
+                    positionsCreated += result.positionsCreated;
+                    console.log(`[Admin] Synced ${wallet.slice(0, 8)}...: ${result.positionsCreated} positions created`);
+                }
+            }
+            catch (err) {
+                errors.push(`${wallet.slice(0, 8)}...: ${err?.message}`);
+            }
+            // Small delay between syncs to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        // Trigger XP recalculation after all syncs complete
+        console.log('[Admin] Triggering XP recalculation...');
+        const xpResult = await xpEngine.recalculateAllXP();
+        res.json({
+            message: 'Force-sync completed',
+            walletsSynced: syncedCount,
+            walletsAttempted: walletList.length,
+            positionsCreated,
+            xpUpdated: xpResult,
+            errors: errors.length > 0 ? errors : 'None',
+        });
+    }
+    catch (error) {
+        console.error('[Admin] Force-sync failed:', error);
+        res.status(500).json({ error: 'Force-sync failed', message: error?.message });
     }
 });
 exports.default = router;

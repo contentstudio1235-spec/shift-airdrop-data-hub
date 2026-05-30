@@ -10,6 +10,7 @@ export interface WalletSyncResult {
 }
 export declare class WalletSyncService {
     private heliusBase;
+    private lastSyncedAt;
     /**
      * Full sync for a wallet:
      *   1. Register user (upsert)
