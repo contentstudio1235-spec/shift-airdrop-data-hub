@@ -2521,8 +2521,8 @@ router.get('/health-check', verifyAdminSecret, async (req, res) => {
     const sizeDistribution = await pool.query(`
       SELECT
         SUM(CASE WHEN position_size_usd < 1 THEN 1 ELSE 0 END) as under_1,
-        SUM(CASE WHEN position_size_usd >= 1 AND position_size_usd < 10 THEN 1 ELSE 0 END) as 1_to_10,
-        SUM(CASE WHEN position_size_usd >= 10 AND position_size_usd < 100 THEN 1 ELSE 0 END) as 10_to_100,
+        SUM(CASE WHEN position_size_usd >= 1 AND position_size_usd < 10 THEN 1 ELSE 0 END) as range_1_10,
+        SUM(CASE WHEN position_size_usd >= 10 AND position_size_usd < 100 THEN 1 ELSE 0 END) as range_10_100,
         SUM(CASE WHEN position_size_usd >= 100 THEN 1 ELSE 0 END) as over_100
       FROM positions WHERE status = 'open'
     `);
@@ -2560,8 +2560,8 @@ router.get('/health-check', verifyAdminSecret, async (req, res) => {
       },
       positionSizeDistribution: {
         under1Dollar: parseInt(sizeDistribution.rows[0]?.under_1 || 0),
-        oneToTenDollars: parseInt(sizeDistribution.rows[0]?.['1_to_10'] || 0),
-        tenTo100Dollars: parseInt(sizeDistribution.rows[0]?.['10_to_100'] || 0),
+        oneToTenDollars: parseInt(sizeDistribution.rows[0]?.range_1_10 || 0),
+        tenTo100Dollars: parseInt(sizeDistribution.rows[0]?.range_10_100 || 0),
         over100Dollars: parseInt(sizeDistribution.rows[0]?.over_100 || 0),
       },
     };
