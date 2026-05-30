@@ -2458,4 +2458,177 @@ router.get('/onchain-holders', verifyAdminSecret, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/admin/health-check
+ * Global health check: identify users with missing positions or zero-size positions
+ */
+router.get('/health-check', verifyAdminSecret, async (req, res) => {
+  try {
+    console.log('[Admin] Starting health check...');
+
+    // 1. Count total users and users with positions
+    const userStats = await pool.query(`
+      SELECT
+        (SELECT COUNT(*) FROM users) as total_users,
+        (SELECT COUNT(DISTINCT wallet) FROM positions WHERE status = 'open') as users_with_open_positions,
+        (SELECT COUNT(*) FROM positions WHERE status = 'open') as total_open_positions,
+        (SELECT COUNT(*) FROM positions WHERE status = 'open' AND position_size_usd < 1) as zero_size_positions
+    `);
+
+    const stats = userStats.rows[0];
+
+    // 2. Find users with zero XP but have positions
+    const zeroXpPositions = await pool.query(`
+      SELECT w.wallet, COUNT(p.id) as position_count, SUM(p.position_size_usd) as total_usd
+      FROM positions p
+      JOIN users w ON p.wallet = w.wallet
+      WHERE p.status = 'open' AND w.total_xp = 0 AND p.position_size_usd > 0
+      GROUP BY w.wallet
+      ORDER BY position_count DESC
+      LIMIT 20
+    `);
+
+    // 3. Find users with $0 positions (failed sync issue)
+    const zeroDollarPositions = await pool.query(`
+      SELECT w.wallet, p.asset, p.position_size_usd, p.opened_at, p.created_at
+      FROM positions p
+      JOIN users w ON p.wallet = w.wallet
+      WHERE p.status = 'open' AND p.position_size_usd < 0.01
+      ORDER BY p.created_at DESC
+      LIMIT 30
+    `);
+
+    // 4. Find users with no positions but high XP (possible sync issue)
+    const highXpNoPositions = await pool.query(`
+      SELECT u.wallet, u.total_xp, u.created_at
+      FROM users u
+      WHERE u.total_xp > 0
+      AND NOT EXISTS (SELECT 1 FROM positions WHERE wallet = u.wallet AND status = 'open')
+      ORDER BY u.total_xp DESC
+      LIMIT 10
+    `);
+
+    // 5. Check for duplicate transactions (sync issue)
+    const duplicateTxs = await pool.query(`
+      SELECT tx_signature, COUNT(*) as count
+      FROM processed_transactions
+      GROUP BY tx_signature
+      HAVING COUNT(*) > 1
+      LIMIT 10
+    `);
+
+    // 6. Position size distribution
+    const sizeDistribution = await pool.query(`
+      SELECT
+        SUM(CASE WHEN position_size_usd < 1 THEN 1 ELSE 0 END) as under_1,
+        SUM(CASE WHEN position_size_usd >= 1 AND position_size_usd < 10 THEN 1 ELSE 0 END) as 1_to_10,
+        SUM(CASE WHEN position_size_usd >= 10 AND position_size_usd < 100 THEN 1 ELSE 0 END) as 10_to_100,
+        SUM(CASE WHEN position_size_usd >= 100 THEN 1 ELSE 0 END) as over_100
+      FROM positions WHERE status = 'open'
+    `);
+
+    const result = {
+      timestamp: new Date().toISOString(),
+      summary: {
+        totalUsers: parseInt(stats.total_users),
+        usersWithOpenPositions: parseInt(stats.users_with_open_positions),
+        totalOpenPositions: parseInt(stats.total_open_positions),
+        zeroSizePositions: parseInt(stats.zero_size_positions),
+        usersWithoutPositions: parseInt(stats.total_users) - parseInt(stats.users_with_open_positions),
+      },
+      issues: {
+        zeroXpWithPositions: {
+          count: zeroXpPositions.rows.length,
+          details: zeroXpPositions.rows,
+          description: 'Users with open positions but 0 XP — likely not synced yet or XP calculation failed',
+        },
+        zeroDollarPositions: {
+          count: zeroDollarPositions.rows.length,
+          details: zeroDollarPositions.rows,
+          description: 'Positions with $0 size — trade likely not recognized by Helius or pricing failed',
+        },
+        highXpNoPositions: {
+          count: highXpNoPositions.rows.length,
+          details: highXpNoPositions.rows,
+          description: 'Users with XP but no open positions — old positions closed or data inconsistency',
+        },
+        duplicateTransactions: {
+          count: duplicateTxs.rows.length,
+          details: duplicateTxs.rows,
+          description: 'Transactions processed more than once — dedup logic may have failed',
+        },
+      },
+      positionSizeDistribution: {
+        under1Dollar: parseInt(sizeDistribution.rows[0]?.under_1 || 0),
+        oneToTenDollars: parseInt(sizeDistribution.rows[0]?.['1_to_10'] || 0),
+        tenTo100Dollars: parseInt(sizeDistribution.rows[0]?.['10_to_100'] || 0),
+        over100Dollars: parseInt(sizeDistribution.rows[0]?.over_100 || 0),
+      },
+    };
+
+    console.log('[Admin] Health check complete:', JSON.stringify(result.summary, null, 2));
+    res.json(result);
+  } catch (error: any) {
+    console.error('[Admin] Health check failed:', error);
+    res.status(500).json({ error: 'Health check failed', message: error?.message });
+  }
+});
+
+/**
+ * POST /api/admin/sync-all-wallets
+ * Force-sync all wallets to pick up any missing positions and recalculate XP
+ * CAUTION: Heavy operation — should only be run during low-traffic periods
+ */
+router.post('/sync-all-wallets', verifyAdminSecret, async (req, res) => {
+  try {
+    console.log('[Admin] Starting force-sync for all wallets...');
+
+    // Get all unique wallets from users table
+    const wallets = await pool.query('SELECT wallet FROM users ORDER BY created_at DESC');
+    const walletList = wallets.rows.map(r => r.wallet);
+
+    console.log(`[Admin] Syncing ${walletList.length} wallets...`);
+
+    // Import walletSyncService
+    const { walletSyncService } = await import('../services/walletSyncService');
+    const { xpEngine } = await import('../services/xpEngine');
+
+    let syncedCount = 0;
+    let positionsCreated = 0;
+    let errors: string[] = [];
+
+    for (const wallet of walletList) {
+      try {
+        const result = await walletSyncService.syncWallet(wallet);
+        if (!result.details[0]?.includes('Skipped')) {
+          syncedCount++;
+          positionsCreated += result.positionsCreated;
+          console.log(`[Admin] Synced ${wallet.slice(0, 8)}...: ${result.positionsCreated} positions created`);
+        }
+      } catch (err: any) {
+        errors.push(`${wallet.slice(0, 8)}...: ${err?.message}`);
+      }
+
+      // Small delay between syncs to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    // Trigger XP recalculation after all syncs complete
+    console.log('[Admin] Triggering XP recalculation...');
+    const xpResult = await xpEngine.recalculateAllXP();
+
+    res.json({
+      message: 'Force-sync completed',
+      walletsSynced: syncedCount,
+      walletsAttempted: walletList.length,
+      positionsCreated,
+      xpUpdated: xpResult,
+      errors: errors.length > 0 ? errors : 'None',
+    });
+  } catch (error: any) {
+    console.error('[Admin] Force-sync failed:', error);
+    res.status(500).json({ error: 'Force-sync failed', message: error?.message });
+  }
+});
+
 export default router;
