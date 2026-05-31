@@ -394,9 +394,9 @@ export default function DataHubAnalyticsPage() {
                   if (steps.length === 0) return null;
                   const totalSteps = steps.length;
                   const baseWidth = 500;
+                  const maxVal = Math.max(...steps.map((s: any) => Number(s.count))) || 1;
                   
                   return steps.map((step: any, idx: number) => {
-                    const maxVal = Number(steps[0].count) || 1;
                     const val = Number(step.count);
                     const conversionRate = (val / maxVal) * 100;
                     
@@ -460,10 +460,12 @@ export default function DataHubAnalyticsPage() {
             }}>
               <h4 style={{ fontSize: "0.85rem", color: "#888", textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 16px" }}>Funnel Breakdown</h4>
               <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                {getActiveFunnelData().map((step: any, idx: number, arr: any[]) => {
-                  const maxVal = Number(arr[0].count) || 1;
-                  const prevStep = arr[idx - 1];
-                  const val = Number(step.count);
+                {(() => {
+                  const arr = getActiveFunnelData();
+                  const maxVal = Math.max(...arr.map((s: any) => Number(s.count))) || 1;
+                  return arr.map((step: any, idx: number) => {
+                    const prevStep = arr[idx - 1];
+                    const val = Number(step.count);
                   
                   // Total conversion of the funnel
                   const totalConv = (val / maxVal) * 100;
@@ -491,7 +493,8 @@ export default function DataHubAnalyticsPage() {
                       </div>
                     </div>
                   );
-                })}
+                });
+              })()}
               </div>
             </div>
           </div>
