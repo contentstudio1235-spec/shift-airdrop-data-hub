@@ -4,6 +4,7 @@
 
 import { query, queryOne, execute } from '../db/pool';
 import { Position, User } from '../types';
+import { trackGA4EventForWallet } from '../utils/analytics';
 
 export class PositionService {
   /**
@@ -58,6 +59,16 @@ export class PositionService {
       'INSERT INTO processed_transactions (tx_signature) VALUES ($1) ON CONFLICT DO NOTHING',
       [txSignature]
     );
+
+    // Dispatch server-side GA4 trade event for tracking
+    trackGA4EventForWallet(wallet, 'rwa_trade_executed', {
+      asset,
+      position_size_usd: positionSizeUSD,
+      token_amount: tokenAmount || 0,
+      price_at_open: priceAtOpen || 0,
+      trade_type: 'buy',
+      tx_signature: txSignature
+    }).catch(() => {});
 
     console.log(`[Position] Opened: ${wallet.slice(0, 8)}... | ${asset} | $${positionSizeUSD.toFixed(2)}`);
     return true;
@@ -128,6 +139,15 @@ export class PositionService {
         [position.id]
       );
     }
+
+    // Dispatch server-side GA4 trade event for tracking
+    trackGA4EventForWallet(wallet, 'rwa_trade_executed', {
+      asset,
+      position_size_usd: Number(position.position_size_usd),
+      trade_type: 'sell',
+      tx_signature: txSignature,
+      hold_duration_hours: holdHours
+    }).catch(() => {});
 
     console.log(`[Position] Closed: ${wallet.slice(0, 8)}... | ${asset} | held ${this.formatDuration(position.opened_at, timestamp)}${holdHours < 24 ? ' ⚠️ early sell — XP clawed back' : ''}`);
     return position;

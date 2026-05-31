@@ -6,6 +6,9 @@ export const pool = new Pool({
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
+  ssl: config.databaseUrl.includes('render.com') || config.databaseUrl.includes('neon.tech') ? {
+    rejectUnauthorized: false
+  } : undefined
 });
 
 // Graceful shutdown

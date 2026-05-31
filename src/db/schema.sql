@@ -4,14 +4,19 @@
 
 -- Users table: core wallet identity + aggregated stats
 CREATE TABLE IF NOT EXISTS users (
-  wallet            VARCHAR(64) PRIMARY KEY,
-  total_xp          DECIMAL(18,4) DEFAULT 0,
-  claim_multiplier  DECIMAL(6,4) DEFAULT 1.0,
-  current_streak    INTEGER DEFAULT 0,
-  last_active       TIMESTAMP,
-  snag_user_id      VARCHAR(128),
-  created_at        TIMESTAMP DEFAULT NOW(),
-  updated_at        TIMESTAMP DEFAULT NOW()
+  wallet                       VARCHAR(64) PRIMARY KEY,
+  total_xp                     DECIMAL(18,4) DEFAULT 0,
+  claim_multiplier             DECIMAL(6,4) DEFAULT 1.0,
+  current_streak               INTEGER DEFAULT 0,
+  last_active                  TIMESTAMP,
+  snag_user_id                 VARCHAR(128),
+  snag_default_referral_link   TEXT,
+  snag_custom_referral_code    VARCHAR(64),
+  referral_link_synced_at      TIMESTAMP,
+  snag_points                  DECIMAL(18,4) DEFAULT 0,
+  ga_user_id                   VARCHAR(128),
+  created_at                   TIMESTAMP DEFAULT NOW(),
+  updated_at                   TIMESTAMP DEFAULT NOW()
 );
 
 -- Positions table: every tracked trading position

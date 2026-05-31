@@ -48,6 +48,7 @@ export default function AdminDashboardPage() {
   const [holdersError, setHoldersError] = useState<string | null>(null);
 
   const navItems = [
+    { label: "📊 Data Hub Analytics", path: "/admin/data-hub" },
     { label: "👥 User Management", path: "/admin/users" },
     { label: "🏆 Badges", path: "/admin/badges" },
     { label: "🎖️ Certificates", path: "/admin/certificates" },
