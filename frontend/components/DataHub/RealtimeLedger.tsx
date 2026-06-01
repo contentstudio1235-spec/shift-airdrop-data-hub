@@ -1,6 +1,11 @@
 'use client';
 
-import { StitchedProfile } from './types';
+import type { StitchedRecord } from './types';
+type StitchedProfile = StitchedRecord & {
+  snag_custom_referral_code?: string | null;
+  snag_points?: number | string | null;
+};
+
 
 interface RealtimeLedgerProps {
   profiles: StitchedProfile[];
@@ -145,7 +150,7 @@ export function RealtimeLedger({ profiles, loading }: RealtimeLedgerProps) {
                   )}
                 </td>
                 <td style={{ ...COL_STYLE, textAlign: 'right' }}>
-                  <PointsBadge points={p.snag_points || 0} />
+                  <PointsBadge points={Number(p.snag_points) || 0} />
                 </td>
               </tr>
             ))

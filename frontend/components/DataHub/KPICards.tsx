@@ -1,6 +1,6 @@
-'use client';
+// AnalyticsMetrics alias for backward compat
+type AnalyticsMetrics = import('./types').AnalyticsDashboard['metrics'];
 
-import { AnalyticsMetrics } from './types';
 import Sparkline from '@/components/Sparkline';
 
 interface KPICardProps {
