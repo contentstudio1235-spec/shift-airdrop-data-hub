@@ -1,11 +1,16 @@
 import { Pool } from 'pg';
 import { config } from '../config';
 
+// Neon free tier supports max 10 connections.
+// Keep pool at 5 to leave headroom for migrations + cron + webhooks running in parallel.
 export const pool = new Pool({
   connectionString: config.databaseUrl,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
+  max: 5,
+  idleTimeoutMillis: 20000,
+  connectionTimeoutMillis: 10000,
+  ssl: config.databaseUrl.includes('neon.tech') || config.databaseUrl.includes('neon.db')
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
 // Graceful shutdown
