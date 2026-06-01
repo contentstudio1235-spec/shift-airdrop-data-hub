@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHIFT RWA — Cross-Channel Data Hub</title>
+    <!-- Google Fonts: Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Lucide Icons (loaded via CDN for lightweight premium glyphs) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-logo"></div>
+                <div class="brand-info">
+                    <span class="brand-name">SHIFT RWA</span>
+                    <span class="brand-tag">DATA HUB</span>
+                </div>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-tab="overview" id="btn-overview">
+                    <i data-lucide="layout-dashboard"></i>
+                    <span>Overview</span>
+                </button>
+                <button class="nav-item" data-tab="campaigns" id="btn-campaigns">
+                    <i data-lucide="bar-chart-3"></i>
+                    <span>Campaigns</span>
+                </button>
+                <button class="nav-item" data-tab="users" id="btn-users">
+                    <i data-lucide="users"></i>
+                    <span>User Resolution</span>
+                </button>
+                <button class="nav-item" data-tab="legal" id="btn-legal">
+                    <i data-lucide="shield-check"></i>
+                    <span>Legal Compliance</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-status-card">
+                    <div class="pulse-indicator status-online"></div>
+                    <div class="status-info">
+                        <span class="status-label">Neon Connection</span>
+                        <span class="status-value">Active Branch</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Dashboard Viewport -->
+        <main class="main-viewport">
+            <!-- Header -->
+            <header class="app-header">
+                <div class="header-title-area">
+                    <h1 id="tab-title">Omnichannel Overview</h1>
+                    <p class="header-subtitle" id="tab-description">Real-time cross-channel marketing KPIs and user attribution.</p>
+                </div>
+                <div class="header-actions">
+                    <div class="time-range-picker">
+                        <button class="time-btn active">7D</button>
+                        <button class="time-btn">30D</button>
+                        <button class="time-btn">ALL</button>
+                    </div>
+                    <button class="btn btn-primary" id="btn-refresh">
+                        <i data-lucide="refresh-cw"></i>
+                        <span>Sync Now</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Dashboard Content Screens -->
+            <div class="content-container">
+                
+                <!-- TAB 1: OVERVIEW -->
+                <section class="tab-content active" id="tab-overview">
+                    <!-- Key Performance Cards Grid -->
+                    <div class="kpi-grid">
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <span class="kpi-title">Total Active Users</span>
+                                <div class="kpi-icon-wrapper"><i data-lucide="users-round"></i></div>
+                            </div>
+                            <div class="kpi-value-area">
+                                <span class="kpi-value" id="kpi-users">12,450</span>
+                                <span class="kpi-trend trend-up"><i data-lucide="trending-up"></i> +12.4%</span>
+                            </div>
+                            <div class="kpi-footer">
+                                <span>Across GA4 & omnichannels</span>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <span class="kpi-title">Total Value Locked (TVL)</span>
+                                <div class="kpi-icon-wrapper"><i data-lucide="coins"></i></div>
+                            </div>
+                            <div class="kpi-value-area">
+                                <span class="kpi-value" id="kpi-tvl">$8,419,250</span>
+                                <span class="kpi-trend trend-up"><i data-lucide="trending-up"></i> +18.2%</span>
+                            </div>
+                            <div class="kpi-footer">
+                                <span>Underlying assets (Alpaca / PoR)</span>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <span class="kpi-title">Snag Conversion Rate</span>
+                                <div class="kpi-icon-wrapper"><i data-lucide="gift"></i></div>
+                            </div>
+                            <div class="kpi-value-area">
+                                <span class="kpi-value" id="kpi-conversion">87.2%</span>
+                                <span class="kpi-trend trend-up"><i data-lucide="trending-up"></i> +4.1%</span>
+                            </div>
+                            <div class="kpi-footer">
+                                <span>Referrals verified via wallets</span>
+                            </div>
+                        </div>
+
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <span class="kpi-title">Avg. Engagement Rate</span>
+                                <div class="kpi-icon-wrapper"><i data-lucide="heart"></i></div>
+                            </div>
+                            <div class="kpi-value-area">
+                                <span class="kpi-value" id="kpi-engagement">64.8%</span>
+                                <span class="kpi-trend trend-down"><i data-lucide="trending-down"></i> -1.2%</span>
+                            </div>
+                            <div class="kpi-footer">
+                                <span>X, Telegram & Discord metrics</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Visualization & Feed Section -->
+                    <div class="dashboard-split-grid">
+                        <!-- Funnel Conversion Chart Card -->
+                        <div class="glass-card chart-card large-span">
+                            <div class="card-header">
+                                <div>
+                                    <h3>Omnichannel Funnel Resolution</h3>
+                                    <p class="card-desc">Tracking drop-offs from social click-throughs to wallet linked trades.</p>
+                                </div>
+                                <div class="header-badges">
+                                    <span class="badge badge-mint">Resolved</span>
+                                </div>
+                            </div>
+                            <div class="card-body funnel-chart-body">
+                                <div class="funnel-container" id="funnel-container">
+                                    <!-- Rendered dynamically via SVG in app.js -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Real-time Live Event Feed -->
+                        <div class="glass-card feed-card">
+                            <div class="card-header">
+                                <div>
+                                    <h3>Live Activity Ingestion Stream</h3>
+                                    <p class="card-desc">Simulated WebSocket listening to Neon DB events table.</p>
+                                </div>
+                                <div class="event-pulse-glow"></div>
+                            </div>
+                            <div class="card-body feed-body">
+                                <div class="event-stream" id="event-stream-list">
+                                    <!-- Dynamic rows added by app.js with fade-in transition -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 2: CAMPAIGNS -->
+                <section class="tab-content" id="tab-campaigns">
+                    <div class="dashboard-split-grid">
+                        <!-- Marketing Channel Comparison -->
+                        <div class="glass-card chart-card large-span">
+                            <div class="card-header">
+                                <div>
+                                    <h3>Marketing Channel Performance</h3>
+                                    <p class="card-desc">Active users and engagements mapped across core communication platforms.</p>
+                                </div>
+                                <div class="chart-toggles">
+                                    <button class="chart-toggle-btn active" data-metric="clicks">Clicks</button>
+                                    <button class="chart-toggle-btn" data-metric="members">Community Growth</button>
+                                </div>
+                            </div>
+                            <div class="card-body comparison-chart-body">
+                                <div class="bar-chart-container" id="comparison-chart">
+                                    <!-- Rendered dynamically in app.js -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Snag Campaigns Overview -->
+                        <div class="glass-card snag-card">
+                            <div class="card-header">
+                                <div>
+                                    <h3>Snag Campaign Rewards</h3>
+                                    <p class="card-desc">Airdrop points and tier allocations based on social challenges.</p>
+                                </div>
+                                <span class="badge badge-amber">Airdrop Active</span>
+                            </div>
+                            <div class="card-body snag-stats">
+                                <div class="snag-grid">
+                                    <div class="snag-stat-box">
+                                        <span class="snag-stat-label">Total Allocated</span>
+                                        <span class="snag-stat-value">5,000,000 pts</span>
+                                    </div>
+                                    <div class="snag-stat-box">
+                                        <span class="snag-stat-label">Claimed Tasks</span>
+                                        <span class="snag-stat-value">4,124,500 pts</span>
+                                    </div>
+                                </div>
+                                <div class="snag-progress-container">
+                                    <div class="snag-progress-header">
+                                        <span>Campaign Distribution Progress</span>
+                                        <span>82.4%</span>
+                                    </div>
+                                    <div class="progress-bar-bg">
+                                        <div class="progress-bar-fill" style="width: 82.4%;"></div>
+                                    </div>
+                                </div>
+                                <div class="campaign-list">
+                                    <div class="campaign-row">
+                                        <div class="camp-meta">
+                                            <span class="camp-name">Ep 01: What is SHIFT</span>
+                                            <span class="camp-desc">Watch video & link wallet task</span>
+                                        </div>
+                                        <span class="badge badge-success">Completed</span>
+                                    </div>
+                                    <div class="campaign-row">
+                                        <div class="camp-meta">
+                                            <span class="camp-name">Snag Referral Boost</span>
+                                            <span class="camp-desc">Invite 3 friends to app.shiftrwa.xyz</span>
+                                        </div>
+                                        <span class="badge badge-success">Completed</span>
+                                    </div>
+                                    <div class="campaign-row">
+                                        <div class="camp-meta">
+                                            <span class="camp-name">Series Token Trading Challenge</span>
+                                            <span class="camp-desc">Hold SOX3L or SPX3L for 5 days</span>
+                                        </div>
+                                        <span class="badge badge-amber">In Progress</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 3: USER RESOLUTION -->
+                <section class="tab-content" id="tab-users">
+                    <div class="glass-card table-card">
+                        <div class="table-filters-bar">
+                            <div class="search-box-wrapper">
+                                <i data-lucide="search" class="search-icon"></i>
+                                <input type="text" id="user-search" placeholder="Search by Solana Wallet, X Handle, Telegram, Discord, GA ID...">
+                            </div>
+                            <div class="filter-actions-group">
+                                <select id="filter-status" class="select-filter">
+                                    <option value="all">All Statuses</option>
+                                    <option value="verified">Verified Profile</option>
+                                    <option value="pending">Pending Link</option>
+                                    <option value="flagged">Flagged Bot</option>
+                                </select>
+                                <select id="filter-channel" class="select-filter">
+                                    <option value="all">All Referral Codes</option>
+                                    <option value="organic">Organic (No Code)</option>
+                                    <option value="code">Has Referral Code</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="table-responsive-wrapper">
+                            <table class="users-table" id="users-data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Solana Wallet</th>
+                                        <th>Google Analytics ID</th>
+                                        <th>X (Twitter)</th>
+                                        <th>Telegram</th>
+                                        <th>Discord</th>
+                                        <th>Snag Code</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="users-table-body">
+                                    <!-- Rendered dynamically by app.js -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="table-pagination-footer">
+                            <span class="pagination-info" id="pagination-text">Showing 1-10 of 120 resolved profiles</span>
+                            <div class="pagination-buttons">
+                                <button class="btn btn-sec btn-sm" id="btn-prev" disabled><i data-lucide="chevron-left"></i> Previous</button>
+                                <button class="btn btn-sec btn-sm" id="btn-next">Next <i data-lucide="chevron-right"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 4: LEGAL COMPLIANCE REFERENCE -->
+                <section class="tab-content" id="tab-legal">
+                    <div class="legal-split-grid">
+                        <div class="glass-card legal-main-card">
+                            <div class="card-header">
+                                <div class="header-title-with-icon">
+                                    <div class="shield-badge-icon"><i data-lucide="shield-alert"></i></div>
+                                    <div>
+                                        <h3>SHIFT DAO LLC Legal Guidelines</h3>
+                                        <p class="card-desc">Mandatory marketing rules enacted April/May 2026. All copy must follow these strictly.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-body legal-rules-body">
+                                <div class="rule-box block-rule">
+                                    <div class="rule-box-header">
+                                        <span class="badge badge-danger">CRITICAL BANS (ZERO TOLERANCE)</span>
+                                    </div>
+                                    <div class="rule-box-content">
+                                        <ul>
+                                            <li><strong>No Yield Promises:</strong> Never mention "guaranteed returns", "risk-free yield", "earning interest", or "stable gains".</li>
+                                            <li><strong>No Banned Keywords:</strong> Phrases like "moon", "no KYC", "bank-grade", or "profits" are legally blocked.</li>
+                                            <li><strong>Product vs Entity Distinction:</strong> Never say "Shift has an app" or "Shift is an exchange". Refer to the product as <strong>Shift Stocks Series Tokens</strong> and the issuer as <strong>SHIFT DAO LLC</strong> (Marshall Islands DAO LLC).</li>
+                                        </ul>
+                                    </div>
+                                </div>
+
+                                <div class="rule-box warn-rule">
+                                    <div class="rule-box-header">
+                                        <span class="badge badge-warning">HEURISTIC WARNINGS</span>
+                                    </div>
+                                    <div class="rule-box-content">
+                                        <ul>
+                                            <li><strong>Asset Wording:</strong> Use "backing/reserve assets" instead of "underlying assets". Say "tokenized exposure of X" instead of "tokenized stock X".</li>
+                                            <li><strong>Regulation Claims:</strong> Do not assert custom regulatory approvals or custom compliance credentials beyond the Marshall Islands DAO LLC Act framework.</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="glass-card compliance-widget">
+                            <div class="card-header">
+                                <div>
+                                    <h3>Legal Copy Analyzer</h3>
+                                    <p class="card-desc">Interactive mockup of shift-blog-writer legal-compliance-linter.py</p>
+                                </div>
+                            </div>
+                            <div class="card-body linter-widget-body">
+                                <div class="linter-input-wrapper">
+                                    <label for="linter-textarea" class="input-label">Test Draft Marketing Content</label>
+                                    <textarea id="linter-textarea" placeholder="Paste your proposed blog draft or X tweet copy here to run compliance audit..."></textarea>
+                                </div>
+                                <div class="linter-actions">
+                                    <button class="btn btn-primary btn-block" id="btn-lint-check">
+                                        <i data-lucide="play"></i> Run Compliance Check
+                                    </button>
+                                </div>
+                                <div class="linter-results-area" id="linter-results" style="display: none;">
+                                    <!-- Results printed by app.js -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+        </main>
+    </div>
+    
+    <!-- JavaScript Entrypoint -->
+    <script src="app.js"></script>
+</body>
+</html>
