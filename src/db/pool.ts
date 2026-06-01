@@ -1,16 +1,21 @@
 import { Pool } from 'pg';
 import { config } from '../config';
 
-// Neon free tier supports max 10 connections.
-// Keep pool at 5 to leave headroom for migrations + cron + webhooks running in parallel.
+// Render Postgres internal URL: no SSL needed (same private network).
+// Neon/external URLs: require SSL with rejectUnauthorized: false.
+// Keep pool at 5 — enough for cron + webhooks + API requests without exhausting DB limits.
+const isExternalDb =
+  config.databaseUrl.includes('neon.tech') ||
+  config.databaseUrl.includes('neon.db') ||
+  config.databaseUrl.includes('ohio-postgres.render.com') || // Render external
+  config.databaseUrl.includes('rlwy.net');                    // Railway
+
 export const pool = new Pool({
   connectionString: config.databaseUrl,
   max: 5,
   idleTimeoutMillis: 20000,
   connectionTimeoutMillis: 10000,
-  ssl: config.databaseUrl.includes('neon.tech') || config.databaseUrl.includes('neon.db')
-    ? { rejectUnauthorized: false }
-    : false,
+  ssl: isExternalDb ? { rejectUnauthorized: false } : false,
 });
 
 // Graceful shutdown
