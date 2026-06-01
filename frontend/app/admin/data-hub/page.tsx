@@ -131,15 +131,15 @@ export default function DataHubAnalyticsPage() {
   };
 
   return (
-    <div className="text-on-surface antialiased min-h-screen pb-xl bg-[#050505]">
-      <nav className="bg-surface/70 backdrop-blur-xl border-b border-outline-variant/20 shadow-[0_0_15px_rgba(0,200,150,0.1)] fixed top-0 w-full z-50 flex justify-between items-center px-margin-mobile h-16 md:hidden">
-        <div className="flex items-center gap-sm">
+    <div className="text-on-surface antialiased min-h-screen pb-8 bg-[#050505]">
+      <nav className="bg-surface/70 backdrop-blur-xl border-b border-outline-variant/20 shadow-[0_0_15px_rgba(0,200,150,0.1)] fixed top-0 w-full z-50 flex justify-between items-center px-4 h-16 md:hidden">
+        <div className="flex items-center gap-2">
           <button className="text-on-surface-variant hover:text-primary transition-colors duration-200">
-            <span className="material-symbols-outlined text-display-sm">menu</span>
+            <span className="material-symbols-outlined text-4xl">menu</span>
           </button>
-          <span className="font-headline-lg-mobile text-headline-lg-mobile font-bold tracking-tighter text-primary text-glow">SHIFT</span>
+          <span className="font-bold tracking-tight text-2xl font-bold tracking-tighter text-primary text-glow">SHIFT</span>
         </div>
-        <div className="flex items-center gap-sm">
+        <div className="flex items-center gap-2">
           <button onClick={fetchStats} className="text-on-surface-variant hover:text-primary transition-colors duration-200 relative">
             <span className="material-symbols-outlined">sync</span>
             {loading && <span className="absolute top-0 right-0 w-2 h-2 bg-primary rounded-full animate-pulse"></span>}
@@ -150,15 +150,15 @@ export default function DataHubAnalyticsPage() {
         </div>
       </nav>
 
-      <nav className="bg-surface/70 backdrop-blur-xl border-b border-outline-variant/20 shadow-[0_0_15px_rgba(0,200,150,0.1)] fixed top-0 w-full z-50 justify-between items-center px-margin-desktop h-16 hidden md:flex">
-        <div className="flex items-center gap-lg">
-          <span className="font-headline-lg text-headline-lg font-bold tracking-tighter text-primary">SHIFT RWA</span>
-          <div className="flex gap-md">
-            <button className="font-body-md text-body-md text-primary border-b-2 border-primary pb-1">Analytics</button>
-            <button onClick={() => router.push("/admin/dashboard")} className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors duration-200">Admin Main</button>
+      <nav className="bg-surface/70 backdrop-blur-xl border-b border-outline-variant/20 shadow-[0_0_15px_rgba(0,200,150,0.1)] fixed top-0 w-full z-50 justify-between items-center px-10 h-16 hidden md:flex">
+        <div className="flex items-center gap-6">
+          <span className="font-bold tracking-tight text-3xl font-bold tracking-tighter text-primary">SHIFT RWA</span>
+          <div className="flex gap-4">
+            <button className="font-normal text-base text-primary border-b-2 border-primary pb-1">Analytics</button>
+            <button onClick={() => router.push("/admin/dashboard")} className="font-normal text-base text-on-surface-variant hover:text-primary transition-colors duration-200">Admin Main</button>
           </div>
         </div>
-        <div className="flex items-center gap-sm">
+        <div className="flex items-center gap-2">
           <button onClick={fetchStats} className="text-on-surface-variant hover:text-primary transition-colors duration-200 flex items-center gap-2">
             <span className="material-symbols-outlined">sync</span>
             {loading && <span className="text-xs text-primary animate-pulse">Syncing...</span>}
@@ -166,40 +166,40 @@ export default function DataHubAnalyticsPage() {
         </div>
       </nav>
 
-      <aside className="bg-surface-container-lowest/80 backdrop-blur-md border-r border-outline-variant/10 fixed left-0 top-0 h-full flex-col py-lg docked left-0 h-screen w-64 transition-all duration-300 ease-in-out hidden md:flex z-40 pt-24">
-        <div className="px-md mb-lg">
-          <div className="flex items-center gap-sm mb-xs">
+      <aside className="bg-surface-container-lowest/80 backdrop-blur-md border-r border-outline-variant/10 fixed left-0 top-0 h-full flex-col py-6 docked left-0 h-screen w-64 transition-all duration-300 ease-in-out hidden md:flex z-40 pt-24">
+        <div className="px-4 mb-6">
+          <div className="flex items-center gap-2 mb-1">
             <div className="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center border border-primary/30">
               <span className="material-symbols-outlined text-primary">hub</span>
             </div>
             <div>
-              <div className="font-headline-lg-mobile text-headline-lg-mobile text-primary font-black text-glow">SHIFT RWA</div>
-              <div className="font-label-sm text-label-sm text-on-surface-variant">Omnichannel Hub</div>
+              <div className="font-bold tracking-tight text-2xl text-primary font-black text-glow">SHIFT RWA</div>
+              <div className="font-semibold uppercase tracking-wider text-xs text-on-surface-variant">Omnichannel Hub</div>
             </div>
           </div>
         </div>
-        <div className="flex flex-col gap-xs px-sm flex-grow">
-          <button className="flex items-center gap-sm px-md py-sm rounded-lg font-label-sm text-label-sm text-primary bg-primary/10 border-r-2 border-primary">
+        <div className="flex flex-col gap-1 px-2 flex-grow">
+          <button className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold uppercase tracking-wider text-xs text-primary bg-primary/10 border-r-2 border-primary">
             <span className="material-symbols-outlined">dashboard</span> Dashboard
           </button>
-          <button onClick={() => setActiveFunnelTab("aum")} className={`flex items-center gap-sm px-md py-sm rounded-lg font-label-sm text-label-sm ${activeFunnelTab === 'aum' ? 'text-primary bg-primary/5' : 'text-on-surface-variant hover:bg-white/5'}`}>
+          <button onClick={() => setActiveFunnelTab("aum")} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold uppercase tracking-wider text-xs ${activeFunnelTab === 'aum' ? 'text-primary bg-primary/5' : 'text-on-surface-variant hover:bg-white/5'}`}>
             <span className="material-symbols-outlined">account_balance_wallet</span> AUM Holding
           </button>
-          <button onClick={() => setActiveFunnelTab("holder")} className={`flex items-center gap-sm px-md py-sm rounded-lg font-label-sm text-label-sm ${activeFunnelTab === 'holder' ? 'text-primary bg-primary/5' : 'text-on-surface-variant hover:bg-white/5'}`}>
+          <button onClick={() => setActiveFunnelTab("holder")} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold uppercase tracking-wider text-xs ${activeFunnelTab === 'holder' ? 'text-primary bg-primary/5' : 'text-on-surface-variant hover:bg-white/5'}`}>
             <span className="material-symbols-outlined">monitoring</span> Holder Acquisition
           </button>
-          <button onClick={() => setActiveFunnelTab("referral")} className={`flex items-center gap-sm px-md py-sm rounded-lg font-label-sm text-label-sm ${activeFunnelTab === 'referral' ? 'text-primary bg-primary/5' : 'text-on-surface-variant hover:bg-white/5'}`}>
+          <button onClick={() => setActiveFunnelTab("referral")} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold uppercase tracking-wider text-xs ${activeFunnelTab === 'referral' ? 'text-primary bg-primary/5' : 'text-on-surface-variant hover:bg-white/5'}`}>
             <span className="material-symbols-outlined">filter_alt</span> Brand Awareness
           </button>
         </div>
       </aside>
 
-      <main className="pt-20 px-margin-mobile md:px-margin-desktop md:pl-[calc(16rem+2.5rem)] md:pt-24 max-w-7xl mx-auto space-y-lg pb-24 md:pb-0">
-        <header className="md:hidden flex flex-col gap-xs mb-md">
-          <h1 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Dashboard</h1>
+      <main className="pt-20 px-4 md:px-10 md:pl-[calc(16rem+2.5rem)] md:pt-24 max-w-7xl mx-auto space-y-lg pb-24 md:pb-0">
+        <header className="md:hidden flex flex-col gap-1 mb-4">
+          <h1 className="font-bold tracking-tight text-2xl text-on-surface">Dashboard</h1>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-primary animate-pulse neon-glow"></span>
-            <span className="font-label-sm text-label-sm text-primary">System Live</span>
+            <span className="font-semibold uppercase tracking-wider text-xs text-primary">System Live</span>
           </div>
         </header>
 
@@ -209,12 +209,12 @@ export default function DataHubAnalyticsPage() {
           </div>
         )}
 
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-md">
-          <div className="glass-panel p-md rounded-xl neon-glow relative overflow-hidden group">
-            <div className="flex justify-between items-start mb-sm">
-              <span className="font-label-sm text-label-sm text-on-surface-variant tracking-wider">STITCHED GA4 PROFILES</span>
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="glass-panel p-4 rounded-xl neon-glow relative overflow-hidden group">
+            <div className="flex justify-between items-start mb-2">
+              <span className="font-semibold uppercase tracking-wider text-xs text-on-surface-variant tracking-wider">STITCHED GA4 PROFILES</span>
             </div>
-            <div className="font-data-lg text-data-lg text-on-surface text-3xl font-bold tracking-tight">
+            <div className="font-bold text-3xl text-on-surface text-3xl font-bold tracking-tight">
               {loading ? "..." : (data?.metrics?.stitchedUsers || 0).toLocaleString()}
             </div>
             <div className="mt-md h-12 w-full relative flex items-end">
@@ -225,11 +225,11 @@ export default function DataHubAnalyticsPage() {
             </div>
           </div>
 
-          <div className="glass-panel p-md rounded-xl neon-glow relative overflow-hidden group">
-            <div className="flex justify-between items-start mb-sm">
-              <span className="font-label-sm text-label-sm text-on-surface-variant tracking-wider">ACTIVE AUM HOLDERS</span>
+          <div className="glass-panel p-4 rounded-xl neon-glow relative overflow-hidden group">
+            <div className="flex justify-between items-start mb-2">
+              <span className="font-semibold uppercase tracking-wider text-xs text-on-surface-variant tracking-wider">ACTIVE AUM HOLDERS</span>
             </div>
-            <div className="font-data-lg text-data-lg text-on-surface text-3xl font-bold tracking-tight">
+            <div className="font-bold text-3xl text-on-surface text-3xl font-bold tracking-tight">
               {loading ? "..." : (data?.metrics?.activeHolders || 0).toLocaleString()}
             </div>
             <div className="mt-md h-12 w-full relative flex items-end">
@@ -240,11 +240,11 @@ export default function DataHubAnalyticsPage() {
             </div>
           </div>
 
-          <div className="glass-panel p-md rounded-xl neon-glow relative overflow-hidden group">
-            <div className="flex justify-between items-start mb-sm">
-              <span className="font-label-sm text-label-sm text-on-surface-variant tracking-wider">USD VOLUME</span>
+          <div className="glass-panel p-4 rounded-xl neon-glow relative overflow-hidden group">
+            <div className="flex justify-between items-start mb-2">
+              <span className="font-semibold uppercase tracking-wider text-xs text-on-surface-variant tracking-wider">USD VOLUME</span>
             </div>
-            <div className="font-data-lg text-data-lg text-on-surface text-3xl font-bold tracking-tight">
+            <div className="font-bold text-3xl text-on-surface text-3xl font-bold tracking-tight">
               ${loading ? "..." : Number(data?.metrics?.totalVolume || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="mt-md h-12 w-full relative flex items-end">
@@ -256,9 +256,9 @@ export default function DataHubAnalyticsPage() {
           </div>
         </section>
 
-        <section className="glass-panel p-md rounded-xl mt-6">
-          <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-lg text-glow border-b border-outline-variant/20 pb-sm">
-            CONVERSION FUNNEL <span className="text-on-surface-variant text-body-md font-body-md font-normal">({activeFunnelTab.toUpperCase()})</span>
+        <section className="glass-panel p-4 rounded-xl mt-6">
+          <h2 className="font-bold tracking-tight text-2xl text-on-surface mb-6 text-glow border-b border-outline-variant/20 pb-2">
+            CONVERSION FUNNEL <span className="text-on-surface-variant text-base font-normal font-normal">({activeFunnelTab.toUpperCase()})</span>
           </h2>
           <div className="flex flex-col items-center w-full max-w-md mx-auto space-y-2">
             {loading ? (
@@ -299,18 +299,18 @@ export default function DataHubAnalyticsPage() {
 
                 return (
                   <div key={step.name} className="relative group" style={{ width: `${widthPct}%` }}>
-                    <div className={`w-full ${bgClass} border ${borderClass} rounded-lg p-sm flex justify-between items-center z-10 relative ${glowClass}`}>
-                      <span className={`font-label-sm text-label-sm ${idx >= 3 ? 'text-on-primary font-bold' : idx > 0 ? 'text-primary' : 'text-on-surface-variant'}`}>
+                    <div className={`w-full ${bgClass} border ${borderClass} rounded-lg p-2 flex justify-between items-center z-10 relative ${glowClass}`}>
+                      <span className={`font-semibold uppercase tracking-wider text-xs ${idx >= 3 ? 'text-on-primary font-bold' : idx > 0 ? 'text-primary' : 'text-on-surface-variant'}`}>
                         {step.name}
                       </span>
-                      <span className={`font-data-lg text-data-lg ${idx >= 3 ? 'text-on-primary' : 'text-on-surface'} font-bold`}>
+                      <span className={`font-bold text-3xl ${idx >= 3 ? 'text-on-primary' : 'text-on-surface'} font-bold`}>
                         {val.toLocaleString()}
                       </span>
                     </div>
                     
                     {idx > 0 && (
                       <div className="absolute -right-16 top-2 hidden md:block">
-                        <span className="font-label-sm text-label-sm text-secondary bg-secondary/10 px-2 py-1 rounded">{stepConv.toFixed(1)}%</span>
+                        <span className="font-semibold uppercase tracking-wider text-xs text-secondary bg-secondary/10 px-2 py-1 rounded">{stepConv.toFixed(1)}%</span>
                       </div>
                     )}
                     
@@ -322,7 +322,7 @@ export default function DataHubAnalyticsPage() {
                           </div>
                         </div>
                         <div className="absolute right-0 top-1/2 -translate-y-1/2 md:hidden">
-                          <span className="font-label-sm text-label-sm text-secondary bg-secondary/10 px-2 py-0.5 rounded text-[10px]">
+                          <span className="font-semibold uppercase tracking-wider text-xs text-secondary bg-secondary/10 px-2 py-0.5 rounded text-[10px]">
                             {steps[idx + 1] ? ((Number(steps[idx + 1].count) / val) * 100).toFixed(1) + '%' : ''}
                           </span>
                         </div>
@@ -335,65 +335,65 @@ export default function DataHubAnalyticsPage() {
           </div>
         </section>
 
-        <section className="glass-panel p-md rounded-xl flex flex-col mt-6">
-          <div className="flex justify-between items-center mb-md border-b border-outline-variant/20 pb-sm">
-            <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface text-glow">
-              REAL-TIME LEDGER <span className="text-on-surface-variant text-body-md font-body-md font-normal">(Solana <span className="material-symbols-outlined text-sm align-middle mx-1">sync_alt</span> GA4)</span>
+        <section className="glass-panel p-4 rounded-xl flex flex-col mt-6">
+          <div className="flex justify-between items-center mb-4 border-b border-outline-variant/20 pb-2">
+            <h2 className="font-bold tracking-tight text-2xl text-on-surface text-glow">
+              REAL-TIME LEDGER <span className="text-on-surface-variant text-base font-normal font-normal">(Solana <span className="material-symbols-outlined text-sm align-middle mx-1">sync_alt</span> GA4)</span>
             </h2>
           </div>
           <div className="overflow-x-auto no-scrollbar w-full rounded-lg border border-outline-variant/10">
             <table className="w-full min-w-[800px] text-left border-collapse">
               <thead>
                 <tr className="bg-surface-container-highest border-b border-outline-variant/30">
-                  <th className="p-sm font-label-sm text-label-sm text-on-surface-variant font-medium">Timestamp</th>
-                  <th className="p-sm font-label-sm text-label-sm text-on-surface-variant font-medium">Solana Wallet</th>
-                  <th className="p-sm font-label-sm text-label-sm text-on-surface-variant font-medium">GA4 ID</th>
-                  <th className="p-sm font-label-sm text-label-sm text-on-surface-variant font-medium">Activity</th>
-                  <th className="p-sm font-label-sm text-label-sm text-on-surface-variant font-medium text-right">Amount</th>
-                  <th className="p-sm font-label-sm text-label-sm text-on-surface-variant font-medium text-center">Snag Code</th>
-                  <th className="p-sm font-label-sm text-label-sm text-on-surface-variant font-medium text-right">Points</th>
+                  <th className="p-2 font-semibold uppercase tracking-wider text-xs text-on-surface-variant font-medium">Timestamp</th>
+                  <th className="p-2 font-semibold uppercase tracking-wider text-xs text-on-surface-variant font-medium">Solana Wallet</th>
+                  <th className="p-2 font-semibold uppercase tracking-wider text-xs text-on-surface-variant font-medium">GA4 ID</th>
+                  <th className="p-2 font-semibold uppercase tracking-wider text-xs text-on-surface-variant font-medium">Activity</th>
+                  <th className="p-2 font-semibold uppercase tracking-wider text-xs text-on-surface-variant font-medium text-right">Amount</th>
+                  <th className="p-2 font-semibold uppercase tracking-wider text-xs text-on-surface-variant font-medium text-center">Snag Code</th>
+                  <th className="p-2 font-semibold uppercase tracking-wider text-xs text-on-surface-variant font-medium text-right">Points</th>
                 </tr>
               </thead>
-              <tbody className="font-body-md text-body-md text-on-surface">
+              <tbody className="font-normal text-base text-on-surface">
                 {loading ? (
                    <tr>
-                     <td colSpan={7} className="p-md text-center text-on-surface-variant font-body-md">
+                     <td colSpan={7} className="p-4 text-center text-on-surface-variant font-normal">
                        Loading ledger...
                      </td>
                    </tr>
                 ) : !data?.recentStitched || data.recentStitched.length === 0 ? (
                    <tr>
-                     <td colSpan={7} className="p-md text-center text-on-surface-variant font-body-md">
+                     <td colSpan={7} className="p-4 text-center text-on-surface-variant font-normal">
                        No recent transactions found.
                      </td>
                    </tr>
                 ) : (
                   data.recentStitched.map((profile: any) => (
                     <tr key={profile.wallet} className="border-b border-outline-variant/10 hover:bg-white/5 transition-colors group">
-                      <td className="p-sm font-label-sm text-label-sm text-on-surface-variant">
+                      <td className="p-2 font-semibold uppercase tracking-wider text-xs text-on-surface-variant">
                         {new Date(profile.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })}
                       </td>
-                      <td className="p-sm font-label-sm text-label-sm text-primary font-medium tracking-wide">
+                      <td className="p-2 font-semibold uppercase tracking-wider text-xs text-primary font-medium tracking-wide">
                         {formatWallet(profile.wallet)}
                       </td>
-                      <td className="p-sm font-label-sm text-label-sm text-secondary">
+                      <td className="p-2 font-semibold uppercase tracking-wider text-xs text-secondary">
                         {profile.ga_user_id}
                       </td>
-                      <td className="p-sm">
-                        <span className="bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded text-xs font-label-sm inline-flex items-center gap-1">
+                      <td className="p-2">
+                        <span className="bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded text-xs font-semibold uppercase tracking-wider inline-flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>Token Purchase
                         </span>
                       </td>
-                      <td className="p-sm font-data-lg text-data-lg text-right text-on-surface">
+                      <td className="p-2 font-bold text-3xl text-right text-on-surface">
                         {Number(profile.total_xp).toLocaleString()} XP
                       </td>
-                      <td className="p-sm text-center font-label-sm text-label-sm text-on-surface-variant">
+                      <td className="p-2 text-center font-semibold uppercase tracking-wider text-xs text-on-surface-variant">
                         {profile.snag_custom_referral_code || 'organic'}
                       </td>
-                      <td className="p-sm text-right">
+                      <td className="p-2 text-right">
                         <button className="bg-surface-container-highest border border-outline-variant/50 px-2 py-1 rounded-full inline-flex items-center gap-1 group-hover:border-primary/50 transition-colors">
                           <span className="material-symbols-outlined text-[14px] text-secondary">diamond</span>
-                          <span className="font-label-sm text-label-sm text-primary font-bold">{Number(profile.snag_points).toLocaleString()} PTS</span>
+                          <span className="font-semibold uppercase tracking-wider text-xs text-primary font-bold">{Number(profile.snag_points).toLocaleString()} PTS</span>
                         </button>
                       </td>
                     </tr>
