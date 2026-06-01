@@ -1,95 +1,166 @@
 // ============================================================
-// SHIFT RWA Cross-Channel Data Hub — Shared Types
-// Full data model from all 4 live API endpoints
+// SHIFT RWA Data Hub — Comprehensive Type Definitions
+// All API response shapes for the 6-page Data Hub
 // ============================================================
 
-// --- /api/admin/dashboard ---
-export interface AdminDashboardMetrics {
-  total_users: number;
-  total_xp: number;
-  badge_count: number;
-  certificate_count: number;
-  hof_count: number;
-  avg_multiplier: number;
-}
-
+// ── Admin Dashboard ───────────────────────────────────────────
 export interface AdminDashboard {
   success: boolean;
-  metrics: AdminDashboardMetrics;
-  recentActivity: any[];
+  metrics: {
+    total_users: number;
+    total_xp: number;
+    badge_count: number;
+    certificate_count: number;
+    hof_count: number;
+    avg_multiplier: number;
+  };
+  recentActivity: Array<{
+    id: string;
+    action: string;
+    resource_type: string;
+    admin_wallet: string;
+    created_at: string;
+  }>;
 }
 
-// --- /api/admin/onchain-holders ---
-export interface TokenHolder {
+// ── On-Chain Holders ──────────────────────────────────────────
+export interface OnchainToken {
   symbol: string;
   name: string;
   mint: string;
   holders: number;
 }
-
 export interface OnchainHolders {
-  tokens: TokenHolder[];
+  tokens: OnchainToken[];
   uniqueHolders: number;
   totalHolderSlots: number;
   fetchedAt: string;
   cached: boolean;
 }
 
-// --- /api/analytics/dashboard-stats ---
-export interface AnalyticsMetrics {
-  totalUsers: number;
-  stitchedUsers: number;
-  activeHolders: number;
-  totalVolume: number;
-}
-
+// ── Analytics / Dashboard Stats ──────────────────────────────
+export type FunnelTab = 'aum' | 'holder' | 'referral';
 export interface FunnelStep {
   name: string;
   count: number;
 }
-
-export interface StitchedProfile {
+export interface StitchedRecord {
   wallet: string;
-  ga_user_id: string;
-  snag_custom_referral_code: string | null;
-  total_xp: number;
-  snag_points: number;
+  ga_user_id: string | null;
+  snag_user_id: string | null;
+  total_xp: string;
   updated_at: string;
 }
-
 export interface AnalyticsDashboard {
   success: boolean;
-  metrics: AnalyticsMetrics;
+  metrics: {
+    totalUsers: number;
+    stitchedUsers: number;
+    activeHolders: number;
+    totalVolume: number;
+  };
   funnels: {
     aum: FunnelStep[];
     holder: FunnelStep[];
     referral: FunnelStep[];
   };
-  recentStitched: StitchedProfile[];
+  recentStitched: StitchedRecord[];
 }
 
-// --- /api/leaderboard ---
+// ── Leaderboard ───────────────────────────────────────────────
 export interface LeaderboardEntry {
-  rank: number;
   wallet: string;
   totalSp: number;
   positionSp: number;
   socialSp: number;
-  totalXP: number;
-  multiplier: number;
+  claimMultiplier: number;
   badgeCount: number;
+  rank: number;
 }
-
 export interface Leaderboard {
-  leaderboard: LeaderboardEntry[];
+  count: number;
+  entries: LeaderboardEntry[];
 }
 
-// --- Combined hub state ---
+// ── GA4 Analytics ────────────────────────────────────────────
+export interface GA4ChannelRow {
+  channel: string;
+  sessions: number;
+  activeUsers: number;
+  pct: number;
+}
+export interface GA4TopPage {
+  page: string;
+  views: number;
+  users: number;
+}
+export interface GA4DailyPoint {
+  date: string;
+  activeUsers: number;
+  sessions: number;
+}
+export interface GA4Data {
+  available: boolean;
+  reason?: string;
+  period: string;
+  totals: {
+    activeUsers: number;
+    sessions: number;
+    pageViews: number;
+    newUsers: number;
+    bounceRate: number;
+    avgSessionDuration: number;
+    eventCount: number;
+  };
+  channels: GA4ChannelRow[];
+  topPages: GA4TopPage[];
+  dailyTrend: GA4DailyPoint[];
+  cachedAt?: string;
+}
+
+// ── Aggregated KPIs ───────────────────────────────────────────
+export interface AggregatedKPIs {
+  aum: {
+    totalHolders: number;
+    totalSlots: number;
+    topToken: string;
+    topTokenHolders: number;
+  };
+  volume: {
+    totalUSD: number;
+    avgPositionUSD: number;
+    openPositions: number;
+    allPositions: number;
+  };
+  growth: {
+    newUsersToday: number;
+    newUsersWeek: number;
+    totalUsers: number;
+  };
+  engagement: {
+    avgStreak: number;
+    totalXP: number;
+    badgesAwarded: number;
+    avgMultiplier: number;
+  };
+  snag: {
+    linkedAccounts: number;
+    totalPoints: number;
+    avgMultiplier: number;
+  };
+}
+
+// ── Hub-wide State ────────────────────────────────────────────
 export interface HubData {
   admin: AdminDashboard | null;
   onchain: OnchainHolders | null;
   analytics: AnalyticsDashboard | null;
   leaderboard: Leaderboard | null;
+  ga4: GA4Data | null;
+  kpis: AggregatedKPIs | null;
+  lastRefresh: Date | null;
+  loading: boolean;
+  errors: Record<string, string>;
 }
 
-export type FunnelTab = 'aum' | 'holder' | 'referral';
+export type HubPage = 'overview' | 'markets' | 'analytics' | 'stitched' | 'portfolios' | 'admin';
