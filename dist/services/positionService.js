@@ -5,7 +5,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.positionService = exports.PositionService = void 0;
 const pool_1 = require("../db/pool");
-const analytics_1 = require("../utils/analytics");
 class PositionService {
     /**
      * Ensure a user record exists (upsert on first seen wallet).
@@ -34,15 +33,6 @@ class PositionService {
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8)`, [wallet, asset, assetMint, positionSizeUSD, tokenAmount, priceAtOpen, timestamp, txSignature]);
         // Mark tx as processed
         await (0, pool_1.execute)('INSERT INTO processed_transactions (tx_signature) VALUES ($1) ON CONFLICT DO NOTHING', [txSignature]);
-        // Dispatch server-side GA4 trade event for tracking
-        (0, analytics_1.trackGA4EventForWallet)(wallet, 'rwa_trade_executed', {
-            asset,
-            position_size_usd: positionSizeUSD,
-            token_amount: tokenAmount || 0,
-            price_at_open: priceAtOpen || 0,
-            trade_type: 'buy',
-            tx_signature: txSignature
-        }).catch(() => { });
         console.log(`[Position] Opened: ${wallet.slice(0, 8)}... | ${asset} | $${positionSizeUSD.toFixed(2)}`);
         return true;
     }
@@ -83,14 +73,6 @@ class PositionService {
             // Zero out xp_generated on the position record
             await (0, pool_1.execute)(`UPDATE positions SET xp_generated = 0 WHERE id = $1`, [position.id]);
         }
-        // Dispatch server-side GA4 trade event for tracking
-        (0, analytics_1.trackGA4EventForWallet)(wallet, 'rwa_trade_executed', {
-            asset,
-            position_size_usd: Number(position.position_size_usd),
-            trade_type: 'sell',
-            tx_signature: txSignature,
-            hold_duration_hours: holdHours
-        }).catch(() => { });
         console.log(`[Position] Closed: ${wallet.slice(0, 8)}... | ${asset} | held ${this.formatDuration(position.opened_at, timestamp)}${holdHours < 24 ? ' ⚠️ early sell — XP clawed back' : ''}`);
         return position;
     }

@@ -2120,10 +2120,10 @@ router.get('/health-check', verifyAdminSecret, async (req, res) => {
         // 6. Position size distribution
         const sizeDistribution = await pool_1.pool.query(`
       SELECT
-        COUNT(CASE WHEN position_size_usd < 1 THEN 1 END)::int as under_1,
-        COUNT(CASE WHEN position_size_usd >= 1 AND position_size_usd < 10 THEN 1 END)::int as range_1_10,
-        COUNT(CASE WHEN position_size_usd >= 10 AND position_size_usd < 100 THEN 1 END)::int as range_10_100,
-        COUNT(CASE WHEN position_size_usd >= 100 THEN 1 END)::int as over_100
+        SUM(CASE WHEN position_size_usd < 1 THEN 1 ELSE 0 END) as under_1,
+        SUM(CASE WHEN position_size_usd >= 1 AND position_size_usd < 10 THEN 1 ELSE 0 END) as range_1_10,
+        SUM(CASE WHEN position_size_usd >= 10 AND position_size_usd < 100 THEN 1 ELSE 0 END) as range_10_100,
+        SUM(CASE WHEN position_size_usd >= 100 THEN 1 ELSE 0 END) as over_100
       FROM positions WHERE status = 'open'
     `);
         const result = {

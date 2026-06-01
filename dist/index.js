@@ -58,7 +58,6 @@ const badges_1 = __importDefault(require("./routes/badges"));
 const events_1 = __importDefault(require("./routes/events"));
 const snag_1 = __importDefault(require("./routes/snag"));
 const auth_1 = __importDefault(require("./routes/auth"));
-const analytics_1 = __importDefault(require("./routes/analytics"));
 const app = (0, express_1.default)();
 // ── Middleware ──
 // Security headers
@@ -99,7 +98,6 @@ app.use('/api/badges', badges_1.default);
 app.use('/api/events', events_1.default);
 app.use('/api/snag', snag_1.default);
 app.use('/api/auth', auth_1.default);
-app.use('/api/analytics', analytics_1.default);
 // ── Health Check ──
 app.get('/health', (_req, res) => {
     res.json({

@@ -11,9 +11,6 @@ exports.pool = new pg_1.Pool({
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
-    ssl: config_1.config.databaseUrl.includes('render.com') || config_1.config.databaseUrl.includes('neon.tech') ? {
-        rejectUnauthorized: false
-    } : undefined
 });
 // Graceful shutdown
 process.on('SIGTERM', async () => {

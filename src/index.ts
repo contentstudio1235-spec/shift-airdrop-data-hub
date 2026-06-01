@@ -22,7 +22,6 @@ import badgesRoutes from './routes/badges';
 import eventsRoutes from './routes/events';
 import snagRoutes from './routes/snag';
 import authRoutes from './routes/auth';
-import analyticsRoutes from './routes/analytics';
 
 const app = express();
 
@@ -72,7 +71,6 @@ app.use('/api/badges', badgesRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/snag', snagRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/analytics', analyticsRoutes);
 
 // ── Health Check ──
 
