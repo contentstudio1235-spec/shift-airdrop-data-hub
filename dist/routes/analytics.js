@@ -1,10 +1,14 @@
 "use strict";
 // ============================================================
-// Analytics Route — GA4 Measurement Protocol + Dashboard Stats
-// Bug fixes applied 2026-06-01:
-//   #1 stitchedUsers now uses snag_user_id OR ga_user_id (was ga_user_id only → returned 1)
-//   #2 AUM funnel now starts at total_users (was stitchedUsers → funnel was inverted)
-//   #3 recentStitched now shows any identity-linked user (was ga_user_id only → 1 test row)
+// Analytics Route — GA4 Data API + Dashboard Stats
+// Auth strategy (in priority order):
+//   1. GA4_OAUTH_TOKEN env var (tomer@prim3.vc OAuth2 token, refreshable)
+//   2. Service account JWT (works once SA is granted GA4 property access)
+// Properties:
+//   536531221 = shiftrwa.xyz (main - has data)
+//   539327664 = loyalty.shiftrwa
+//   539348467 = app.shiftrwa
+//   539683588 = Snag Shift
 // ============================================================
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -30,11 +34,29 @@ function cacheGet(key) {
 function cacheSet(key, data, ttlMs = 60 * 60 * 1000) {
     cache[key] = { data, expiresAt: Date.now() + ttlMs };
 }
-// ── GA4 Data API helpers (RS256 JWT, no external auth library) ───────────────
-const GA4_PROPERTY_ID = '536531221';
-const SA_KEY_PATH = path_1.default.resolve('/Users/tomer/Library/Mobile Documents/com~apple~CloudDocs/Claude/Projects/SHIFT Airdrop', 'micro-vine-498016-n0-f99594ed911d.json');
+// ── SHIFT GA4 property map ────────────────────────────────────────────────────
+const GA4_PROPERTY_ID = '536531221'; // shiftrwa.xyz — primary property with data
+const GA4_PROPERTIES = {
+    '536531221': 'shiftrwa.xyz',
+    '539327664': 'loyalty.shiftrwa',
+    '539348467': 'app.shiftrwa',
+    '539683588': 'Snag Shift',
+};
+// ── Service Account JWT auth (RS256, no google-auth-library) ──────────────────
+const SA_KEY_PATH = (() => {
+    // Support both local dev path and Render deployment path
+    const localPath = path_1.default.resolve('/Users/tomer/Library/Mobile Documents/com~apple~CloudDocs/Claude/Projects/SHIFT Airdrop', 'micro-vine-498016-n0-f99594ed911d.json');
+    const renderPath = path_1.default.resolve(process.cwd(), 'micro-vine-498016-n0-f99594ed911d.json');
+    if (fs_1.default.existsSync(localPath))
+        return localPath;
+    if (fs_1.default.existsSync(renderPath))
+        return renderPath;
+    return localPath;
+})();
 function loadServiceAccount() {
     try {
+        if (!fs_1.default.existsSync(SA_KEY_PATH))
+            return null;
         const raw = fs_1.default.readFileSync(SA_KEY_PATH, 'utf-8');
         return JSON.parse(raw);
     }
@@ -58,20 +80,60 @@ function makeJwt(sa) {
     const sig = sign.sign(sa.private_key, 'base64url');
     return `${unsigned}.${sig}`;
 }
+// ── Primary auth: GA4_OAUTH_TOKEN env var (tomer@prim3.vc OAuth2 token) ───────
+// When the SA lacks GA4 property access, use this OAuth token.
+// Set GA4_OAUTH_TOKEN in Render env vars. When expired, update via:
+//   1. developers.google.com/oauthplayground (scope: analytics.readonly)
+//   2. Copy new access token into Render env var
+// For persistent refresh: set GA4_OAUTH_REFRESH_TOKEN + GA4_OAUTH_CLIENT_ID + GA4_OAUTH_CLIENT_SECRET
+async function refreshOAuthToken() {
+    const refreshToken = process.env.GA4_OAUTH_REFRESH_TOKEN;
+    const clientId = process.env.GA4_OAUTH_CLIENT_ID || '407408718192.apps.googleusercontent.com';
+    const clientSecret = process.env.GA4_OAUTH_CLIENT_SECRET;
+    if (!refreshToken || !clientSecret)
+        return null;
+    try {
+        const { data } = await axios_1.default.post('https://oauth2.googleapis.com/token', new URLSearchParams({
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken,
+            client_id: clientId,
+            client_secret: clientSecret,
+        }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+        const token = data.access_token;
+        cacheSet('ga4_access_token', token, 55 * 60 * 1000);
+        console.log('[GA4] ✅ Refreshed OAuth token via refresh_token');
+        return token;
+    }
+    catch (e) {
+        console.warn('[GA4] Failed to refresh OAuth token:', e.message);
+        return null;
+    }
+}
 async function getGa4AccessToken() {
     const cached = cacheGet('ga4_access_token');
     if (cached)
         return cached;
+    // Priority 1: env var static token (for quick deployment)
+    const envToken = process.env.GA4_OAUTH_TOKEN;
+    if (envToken) {
+        cacheSet('ga4_access_token', envToken, 45 * 60 * 1000); // assume ~45 min left
+        console.log('[GA4] Using GA4_OAUTH_TOKEN from env');
+        return envToken;
+    }
+    // Priority 2: refresh token flow (persistent)
+    const refreshed = await refreshOAuthToken();
+    if (refreshed)
+        return refreshed;
+    // Priority 3: Service account JWT (works if SA has GA4 access)
     const sa = loadServiceAccount();
     if (!sa)
-        throw new Error('Service account key not found');
+        throw new Error('No GA4 auth available: set GA4_OAUTH_TOKEN or GA4_OAUTH_REFRESH_TOKEN in env');
     const jwt = makeJwt(sa);
     const { data } = await axios_1.default.post('https://oauth2.googleapis.com/token', new URLSearchParams({
         grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
         assertion: jwt,
     }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
     const token = data.access_token;
-    // Cache token for 55 minutes (it lasts 60)
     cacheSet('ga4_access_token', token, 55 * 60 * 1000);
     return token;
 }
@@ -221,7 +283,8 @@ router.get('/dashboard-stats', async (req, res) => {
 });
 // ============================================================
 // GET /api/analytics/ga4
-// Fetches GA4 Data API using service account JWT (RS256, no google-auth-library).
+// Fetches GA4 Data API using OAuth token (GA4_OAUTH_TOKEN env) or SA JWT.
+// Pulls channels, pages, trend, countries, devices, 7d + yesterday stats.
 // Cached for 1 hour. Returns {available:false} gracefully on 403.
 // ============================================================
 router.get('/ga4', async (_req, res) => {
@@ -231,36 +294,60 @@ router.get('/ga4', async (_req, res) => {
         return res.status(200).json({ success: true, cached: true, ...cached });
     try {
         const token = await getGa4AccessToken();
-        const dateRange = [{ startDate: '30daysAgo', endDate: 'today' }];
-        // ── Channels report ──
-        const channelsReport = await ga4RunReport(token, {
-            dateRanges: dateRange,
-            metrics: [
-                { name: 'activeUsers' },
-                { name: 'sessions' },
-                { name: 'screenPageViews' },
-                { name: 'newUsers' },
-                { name: 'bounceRate' },
-                { name: 'averageSessionDuration' },
-                { name: 'eventCount' },
-            ],
-            dimensions: [{ name: 'sessionDefaultChannelGroup' }],
-        });
-        // ── Top pages report ──
-        const pagesReport = await ga4RunReport(token, {
-            dateRanges: dateRange,
-            metrics: [{ name: 'screenPageViews' }, { name: 'activeUsers' }],
-            dimensions: [{ name: 'pagePath' }],
-            orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
-            limit: 20,
-        });
-        // ── Daily trend report ──
-        const trendReport = await ga4RunReport(token, {
-            dateRanges: dateRange,
-            metrics: [{ name: 'activeUsers' }, { name: 'sessions' }],
-            dimensions: [{ name: 'date' }],
-            orderBys: [{ dimension: { dimensionName: 'date' }, desc: false }],
-        });
+        const date30d = [{ startDate: '30daysAgo', endDate: 'today' }];
+        const date7d = [{ startDate: '7daysAgo', endDate: 'today' }];
+        const dateYesterday = [{ startDate: '1daysAgo', endDate: '1daysAgo' }];
+        // ── Parallel reports ──
+        const [channelsReport, pagesReport, trendReport, countriesReport, devicesReport, totals7dReport, totalsYestReport] = await Promise.all([
+            // Channels + totals (30d)
+            ga4RunReport(token, {
+                dateRanges: date30d,
+                metrics: [
+                    { name: 'activeUsers' }, { name: 'sessions' }, { name: 'screenPageViews' },
+                    { name: 'newUsers' }, { name: 'bounceRate' }, { name: 'averageSessionDuration' }, { name: 'eventCount' },
+                ],
+                dimensions: [{ name: 'sessionDefaultChannelGroup' }],
+            }),
+            // Top pages (30d)
+            ga4RunReport(token, {
+                dateRanges: date30d,
+                metrics: [{ name: 'screenPageViews' }, { name: 'activeUsers' }],
+                dimensions: [{ name: 'pagePath' }],
+                orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
+                limit: 20,
+            }),
+            // Daily trend (30d)
+            ga4RunReport(token, {
+                dateRanges: date30d,
+                metrics: [{ name: 'activeUsers' }, { name: 'sessions' }, { name: 'newUsers' }],
+                dimensions: [{ name: 'date' }],
+                orderBys: [{ dimension: { dimensionName: 'date' }, desc: false }],
+            }),
+            // Top countries (30d)
+            ga4RunReport(token, {
+                dateRanges: date30d,
+                metrics: [{ name: 'activeUsers' }, { name: 'sessions' }],
+                dimensions: [{ name: 'country' }],
+                orderBys: [{ metric: { metricName: 'activeUsers' }, desc: true }],
+                limit: 10,
+            }),
+            // Device categories (30d)
+            ga4RunReport(token, {
+                dateRanges: date30d,
+                metrics: [{ name: 'activeUsers' }, { name: 'sessions' }],
+                dimensions: [{ name: 'deviceCategory' }],
+            }),
+            // 7d totals
+            ga4RunReport(token, {
+                dateRanges: date7d,
+                metrics: [{ name: 'activeUsers' }, { name: 'sessions' }, { name: 'newUsers' }, { name: 'screenPageViews' }],
+            }),
+            // Yesterday
+            ga4RunReport(token, {
+                dateRanges: dateYesterday,
+                metrics: [{ name: 'activeUsers' }, { name: 'sessions' }, { name: 'newUsers' }],
+            }),
+        ]);
         // Parse helpers
         const parseRows = (report, dimKeys, metricKeys) => (report.rows || []).map((row) => {
             const obj = {};
@@ -270,9 +357,11 @@ router.get('/ga4', async (_req, res) => {
         });
         const channels = parseRows(channelsReport, ['channel'], ['activeUsers', 'sessions', 'screenPageViews', 'newUsers', 'bounceRate', 'avgSessionDuration', 'eventCount']);
         const pages = parseRows(pagesReport, ['pagePath'], ['screenPageViews', 'activeUsers']);
-        const trend = parseRows(trendReport, ['date'], ['activeUsers', 'sessions']);
-        // Aggregate totals from channel rows
-        const totals = channels.reduce((acc, row) => {
+        const trend = parseRows(trendReport, ['date'], ['activeUsers', 'sessions', 'newUsers']);
+        const countries = parseRows(countriesReport, ['country'], ['activeUsers', 'sessions']);
+        const devices = parseRows(devicesReport, ['deviceCategory'], ['activeUsers', 'sessions']);
+        // 30d aggregate totals
+        const totals30d = channels.reduce((acc, row) => {
             acc.activeUsers += parseInt(row.activeUsers, 10) || 0;
             acc.sessions += parseInt(row.sessions, 10) || 0;
             acc.screenPageViews += parseInt(row.screenPageViews, 10) || 0;
@@ -280,19 +369,45 @@ router.get('/ga4', async (_req, res) => {
             acc.eventCount += parseInt(row.eventCount, 10) || 0;
             return acc;
         }, { activeUsers: 0, sessions: 0, screenPageViews: 0, newUsers: 0, eventCount: 0 });
-        const result = { available: true, propertyId: GA4_PROPERTY_ID, totals, channels, pages, trend };
+        // 7d totals
+        const r7 = totals7dReport.rows?.[0]?.metricValues || [];
+        const totals7d = {
+            activeUsers: parseInt(r7[0]?.value || '0', 10),
+            sessions: parseInt(r7[1]?.value || '0', 10),
+            newUsers: parseInt(r7[2]?.value || '0', 10),
+            pageViews: parseInt(r7[3]?.value || '0', 10),
+        };
+        // Yesterday
+        const rY = totalsYestReport.rows?.[0]?.metricValues || [];
+        const yesterday = {
+            activeUsers: parseInt(rY[0]?.value || '0', 10),
+            sessions: parseInt(rY[1]?.value || '0', 10),
+            newUsers: parseInt(rY[2]?.value || '0', 10),
+        };
+        const result = {
+            available: true,
+            propertyId: GA4_PROPERTY_ID,
+            totals: totals30d,
+            totals7d,
+            yesterday,
+            channels,
+            pages,
+            trend,
+            countries,
+            devices,
+        };
         cacheSet(CACHE_KEY, result);
         return res.status(200).json({ success: true, cached: false, ...result });
     }
     catch (err) {
         const status = err?.response?.status;
         if (status === 403) {
-            console.warn('[Analytics /ga4] 403 — service account not yet granted access to GA4 property');
+            console.warn('[Analytics /ga4] 403 — GA4 token lacks access to property. Set GA4_OAUTH_TOKEN env var.');
             return res.status(200).json({
                 success: true,
                 available: false,
                 reason: 'permission_denied',
-                hint: `Grant Viewer access to ${GA4_PROPERTY_ID} for the service account`,
+                hint: 'Set GA4_OAUTH_TOKEN env var with a valid analytics.readonly OAuth2 token',
             });
         }
         console.error('[Analytics /ga4] Error:', err?.response?.data || err.message);
