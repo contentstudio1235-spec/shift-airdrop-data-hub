@@ -1,6 +1,6 @@
 'use client';
 
-import { DashboardMetrics } from './types';
+import { AnalyticsMetrics } from './types';
 import Sparkline from '@/components/Sparkline';
 
 interface KPICardProps {
@@ -105,7 +105,7 @@ export function KPICard({
 }
 
 interface KPICardsProps {
-  metrics: DashboardMetrics | null;
+  metrics: AnalyticsMetrics | null;
   loading: boolean;
 }
 
