@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import styles from "@/styles/admin.module.css";
 
-// Harmonized dark theme variables and HSL colors for dynamic glows
 const ACCENT_COLORS = {
   emerald: "#00c896",
   emeraldGlow: "rgba(0, 200, 150, 0.25)",
@@ -26,7 +25,6 @@ export default function DataHubAnalyticsPage() {
   const [passcode, setPasscode] = useState("");
   const [authError, setAuthError] = useState(false);
 
-  // Stats state
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -125,460 +123,287 @@ export default function DataHubAnalyticsPage() {
     );
   }
 
-  // Helper: Format wallet output
   const formatWallet = (w: string) => `${w.slice(0, 6)}...${w.slice(-6)}`;
 
-  // Funnel details depending on selected tab
   const getActiveFunnelData = () => {
     if (!data?.funnels) return [];
     return data.funnels[activeFunnelTab] || [];
   };
 
-  const getFunnelTitle = () => {
-    switch (activeFunnelTab) {
-      case "aum": return "AUM Holding Milestone Funnel (KPI 1)";
-      case "holder": return "Unique Holder Acquisition Funnel (KPI 3)";
-      case "referral": return "Brand Awareness & Viral Referral Funnel (KPI 4)";
-    }
-  };
-
   return (
-    <div className={styles.adminPage} style={{ background: "#060606", color: "#e0e0e0", fontFamily: "var(--font-inter-var)" }}>
-      {/* Header section with glow background */}
-      <div style={{
-        position: "relative",
-        borderBottom: `1px solid ${ACCENT_COLORS.glassBorder}`,
-        paddingBottom: "24px",
-        marginBottom: "32px"
-      }}>
-        <div style={{
-          position: "absolute",
-          top: "-50px",
-          left: "10%",
-          width: "250px",
-          height: "150px",
-          background: `radial-gradient(circle, ${ACCENT_COLORS.emeraldGlow} 0%, rgba(0,0,0,0) 70%)`,
-          filter: "blur(40px)",
-          pointerEvents: "none"
-        }} />
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
-          <div>
-            <h1 style={{ fontSize: "2rem", fontWeight: 700, color: "#fff", margin: 0, letterSpacing: "-0.03em" }}>
-              📊 SHIFT Omnichannel Data Hub
-            </h1>
-            <p style={{ color: "#666", fontSize: "0.92rem", marginTop: "4px" }}>
-              Unified Attribution, SQL database stitches, and GA4 telemetry sync
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: "12px" }}>
-            <button
-              onClick={() => router.push("/admin/dashboard")}
-              style={{
-                background: "transparent",
-                border: `1px solid ${ACCENT_COLORS.glassBorder}`,
-                borderRadius: "8px",
-                color: "#aaa",
-                padding: "8px 16px",
-                fontSize: "0.85rem",
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              ⬅️ Admin Main
-            </button>
-            <button
-              onClick={fetchStats}
-              disabled={loading}
-              style={{
-                background: loading ? "rgba(20, 20, 20, 0.5)" : "#111",
-                border: "1px solid #222",
-                borderRadius: "8px",
-                color: ACCENT_COLORS.emerald,
-                padding: "8px 20px",
-                fontSize: "0.85rem",
-                cursor: "pointer",
-                boxShadow: loading ? "none" : `0 4px 12px rgba(0, 0, 0, 0.3)`
-              }}
-            >
-              {loading ? "Syncing..." : "🔄 Force Sync"}
-            </button>
+    <div className="text-on-surface antialiased min-h-screen pb-xl bg-[#050505]">
+      <nav className="bg-surface/70 backdrop-blur-xl border-b border-outline-variant/20 shadow-[0_0_15px_rgba(0,200,150,0.1)] fixed top-0 w-full z-50 flex justify-between items-center px-margin-mobile h-16 md:hidden">
+        <div className="flex items-center gap-sm">
+          <button className="text-on-surface-variant hover:text-primary transition-colors duration-200">
+            <span className="material-symbols-outlined text-display-sm">menu</span>
+          </button>
+          <span className="font-headline-lg-mobile text-headline-lg-mobile font-bold tracking-tighter text-primary text-glow">SHIFT</span>
+        </div>
+        <div className="flex items-center gap-sm">
+          <button onClick={fetchStats} className="text-on-surface-variant hover:text-primary transition-colors duration-200 relative">
+            <span className="material-symbols-outlined">sync</span>
+            {loading && <span className="absolute top-0 right-0 w-2 h-2 bg-primary rounded-full animate-pulse"></span>}
+          </button>
+          <button onClick={() => router.push("/admin/dashboard")} className="text-on-surface-variant hover:text-primary transition-colors duration-200">
+            <span className="material-symbols-outlined">exit_to_app</span>
+          </button>
+        </div>
+      </nav>
+
+      <nav className="bg-surface/70 backdrop-blur-xl border-b border-outline-variant/20 shadow-[0_0_15px_rgba(0,200,150,0.1)] fixed top-0 w-full z-50 justify-between items-center px-margin-desktop h-16 hidden md:flex">
+        <div className="flex items-center gap-lg">
+          <span className="font-headline-lg text-headline-lg font-bold tracking-tighter text-primary">SHIFT RWA</span>
+          <div className="flex gap-md">
+            <button className="font-body-md text-body-md text-primary border-b-2 border-primary pb-1">Analytics</button>
+            <button onClick={() => router.push("/admin/dashboard")} className="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors duration-200">Admin Main</button>
           </div>
         </div>
-      </div>
-
-      {error && (
-        <div style={{
-          background: "rgba(230, 57, 70, 0.08)",
-          border: `1px solid ${ACCENT_COLORS.dropoffRed}`,
-          borderRadius: "8px",
-          color: ACCENT_COLORS.dropoffRed,
-          padding: "16px",
-          marginBottom: "24px",
-          fontSize: "0.9rem"
-        }}>
-          ⚠️ {error}
+        <div className="flex items-center gap-sm">
+          <button onClick={fetchStats} className="text-on-surface-variant hover:text-primary transition-colors duration-200 flex items-center gap-2">
+            <span className="material-symbols-outlined">sync</span>
+            {loading && <span className="text-xs text-primary animate-pulse">Syncing...</span>}
+          </button>
         </div>
-      )}
+      </nav>
 
-      {/* Main KPI Stats Row */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-        gap: "16px",
-        marginBottom: "32px"
-      }}>
-        {/* Metric 1 */}
-        <div style={{
-          background: ACCENT_COLORS.glassBg,
-          border: `1px solid ${ACCENT_COLORS.glassBorder}`,
-          borderRadius: "12px",
-          padding: "24px",
-          position: "relative",
-          overflow: "hidden"
-        }}>
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", background: ACCENT_COLORS.blue }} />
-          <h3 style={{ fontSize: "0.78rem", color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 8px" }}>Stitched GA4 Profiles</h3>
-          <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
-            <span style={{ fontSize: "2.4rem", fontWeight: 700, color: "#fff" }}>
-              {loading ? "..." : data?.metrics?.stitchedUsers || 0}
-            </span>
-            <span style={{ color: "#444", fontSize: "0.85rem" }}>
-              / {loading ? "..." : data?.metrics?.totalUsers || 0} total
-            </span>
-          </div>
-          <div style={{ color: ACCENT_COLORS.blue, fontSize: "0.75rem", marginTop: "8px", fontWeight: 600 }}>
-            {data?.metrics?.totalUsers ? ((data.metrics.stitchedUsers / data.metrics.totalUsers) * 100).toFixed(1) : 0}% Mapping Efficiency
-          </div>
-        </div>
-
-        {/* Metric 2 */}
-        <div style={{
-          background: ACCENT_COLORS.glassBg,
-          border: `1px solid ${ACCENT_COLORS.glassBorder}`,
-          borderRadius: "12px",
-          padding: "24px",
-          position: "relative",
-          overflow: "hidden"
-        }}>
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", background: ACCENT_COLORS.emerald }} />
-          <h3 style={{ fontSize: "0.78rem", color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 8px" }}>Active AUM Holders (On-chain)</h3>
-          <div style={{ fontSize: "2.4rem", fontWeight: 700, color: "#fff" }}>
-            {loading ? "..." : data?.metrics?.activeHolders || 0}
-          </div>
-          <div style={{ color: ACCENT_COLORS.emerald, fontSize: "0.75rem", marginTop: "8px", fontWeight: 600 }}>
-            Unique wallets holding SHIFT tokenized assets
-          </div>
-        </div>
-
-        {/* Metric 3 */}
-        <div style={{
-          background: ACCENT_COLORS.glassBg,
-          border: `1px solid ${ACCENT_COLORS.glassBorder}`,
-          borderRadius: "12px",
-          padding: "24px",
-          position: "relative",
-          overflow: "hidden"
-        }}>
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", background: ACCENT_COLORS.purple }} />
-          <h3 style={{ fontSize: "0.78rem", color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 8px" }}>Accumulated Trading Volume</h3>
-          <div style={{ fontSize: "2.4rem", fontWeight: 700, color: "#fff" }}>
-            ${loading ? "..." : Number(data?.metrics?.totalVolume || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          <div style={{ color: ACCENT_COLORS.purple, fontSize: "0.75rem", marginTop: "8px", fontWeight: 600 }}>
-            Total volume executed under system tracking (USD)
-          </div>
-        </div>
-      </div>
-
-      {/* Conversion Funnels Section */}
-      <section style={{
-        background: ACCENT_COLORS.glassBg,
-        border: `1px solid ${ACCENT_COLORS.glassBorder}`,
-        borderRadius: "16px",
-        padding: "28px",
-        marginBottom: "32px",
-        boxShadow: "0 4px 20px rgba(0,0,0,0.4)"
-      }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "28px", flexWrap: "wrap", gap: "16px" }}>
-          <div>
-            <h2 style={{ fontSize: "1.2rem", fontWeight: 600, color: "#fff", margin: 0 }}>
-              📈 Omnichannel Conversion Funnels
-            </h2>
-            <p style={{ color: "#666", fontSize: "0.82rem", marginTop: "4px" }}>Select a funnel to inspect conversion drop-offs</p>
-          </div>
-          {/* Tabs switch */}
-          <div style={{
-            display: "flex",
-            background: "rgba(0, 0, 0, 0.4)",
-            border: "1px solid #1e1e1e",
-            borderRadius: "8px",
-            padding: "4px"
-          }}>
-            <button
-              onClick={() => setActiveFunnelTab("aum")}
-              style={{
-                background: activeFunnelTab === "aum" ? "#1a1a1a" : "transparent",
-                border: "none",
-                borderRadius: "6px",
-                color: activeFunnelTab === "aum" ? ACCENT_COLORS.emerald : "#666",
-                padding: "8px 16px",
-                fontSize: "0.82rem",
-                fontWeight: 600,
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              KPI 1: AUM Hold
-            </button>
-            <button
-              onClick={() => setActiveFunnelTab("holder")}
-              style={{
-                background: activeFunnelTab === "holder" ? "#1a1a1a" : "transparent",
-                border: "none",
-                borderRadius: "6px",
-                color: activeFunnelTab === "holder" ? ACCENT_COLORS.blue : "#666",
-                padding: "8px 16px",
-                fontSize: "0.82rem",
-                fontWeight: 600,
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              KPI 3: Holder Onboarding
-            </button>
-            <button
-              onClick={() => setActiveFunnelTab("referral")}
-              style={{
-                background: activeFunnelTab === "referral" ? "#1a1a1a" : "transparent",
-                border: "none",
-                borderRadius: "6px",
-                color: activeFunnelTab === "referral" ? ACCENT_COLORS.purple : "#666",
-                padding: "8px 16px",
-                fontSize: "0.82rem",
-                fontWeight: 600,
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              KPI 4: Brand Awareness
-            </button>
-          </div>
-        </div>
-
-        {/* Dynamic Funnel View */}
-        <h3 style={{ fontSize: "1rem", color: "#fff", fontWeight: 600, marginBottom: "20px" }}>{getFunnelTitle()}</h3>
-
-        {loading ? (
-          <div style={{ height: "240px", display: "flex", alignItems: "center", justifyContent: "center", color: "#666" }}>Loading conversion pathways...</div>
-        ) : (
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "2fr 1fr",
-            gap: "32px",
-            alignItems: "center",
-            minHeight: "260px"
-          }}>
-            {/* Visual Funnel Stack (Pure geometric SVG + CSS) */}
-            <div style={{ position: "relative", padding: "10px" }}>
-              <svg viewBox="0 0 600 240" style={{ width: "100%", height: "auto", overflow: "visible" }}>
-                <defs>
-                  <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor={activeFunnelTab === "aum" ? ACCENT_COLORS.emerald : activeFunnelTab === "holder" ? ACCENT_COLORS.blue : ACCENT_COLORS.purple} />
-                    <stop offset="100%" stopColor="#051c14" />
-                  </linearGradient>
-                </defs>
-
-                {/* Render funnel polygons based on steps */}
-                {(() => {
-                  const steps = getActiveFunnelData();
-                  if (steps.length === 0) return null;
-                  const totalSteps = steps.length;
-                  const baseWidth = 500;
-                  const maxVal = Math.max(...steps.map((s: any) => Number(s.count))) || 1;
-                  
-                  return steps.map((step: any, idx: number) => {
-                    const val = Number(step.count);
-                    const conversionRate = (val / maxVal) * 100;
-                    
-                    // Compute geometric points for 3D tapered funnel segment
-                    const segmentHeight = 200 / totalSteps;
-                    const topY = idx * segmentHeight + 10;
-                    const bottomY = (idx + 1) * segmentHeight + 10;
-                    
-                    const nextStep = steps[idx + 1];
-                    const nextVal = nextStep ? Number(nextStep.count) : val;
-                    
-                    const curWidth = baseWidth * (val / maxVal);
-                    const nextWidth = baseWidth * (nextVal / maxVal);
-                    
-                    const xStartTop = (600 - curWidth) / 2;
-                    const xEndTop = xStartTop + curWidth;
-                    
-                    const xStartBottom = (600 - nextWidth) / 2;
-                    const xEndBottom = xStartBottom + nextWidth;
-                    
-                    const polygonPoints = `${xStartTop},${topY} ${xEndTop},${topY} ${xEndBottom},${bottomY} ${xStartBottom},${bottomY}`;
-                    
-                    // Color accent
-                    const glowColor = activeFunnelTab === "aum" ? ACCENT_COLORS.emerald : activeFunnelTab === "holder" ? ACCENT_COLORS.blue : ACCENT_COLORS.purple;
-
-                    return (
-                      <g key={step.name} style={{ cursor: "pointer" }}>
-                        <polygon
-                          points={polygonPoints}
-                          fill="url(#glowGrad)"
-                          stroke={glowColor}
-                          strokeWidth="1.5"
-                          opacity={0.3 + (idx * 0.15)}
-                          style={{ transition: "all 0.3s ease" }}
-                        />
-                        {/* Text Overlay for counts */}
-                        <text
-                          x="300"
-                          y={topY + segmentHeight / 2 + 5}
-                          fill="#ffffff"
-                          fontSize="11"
-                          fontWeight="700"
-                          textAnchor="middle"
-                          fontFamily="monospace"
-                        >
-                          {step.name}: {val} users ({conversionRate.toFixed(0)}%)
-                        </text>
-                      </g>
-                    );
-                  });
-                })()}
-              </svg>
+      <aside className="bg-surface-container-lowest/80 backdrop-blur-md border-r border-outline-variant/10 fixed left-0 top-0 h-full flex-col py-lg docked left-0 h-screen w-64 transition-all duration-300 ease-in-out hidden md:flex z-40 pt-24">
+        <div className="px-md mb-lg">
+          <div className="flex items-center gap-sm mb-xs">
+            <div className="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center border border-primary/30">
+              <span className="material-symbols-outlined text-primary">hub</span>
             </div>
-
-            {/* Funnel Table Breakdown */}
-            <div style={{
-              background: "rgba(0, 0, 0, 0.4)",
-              border: "1px solid #1e1e1e",
-              borderRadius: "10px",
-              padding: "20px"
-            }}>
-              <h4 style={{ fontSize: "0.85rem", color: "#888", textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 16px" }}>Funnel Breakdown</h4>
-              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                {(() => {
-                  const arr = getActiveFunnelData();
-                  const maxVal = Math.max(...arr.map((s: any) => Number(s.count))) || 1;
-                  return arr.map((step: any, idx: number) => {
-                    const prevStep = arr[idx - 1];
-                    const val = Number(step.count);
-                  
-                  // Total conversion of the funnel
-                  const totalConv = (val / maxVal) * 100;
-                  
-                  // Step-by-step retention (drop-off)
-                  let stepConv = 100;
-                  if (prevStep) {
-                    const prevVal = Number(prevStep.count) || 1;
-                    stepConv = (val / prevVal) * 100;
-                  }
-
-                  return (
-                    <div key={step.name} style={{ borderBottom: idx !== arr.length - 1 ? "1px solid #141414" : "none", paddingBottom: "10px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
-                        <span style={{ fontSize: "0.85rem", color: "#fff", fontWeight: 500 }}>{step.name}</span>
-                        <span style={{ fontSize: "0.85rem", color: ACCENT_COLORS.emerald, fontWeight: 700 }}>{val}</span>
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "#666" }}>
-                        <span>Cumulative: {totalConv.toFixed(1)}%</span>
-                        {idx !== 0 && (
-                          <span style={{ color: stepConv >= 80 ? ACCENT_COLORS.emerald : stepConv >= 50 ? ACCENT_COLORS.gold : ACCENT_COLORS.dropoffRed }}>
-                            Retention: {stepConv.toFixed(0)}%
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
-              </div>
+            <div>
+              <div className="font-headline-lg-mobile text-headline-lg-mobile text-primary font-black text-glow">SHIFT RWA</div>
+              <div className="font-label-sm text-label-sm text-on-surface-variant">Omnichannel Hub</div>
             </div>
+          </div>
+        </div>
+        <div className="flex flex-col gap-xs px-sm flex-grow">
+          <button className="flex items-center gap-sm px-md py-sm rounded-lg font-label-sm text-label-sm text-primary bg-primary/10 border-r-2 border-primary">
+            <span className="material-symbols-outlined">dashboard</span> Dashboard
+          </button>
+          <button onClick={() => setActiveFunnelTab("aum")} className={`flex items-center gap-sm px-md py-sm rounded-lg font-label-sm text-label-sm ${activeFunnelTab === 'aum' ? 'text-primary bg-primary/5' : 'text-on-surface-variant hover:bg-white/5'}`}>
+            <span className="material-symbols-outlined">account_balance_wallet</span> AUM Holding
+          </button>
+          <button onClick={() => setActiveFunnelTab("holder")} className={`flex items-center gap-sm px-md py-sm rounded-lg font-label-sm text-label-sm ${activeFunnelTab === 'holder' ? 'text-primary bg-primary/5' : 'text-on-surface-variant hover:bg-white/5'}`}>
+            <span className="material-symbols-outlined">monitoring</span> Holder Acquisition
+          </button>
+          <button onClick={() => setActiveFunnelTab("referral")} className={`flex items-center gap-sm px-md py-sm rounded-lg font-label-sm text-label-sm ${activeFunnelTab === 'referral' ? 'text-primary bg-primary/5' : 'text-on-surface-variant hover:bg-white/5'}`}>
+            <span className="material-symbols-outlined">filter_alt</span> Brand Awareness
+          </button>
+        </div>
+      </aside>
+
+      <main className="pt-20 px-margin-mobile md:px-margin-desktop md:pl-[calc(16rem+2.5rem)] md:pt-24 max-w-7xl mx-auto space-y-lg pb-24 md:pb-0">
+        <header className="md:hidden flex flex-col gap-xs mb-md">
+          <h1 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Dashboard</h1>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-primary animate-pulse neon-glow"></span>
+            <span className="font-label-sm text-label-sm text-primary">System Live</span>
+          </div>
+        </header>
+
+        {error && (
+          <div className="bg-red-500/10 border border-red-500 rounded-lg p-4 text-red-500 mb-4 text-sm">
+            ⚠️ {error}
           </div>
         )}
-      </section>
 
-      {/* Stitched Profiles Ledger */}
-      <section style={{
-        background: ACCENT_COLORS.glassBg,
-        border: `1px solid ${ACCENT_COLORS.glassBorder}`,
-        borderRadius: "16px",
-        padding: "28px",
-        boxShadow: "0 4px 20px rgba(0,0,0,0.4)"
-      }}>
-        <div style={{ marginBottom: "20px" }}>
-          <h2 style={{ fontSize: "1.2rem", fontWeight: 600, color: "#fff", margin: 0 }}>
-            🔗 Real-Time Stitched Identity Ledger
-          </h2>
-          <p style={{ color: "#666", fontSize: "0.82rem", marginTop: "4px" }}>
-            Stitched profiles linking Solana wallets to Google Analytics Client IDs and referral campaigns
-          </p>
-        </div>
-
-        {loading ? (
-          <div style={{ height: "180px", display: "flex", alignItems: "center", justifyContent: "center", color: "#666" }}>Loading identity records...</div>
-        ) : !data?.recentStitched || data.recentStitched.length === 0 ? (
-          <div style={{ height: "120px", display: "flex", alignItems: "center", justifyContent: "center", color: "#555" }}>
-            ℹ️ No stitched user sessions found. Connect wallets on frontend to begin mapping.
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-md">
+          <div className="glass-panel p-md rounded-xl neon-glow relative overflow-hidden group">
+            <div className="flex justify-between items-start mb-sm">
+              <span className="font-label-sm text-label-sm text-on-surface-variant tracking-wider">STITCHED GA4 PROFILES</span>
+            </div>
+            <div className="font-data-lg text-data-lg text-on-surface text-3xl font-bold tracking-tight">
+              {loading ? "..." : (data?.metrics?.stitchedUsers || 0).toLocaleString()}
+            </div>
+            <div className="mt-md h-12 w-full relative flex items-end">
+              <div className="absolute bottom-0 w-full h-full liquid-chart-gradient rounded-b-xl opacity-50 group-hover:opacity-100 transition-opacity"></div>
+              <svg className="w-full h-full preserve-aspect-ratio-none stroke-primary" fill="none" strokeWidth="2" viewBox="0 0 100 30">
+                <path d="M0,25 L10,22 L20,28 L30,15 L40,18 L50,8 L60,12 L70,5 L80,10 L90,2 L100,8"></path>
+              </svg>
+            </div>
           </div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table className={styles.table} style={{ width: "100%", borderCollapse: "collapse" }}>
+
+          <div className="glass-panel p-md rounded-xl neon-glow relative overflow-hidden group">
+            <div className="flex justify-between items-start mb-sm">
+              <span className="font-label-sm text-label-sm text-on-surface-variant tracking-wider">ACTIVE AUM HOLDERS</span>
+            </div>
+            <div className="font-data-lg text-data-lg text-on-surface text-3xl font-bold tracking-tight">
+              {loading ? "..." : (data?.metrics?.activeHolders || 0).toLocaleString()}
+            </div>
+            <div className="mt-md h-12 w-full relative flex items-end">
+              <div className="absolute bottom-0 w-full h-full liquid-chart-gradient rounded-b-xl opacity-50 group-hover:opacity-100 transition-opacity"></div>
+              <svg className="w-full h-full preserve-aspect-ratio-none stroke-primary" fill="none" strokeWidth="2" viewBox="0 0 100 30">
+                <path d="M0,20 L15,25 L30,18 L45,22 L60,10 L75,15 L90,5 L100,2"></path>
+              </svg>
+            </div>
+          </div>
+
+          <div className="glass-panel p-md rounded-xl neon-glow relative overflow-hidden group">
+            <div className="flex justify-between items-start mb-sm">
+              <span className="font-label-sm text-label-sm text-on-surface-variant tracking-wider">USD VOLUME</span>
+            </div>
+            <div className="font-data-lg text-data-lg text-on-surface text-3xl font-bold tracking-tight">
+              ${loading ? "..." : Number(data?.metrics?.totalVolume || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div className="mt-md h-12 w-full relative flex items-end">
+              <div className="absolute bottom-0 w-full h-full liquid-chart-gradient rounded-b-xl opacity-50 group-hover:opacity-100 transition-opacity"></div>
+              <svg className="w-full h-full preserve-aspect-ratio-none stroke-primary" fill="none" strokeWidth="2" viewBox="0 0 100 30">
+                <path d="M0,28 L12,25 L24,20 L36,22 L48,15 L60,10 L72,12 L84,5 L96,0 L100,0"></path>
+              </svg>
+            </div>
+          </div>
+        </section>
+
+        <section className="glass-panel p-md rounded-xl mt-6">
+          <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface mb-lg text-glow border-b border-outline-variant/20 pb-sm">
+            CONVERSION FUNNEL <span className="text-on-surface-variant text-body-md font-body-md font-normal">({activeFunnelTab.toUpperCase()})</span>
+          </h2>
+          <div className="flex flex-col items-center w-full max-w-md mx-auto space-y-2">
+            {loading ? (
+               <div className="py-10 text-on-surface-variant">Loading funnel...</div>
+            ) : (() => {
+              const steps = getActiveFunnelData();
+              if (!steps || steps.length === 0) return <div className="py-10 text-on-surface-variant">No funnel data</div>;
+              
+              const maxVal = Math.max(...steps.map((s: any) => Number(s.count))) || 1;
+              return steps.map((step: any, idx: number) => {
+                const val = Number(step.count);
+                const prevStep = steps[idx - 1];
+                let stepConv = 100;
+                if (prevStep) {
+                  const prevVal = Number(prevStep.count) || 1;
+                  stepConv = (val / prevVal) * 100;
+                }
+                
+                // Width mapping: 100% -> 90% -> 80% -> 70%
+                const widthPct = Math.max(40, 100 - (idx * 10));
+                
+                let bgClass = "bg-surface-container-highest";
+                let glowClass = "";
+                let borderClass = "border-outline-variant/30";
+                
+                if (idx === 1) {
+                  bgClass = "bg-gradient-to-r from-surface-container-highest to-surface-container";
+                  borderClass = "border-primary/20";
+                } else if (idx === 2) {
+                  bgClass = "bg-gradient-to-r from-surface-container-highest to-primary/10";
+                  borderClass = "border-primary/40";
+                  glowClass = "neon-glow";
+                } else if (idx >= 3) {
+                  bgClass = "bg-gradient-to-r from-primary/20 to-primary/30";
+                  borderClass = "border-primary";
+                  glowClass = "neon-glow shadow-[0_0_20px_rgba(0,200,150,0.3)]";
+                }
+
+                return (
+                  <div key={step.name} className="relative group" style={{ width: `${widthPct}%` }}>
+                    <div className={`w-full ${bgClass} border ${borderClass} rounded-lg p-sm flex justify-between items-center z-10 relative ${glowClass}`}>
+                      <span className={`font-label-sm text-label-sm ${idx >= 3 ? 'text-on-primary font-bold' : idx > 0 ? 'text-primary' : 'text-on-surface-variant'}`}>
+                        {step.name}
+                      </span>
+                      <span className={`font-data-lg text-data-lg ${idx >= 3 ? 'text-on-primary' : 'text-on-surface'} font-bold`}>
+                        {val.toLocaleString()}
+                      </span>
+                    </div>
+                    
+                    {idx > 0 && (
+                      <div className="absolute -right-16 top-2 hidden md:block">
+                        <span className="font-label-sm text-label-sm text-secondary bg-secondary/10 px-2 py-1 rounded">{stepConv.toFixed(1)}%</span>
+                      </div>
+                    )}
+                    
+                    {idx < steps.length - 1 && (
+                      <div className="h-8 flex justify-center items-center relative">
+                        <div className={`h-full w-px ${idx === 0 ? 'bg-outline-variant/50' : idx === 1 ? 'bg-primary/30' : 'bg-primary/50'} relative`}>
+                          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${idx === 0 ? 'bg-surface-container border-outline-variant/30 text-on-surface-variant' : 'bg-surface-container border-primary/30 text-primary'} px-2 rounded-full border z-20`}>
+                            <span className="material-symbols-outlined text-[16px]">arrow_downward</span>
+                          </div>
+                        </div>
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 md:hidden">
+                          <span className="font-label-sm text-label-sm text-secondary bg-secondary/10 px-2 py-0.5 rounded text-[10px]">
+                            {steps[idx + 1] ? ((Number(steps[idx + 1].count) / val) * 100).toFixed(1) + '%' : ''}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        </section>
+
+        <section className="glass-panel p-md rounded-xl flex flex-col mt-6">
+          <div className="flex justify-between items-center mb-md border-b border-outline-variant/20 pb-sm">
+            <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-on-surface text-glow">
+              REAL-TIME LEDGER <span className="text-on-surface-variant text-body-md font-body-md font-normal">(Solana <span className="material-symbols-outlined text-sm align-middle mx-1">sync_alt</span> GA4)</span>
+            </h2>
+          </div>
+          <div className="overflow-x-auto no-scrollbar w-full rounded-lg border border-outline-variant/10">
+            <table className="w-full min-w-[800px] text-left border-collapse">
               <thead>
-                <tr style={{ borderBottom: "2px solid #1a1a1a" }}>
-                  <th style={{ color: "#666", textTransform: "uppercase", fontSize: "0.72rem", padding: "12px 16px" }}>Solana Wallet</th>
-                  <th style={{ color: "#666", textTransform: "uppercase", fontSize: "0.72rem", padding: "12px 16px" }}>GA4 Client ID</th>
-                  <th style={{ color: "#666", textTransform: "uppercase", fontSize: "0.72rem", padding: "12px 16px" }}>Referral Campaign</th>
-                  <th style={{ color: "#666", textTransform: "uppercase", fontSize: "0.72rem", padding: "12px 16px" }}>Total XP</th>
-                  <th style={{ color: "#666", textTransform: "uppercase", fontSize: "0.72rem", padding: "12px 16px" }}>Snag Points</th>
-                  <th style={{ color: "#666", textTransform: "uppercase", fontSize: "0.72rem", padding: "12px 16px" }}>Stitched At</th>
+                <tr className="bg-surface-container-highest border-b border-outline-variant/30">
+                  <th className="p-sm font-label-sm text-label-sm text-on-surface-variant font-medium">Timestamp</th>
+                  <th className="p-sm font-label-sm text-label-sm text-on-surface-variant font-medium">Solana Wallet</th>
+                  <th className="p-sm font-label-sm text-label-sm text-on-surface-variant font-medium">GA4 ID</th>
+                  <th className="p-sm font-label-sm text-label-sm text-on-surface-variant font-medium">Activity</th>
+                  <th className="p-sm font-label-sm text-label-sm text-on-surface-variant font-medium text-right">Amount</th>
+                  <th className="p-sm font-label-sm text-label-sm text-on-surface-variant font-medium text-center">Snag Code</th>
+                  <th className="p-sm font-label-sm text-label-sm text-on-surface-variant font-medium text-right">Points</th>
                 </tr>
               </thead>
-              <tbody>
-                {data.recentStitched.map((profile: any) => (
-                  <tr key={profile.wallet} style={{ borderBottom: "1px solid #141414", transition: "all 0.15s" }}>
-                    <td style={{ padding: "14px 16px", color: ACCENT_COLORS.emerald, fontWeight: "600", fontFamily: "monospace" }}>
-                      {formatWallet(profile.wallet)}
-                    </td>
-                    <td style={{ padding: "14px 16px", color: "#aaa", fontFamily: "monospace" }}>
-                      {profile.ga_user_id}
-                    </td>
-                    <td style={{ padding: "14px 16px" }}>
-                      {profile.snag_custom_referral_code ? (
-                        <span style={{
-                          background: "rgba(171, 71, 188, 0.12)",
-                          color: ACCENT_COLORS.purple,
-                          border: "1px solid rgba(171, 71, 188, 0.25)",
-                          padding: "3px 10px",
-                          borderRadius: "20px",
-                          fontSize: "0.76rem",
-                          fontWeight: 600
-                        }}>
-                          🏷️ {profile.snag_custom_referral_code}
+              <tbody className="font-body-md text-body-md text-on-surface">
+                {loading ? (
+                   <tr>
+                     <td colSpan={7} className="p-md text-center text-on-surface-variant font-body-md">
+                       Loading ledger...
+                     </td>
+                   </tr>
+                ) : !data?.recentStitched || data.recentStitched.length === 0 ? (
+                   <tr>
+                     <td colSpan={7} className="p-md text-center text-on-surface-variant font-body-md">
+                       No recent transactions found.
+                     </td>
+                   </tr>
+                ) : (
+                  data.recentStitched.map((profile: any) => (
+                    <tr key={profile.wallet} className="border-b border-outline-variant/10 hover:bg-white/5 transition-colors group">
+                      <td className="p-sm font-label-sm text-label-sm text-on-surface-variant">
+                        {new Date(profile.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })}
+                      </td>
+                      <td className="p-sm font-label-sm text-label-sm text-primary font-medium tracking-wide">
+                        {formatWallet(profile.wallet)}
+                      </td>
+                      <td className="p-sm font-label-sm text-label-sm text-secondary">
+                        {profile.ga_user_id}
+                      </td>
+                      <td className="p-sm">
+                        <span className="bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded text-xs font-label-sm inline-flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>Token Purchase
                         </span>
-                      ) : (
-                        <span style={{ color: "#444", fontSize: "0.78rem" }}>organic</span>
-                      )}
-                    </td>
-                    <td style={{ padding: "14px 16px", color: ACCENT_COLORS.blue, fontWeight: 700 }}>
-                      {Number(profile.total_xp).toLocaleString()} XP
-                    </td>
-                    <td style={{ padding: "14px 16px", color: ACCENT_COLORS.gold, fontWeight: 700 }}>
-                      {Number(profile.snag_points).toLocaleString()} SP
-                    </td>
-                    <td style={{ padding: "14px 16px", color: "#666", fontSize: "0.78rem" }}>
-                      {new Date(profile.updated_at).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="p-sm font-data-lg text-data-lg text-right text-on-surface">
+                        {Number(profile.total_xp).toLocaleString()} XP
+                      </td>
+                      <td className="p-sm text-center font-label-sm text-label-sm text-on-surface-variant">
+                        {profile.snag_custom_referral_code || 'organic'}
+                      </td>
+                      <td className="p-sm text-right">
+                        <button className="bg-surface-container-highest border border-outline-variant/50 px-2 py-1 rounded-full inline-flex items-center gap-1 group-hover:border-primary/50 transition-colors">
+                          <span className="material-symbols-outlined text-[14px] text-secondary">diamond</span>
+                          <span className="font-label-sm text-label-sm text-primary font-bold">{Number(profile.snag_points).toLocaleString()} PTS</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
-        )}
-      </section>
+        </section>
+      </main>
     </div>
   );
 }
