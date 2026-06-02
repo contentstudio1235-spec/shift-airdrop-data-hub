@@ -2,3 +2,4 @@ node_modules/
 # dist/ is committed so Render uses pre-compiled JS without a build step
 .env
 *.log
+HANDOFF.md
