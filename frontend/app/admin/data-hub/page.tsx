@@ -415,6 +415,10 @@ function AnalyticsPage({ data }: { data: HubData }) {
   const showGA4 = ga4?.available ? ga4 : null;
   const totalUsers = showGA4?.totals?.activeUsers || cachedGA4.totalUsers;
 
+  // Normalize GA4 pages: API returns .pages with pagePath/screenPageViews
+  const ga4TopPages = showGA4?.topPages?.length ? showGA4.topPages
+    : (showGA4?.pages || []).map((p: any) => ({ page: p.pagePath, views: parseInt(p.screenPageViews) || 0 }));
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       {/* Permission notice if GA4 not connected */}
@@ -424,7 +428,7 @@ function AnalyticsPage({ data }: { data: HubData }) {
           <div>
             <div style={{ color: "#fbbf24", fontWeight: 700, fontSize: "13px" }}>GA4 Live Connection Pending</div>
             <div style={{ color: "#92400e", fontSize: "12px", marginTop: "4px" }}>
-              Grant <code style={{ background: "rgba(0,0,0,0.3)", padding: "1px 5px", borderRadius: "3px" }}>tomer-antigravity-shift@micro-vine-498016-n0.iam.gserviceaccount.com</code> Viewer access in Google Analytics Admin → Property Access Management for all 7 properties. Displaying cached data until connected.
+              GA4 data is unavailable. Check backend logs for auth errors. Displaying cached data.
             </div>
           </div>
         </div>
@@ -468,8 +472,8 @@ function AnalyticsPage({ data }: { data: HubData }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
         <Card title="Top Pages" subtitle="By page views — last 30 days">
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {(showGA4?.topPages || cachedGA4.topPages).map((p: any, i: number) => {
-              const maxViews = (showGA4?.topPages || cachedGA4.topPages)[0]?.views || 1;
+            {(ga4TopPages.length > 0 ? ga4TopPages : cachedGA4.topPages).map((p: any, i: number) => {
+              const maxViews = (ga4TopPages.length > 0 ? ga4TopPages : cachedGA4.topPages)[0]?.views || 1;
               const pct = Math.round(((p.views || p.views) / maxViews) * 100);
               return (
                 <div key={i}>
@@ -893,7 +897,13 @@ export default function DataHubPage() {
       admin: get(adminRes, "admin"),
       onchain: get(onchainRes, "onchain"),
       analytics: get(analyticsRes, "analytics"),
-      leaderboard: get(leaderboardRes, "leaderboard"),
+      leaderboard: (() => {
+        const raw: any = get(leaderboardRes, "leaderboard");
+        if (!raw) return null;
+        // API returns { leaderboard: [...] }, component expects { entries: [...] }
+        const arr = Array.isArray(raw) ? raw : (raw.leaderboard || raw.data || []);
+        return { entries: arr };
+      })(),
       ga4: get(ga4Res, "ga4"),
       lastRefresh: new Date(),
       loading: false,
