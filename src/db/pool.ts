@@ -6,6 +6,10 @@ export const pool = new Pool({
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
+  // Required for external connections to Render-hosted Postgres
+  ssl: config.databaseUrl?.includes('render.com')
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
 // Graceful shutdown
