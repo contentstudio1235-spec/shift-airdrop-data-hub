@@ -447,7 +447,11 @@ function AnalyticsPage({ data }: { data: HubData }) {
           <div key={i} style={{ ...S.card, padding: "18px" }}>
             <div style={{ fontSize: "20px", marginBottom: "8px" }}>{k.icon}</div>
             <div style={S.label}>{k.label}</div>
-            <div style={{ ...S.value, color: k.c, fontSize: "22px" }}>{k.value}</div>
+            <div style={{ ...S.value, color: k.c, fontSize: "22px" }}>
+              {typeof k.value === "string" && k.value.endsWith("%")
+                ? <><span style={{ fontWeight: 400 }}>{k.value.slice(0, -1)}</span>%</>
+                : k.value}
+            </div>
           </div>
         ))}
       </div>
@@ -571,7 +575,11 @@ function StitchedPage({ data }: { data: HubData }) {
           <div key={i} style={{ ...S.card, padding: "20px" }}>
             <div style={{ fontSize: "22px", marginBottom: "8px" }}>{k.icon}</div>
             <div style={S.label}>{k.label}</div>
-            <div style={{ ...S.value, color: k.c, fontSize: "26px" }}>{k.value}</div>
+            <div style={{ ...S.value, color: k.c, fontSize: "26px" }}>
+              {typeof k.value === "string" && k.value.endsWith("%")
+                ? <><span style={{ fontWeight: 400 }}>{k.value.slice(0, -1)}</span>%</>
+                : k.value}
+            </div>
           </div>
         ))}
       </div>
