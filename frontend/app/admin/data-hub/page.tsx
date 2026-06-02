@@ -902,7 +902,7 @@ export default function DataHubPage() {
         if (!raw) return null;
         // API returns { leaderboard: [...] }, component expects { entries: [...] }
         const arr = Array.isArray(raw) ? raw : (raw.leaderboard || raw.data || []);
-        return { entries: arr };
+        return { entries: arr, count: arr.length };
       })(),
       ga4: get(ga4Res, "ga4"),
       lastRefresh: new Date(),
