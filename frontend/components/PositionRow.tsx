@@ -1,5 +1,7 @@
 import type { Position } from '@/lib/types';
 import ProgressBar from './ProgressBar';
+import { PnLBadge } from './PnLBadge';
+import { PnLInfoTooltip } from './PnLInfoTooltip';
 
 interface PositionRowProps {
   position: Position;
@@ -12,7 +14,8 @@ export default function PositionRow({ position }: PositionRowProps) {
   const initials = ticker.slice(0, 3).toUpperCase();
 
   return (
-    <div className="position-row fade-in">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      <div className="position-row fade-in">
       {/* Asset */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
         <div className="asset-logo">{initials}</div>
@@ -65,6 +68,32 @@ export default function PositionRow({ position }: PositionRowProps) {
           {position.progressionHook ?? `${mult.toFixed(1)}x → 3.0x`}
         </div>
       </div>
+      </div>
+
+      {/* P&L Row (if data available) */}
+      {position.pnlUsd !== undefined && position.pnlPct !== undefined && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingLeft: 40,
+            paddingRight: 16,
+            paddingTop: 8,
+            paddingBottom: 8,
+            backgroundColor: 'rgba(0, 0, 0, 0.02)',
+            borderRadius: '0 0 8px 8px',
+            fontSize: 12,
+            color: 'var(--text-mute)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span>P&L</span>
+            <PnLInfoTooltip variant="position" showIcon={true} />
+          </div>
+          <PnLBadge pnlUsd={position.pnlUsd} pnlPct={position.pnlPct} size="sm" />
+        </div>
+      )}
     </div>
   );
 }

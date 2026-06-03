@@ -8,6 +8,9 @@ import { missionsService } from '../services/missionsService';
 import { badgeGalleryService } from '../services/badgeGalleryService';
 import { referralTrackingService } from '../services/referralTrackingService';
 import { getUserLevelInfo } from '../utils/levelSystem';
+import { positionService } from '../services/positionService';
+import { jupiterPriceService } from '../services/jupiterPriceService';
+import { calculateDashboardPnL } from '../services/pnlService';
 
 const router = Router();
 
@@ -17,12 +20,13 @@ router.get('/:wallet', async (req, res) => {
 
   try {
     // 1. Get user stats & SNAG points in parallel
-    const [user, snagBalance] = await Promise.all([
+    const [user, snagBalance, positions] = await Promise.all([
       queryOne(
         'SELECT total_xp, claim_multiplier, current_streak, snag_user_id, snag_points FROM users WHERE wallet = $1',
         [wallet]
       ),
-      snagSyncService.getUserPoints(wallet)
+      snagSyncService.getUserPoints(wallet),
+      positionService.getActivePositions(wallet)
     ]);
 
     if (!user) {
@@ -67,6 +71,19 @@ router.get('/:wallet', async (req, res) => {
       [wallet]
     );
 
+    // 4. Calculate P&L for dashboard (if positions exist)
+    let dashboardPnL = null;
+    if (positions && positions.length > 0) {
+      try {
+        const assetMints = [...new Set(positions.map(p => p.asset_mint || p.asset).filter(Boolean))];
+        const prices = await jupiterPriceService.getPrices(assetMints);
+        dashboardPnL = calculateDashboardPnL(positions, prices);
+      } catch (err) {
+        console.warn('[Dashboard] P&L calculation error:', err);
+        // Continue without P&L data if calculation fails
+      }
+    }
+
     res.json({
       wallet,
       // Combined SP (main display value)
@@ -83,7 +100,14 @@ router.get('/:wallet', async (req, res) => {
       currentStreak: user.current_streak,
       rank: parseInt(rankResult?.rank || '1', 10),
       activePositions: parseInt(positionsResult?.count || '0', 10),
-      projectedAllocation: 'TBD'
+      projectedAllocation: 'TBD',
+      // P&L summary
+      ...(dashboardPnL && {
+        totalUnrealizedPnL: dashboardPnL.totalUnrealizedPnL,
+        totalRealizedPnL: dashboardPnL.totalRealizedPnL,
+        totalPnLUsd: dashboardPnL.totalPnLUsd,
+        totalPnLPct: dashboardPnL.totalPnLPct,
+      }),
     });
   } catch (error) {
     console.error('[API] Dashboard fetch error:', error);

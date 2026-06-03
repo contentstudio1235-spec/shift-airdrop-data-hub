@@ -30,16 +30,51 @@ const TOKEN_SYMBOLS = {
     '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT': 'SPX3L',
     '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT': 'SPX3S',
 };
+// RWA Fallback Prices (from blockchain analysis)
+// Used when Jupiter API cannot price proprietary SHIFT tokens
+const RWA_FALLBACK_PRICES = {
+    '6afjZE5Qv9WF5K1adBgTxtWyenJ7ZerH6BVAzmoSHFT': 22.07, // TSL2L
+    'bNPXng6hSVas7LWiNQyvpGcPYtY1ZmFY6WP49ymSHFT': 50.03, // TSL1S
+    'Hyhxfb6riaqCV333GynmnCXCEQK3goTznFj7k4dSHFT': 216.39, // SOX3L
+    '7GoxZQ7gCh1mg1b3AUqd7cyPqiUp4y2NRxM9A5zSHFT': 10.26, // SOX3S
+    '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT': 420.18, // SPX3L
+    '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT': 5.12, // SPX3S
+};
 class JupiterPriceService {
     baseUrl;
+    priceCache = new Map();
+    CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
     constructor() {
         this.baseUrl = config_1.config.jupiterPriceApi;
     }
     /**
-     * Get USD price for a token mint.
+     * Check if a cached price is still valid
+     */
+    isCacheValid(cachedAt) {
+        return Date.now() - cachedAt.getTime() < this.CACHE_TTL_MS;
+    }
+    /**
+     * Clear expired cache entries periodically
+     */
+    pruneCache() {
+        const now = new Date();
+        for (const [mint, cached] of this.priceCache.entries()) {
+            if (!this.isCacheValid(cached.cachedAt)) {
+                this.priceCache.delete(mint);
+            }
+        }
+    }
+    /**
+     * Get USD price for a token mint (with caching and RWA fallback).
      * Returns null if price unavailable.
      */
     async getPrice(mint) {
+        // 1. Check cache first
+        const cached = this.priceCache.get(mint);
+        if (cached && this.isCacheValid(cached.cachedAt)) {
+            return cached.price;
+        }
+        // 2. Try Jupiter API
         try {
             const response = await axios_1.default.get(this.baseUrl, {
                 params: { ids: mint },
@@ -47,43 +82,87 @@ class JupiterPriceService {
             });
             const priceData = response.data?.data?.[mint];
             if (priceData?.price) {
-                return parseFloat(priceData.price);
+                const price = parseFloat(priceData.price);
+                // Cache the result
+                this.priceCache.set(mint, { price, cachedAt: new Date() });
+                return price;
             }
-            // NOMINAL PRICE for SHIFT_TEST token if not found on Jupiter
-            if (mint === config_1.config.shiftTokenMint) {
-                return 0.5; // $0.50 for testing
-            }
-            return null;
         }
         catch (error) {
-            console.error(`[JupiterPrice] Failed to fetch price for ${mint}:`, error);
-            // Fallback for SHIFT_TEST token even on network error
-            if (mint === config_1.config.shiftTokenMint) {
-                return 0.5;
-            }
-            return null;
+            console.warn(`[JupiterPrice] API error for ${mint.slice(0, 12)}...:`, error.message);
         }
+        // 3. Try RWA fallback price
+        const fallbackPrice = RWA_FALLBACK_PRICES[mint];
+        if (fallbackPrice) {
+            this.priceCache.set(mint, { price: fallbackPrice, cachedAt: new Date() });
+            console.log(`[JupiterPrice] Using RWA fallback: ${TOKEN_SYMBOLS[mint]} = $${fallbackPrice}`);
+            return fallbackPrice;
+        }
+        // 4. SHIFT_TEST token fallback
+        if (mint === config_1.config.shiftTokenMint) {
+            const price = 0.5;
+            this.priceCache.set(mint, { price, cachedAt: new Date() });
+            return price;
+        }
+        return null;
     }
     /**
-     * Get USD prices for multiple mints in a single call.
+     * Get USD prices for multiple mints (with caching and batch optimization).
+     * Reduces API calls by checking cache first.
      */
     async getPrices(mints) {
-        const prices = {};
         if (mints.length === 0)
-            return prices;
-        try {
-            const response = await axios_1.default.get(this.baseUrl, {
-                params: { ids: mints.join(',') },
-                timeout: 10000,
-            });
-            for (const [mint, data] of Object.entries(response.data?.data || {})) {
-                if (data?.price) {
-                    prices[mint] = parseFloat(data.price);
-                }
+            return {};
+        // Prune expired entries periodically
+        this.pruneCache();
+        const prices = {};
+        const toFetch = [];
+        // 1. Collect cached prices and identify what needs fetching
+        for (const mint of mints) {
+            const cached = this.priceCache.get(mint);
+            if (cached && this.isCacheValid(cached.cachedAt)) {
+                prices[mint] = cached.price;
+            }
+            else {
+                toFetch.push(mint);
             }
         }
-        catch (error) {
-            console.error('[JupiterPrice] Batch price fetch failed:', error);
+        // 2. If nothing to fetch, return cached results
+        if (toFetch.length === 0) {
+            return prices;
+        }
+        // 3. Batch fetch missing prices from Jupiter
+        if (toFetch.length > 0) {
+            try {
+                const response = await axios_1.default.get(this.baseUrl, {
+                    params: { ids: toFetch.join(',') },
+                    timeout: 10000,
+                });
+                for (const [mint, data] of Object.entries(response.data?.data || {})) {
+                    if (data?.price) {
+                        const price = parseFloat(data.price);
+                        prices[mint] = price;
+                        this.priceCache.set(mint, { price, cachedAt: new Date() });
+                    }
+                }
+            }
+            catch (error) {
+                console.warn('[JupiterPrice] Batch fetch failed:', error.message);
+            }
+        }
+        // 4. Apply RWA/fallback prices for anything still missing
+        for (const mint of toFetch) {
+            if (!prices[mint]) {
+                const fallbackPrice = RWA_FALLBACK_PRICES[mint];
+                if (fallbackPrice) {
+                    prices[mint] = fallbackPrice;
+                    this.priceCache.set(mint, { price: fallbackPrice, cachedAt: new Date() });
+                }
+                else if (mint === config_1.config.shiftTokenMint) {
+                    prices[mint] = 0.5;
+                    this.priceCache.set(mint, { price: 0.5, cachedAt: new Date() });
+                }
+            }
         }
         return prices;
     }

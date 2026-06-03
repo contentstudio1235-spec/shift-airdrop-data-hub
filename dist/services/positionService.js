@@ -5,6 +5,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.positionService = exports.PositionService = void 0;
 const pool_1 = require("../db/pool");
+const heliusTransactionService_1 = require("./heliusTransactionService");
 class PositionService {
     /**
      * Ensure a user record exists (upsert on first seen wallet).
@@ -125,6 +126,117 @@ class PositionService {
         if (weeks > 0)
             return `${weeks}w ${days}d`;
         return `${days}d`;
+    }
+    /**
+     * Capture entry price from blockchain transaction (when position opens).
+     * Extracts swap price via Helius API and stores in price_at_open.
+     */
+    async capturePositionOpen(position) {
+        if (position.price_at_open) {
+            return true; // Already captured
+        }
+        if (!position.tx_signature_open) {
+            console.warn(`[Position] No tx signature for position ${position.id}`);
+            return false;
+        }
+        try {
+            const swapData = await (0, heliusTransactionService_1.extractSwapPriceFromTx)(position.tx_signature_open, position.wallet, position.asset_mint || position.asset);
+            if (!swapData) {
+                console.warn(`[Position] Could not extract price for position ${position.id}`);
+                return false;
+            }
+            // Update position with extracted price
+            await (0, pool_1.execute)(`UPDATE positions
+         SET price_at_open = $1, extracted_at = NOW()
+         WHERE id = $2`, [swapData.pricePerToken, position.id]);
+            console.log(`[Position] ✅ Captured entry price: ${position.asset} @ $${swapData.pricePerToken.toFixed(4)}`);
+            return true;
+        }
+        catch (err) {
+            console.error(`[Position] Error capturing price for ${position.id}:`, err);
+            return false;
+        }
+    }
+    /**
+     * Capture exit price when position closes.
+     * Extracts swap price and stores close_value_usd.
+     */
+    async capturePositionClose(positionId, txSignatureClose, wallet, assetMint) {
+        try {
+            const position = await (0, pool_1.queryOne)('SELECT * FROM positions WHERE id = $1', [positionId]);
+            if (!position) {
+                console.warn(`[Position] Position not found: ${positionId}`);
+                return false;
+            }
+            const swapData = await (0, heliusTransactionService_1.extractSwapPriceFromTx)(txSignatureClose, wallet, assetMint || position.asset);
+            if (!swapData) {
+                console.warn(`[Position] Could not extract close price for ${positionId}`);
+                return false;
+            }
+            // Calculate close value
+            const tokenAmount = position.token_amount || 0;
+            const closeValueUsd = tokenAmount * swapData.pricePerToken;
+            // Update position
+            await (0, pool_1.execute)(`UPDATE positions
+         SET price_at_close = $1, close_value_usd = $2, extracted_at = NOW()
+         WHERE id = $3`, [swapData.pricePerToken, closeValueUsd, positionId]);
+            console.log(`[Position] ✅ Captured exit price: ${position.asset} @ $${swapData.pricePerToken.toFixed(4)} | Close value: $${closeValueUsd.toFixed(2)}`);
+            return true;
+        }
+        catch (err) {
+            console.error(`[Position] Error capturing close price for ${positionId}:`, err);
+            return false;
+        }
+    }
+    /**
+     * Backfill entry prices for all positions without price_at_open.
+     * Uses Helius to extract swap prices from blockchain transactions.
+     * Returns { total, updated, failed } for audit.
+     */
+    async backfillEntryPrices() {
+        console.log('[Position] Starting entry price backfill...\n');
+        const positions = await (0, pool_1.query)(`SELECT id, wallet, asset, asset_mint, tx_signature_open, token_amount
+       FROM positions
+       WHERE status = 'open' AND price_at_open IS NULL
+       ORDER BY opened_at DESC`);
+        console.log(`[Position] Found ${positions.length} positions without entry prices\n`);
+        if (positions.length === 0) {
+            return { total: 0, updated: 0, failed: 0 };
+        }
+        // Batch extract prices from Helius
+        const priceMap = await (0, heliusTransactionService_1.batchExtractSwapPrices)(positions.map((p) => ({
+            id: p.id,
+            wallet: p.wallet,
+            asset_mint: p.asset_mint || p.asset,
+            tx_signature_open: p.tx_signature_open,
+        })));
+        // Update positions with extracted prices
+        let updated = 0;
+        let failed = 0;
+        for (const position of positions) {
+            const swapData = priceMap.get(position.id);
+            if (swapData) {
+                try {
+                    await (0, pool_1.execute)(`UPDATE positions
+             SET price_at_open = $1, extracted_at = NOW()
+             WHERE id = $2`, [swapData.pricePerToken, position.id]);
+                    updated++;
+                }
+                catch (err) {
+                    console.error(`[Position] Failed to update ${position.id}:`, err);
+                    failed++;
+                }
+            }
+            else {
+                failed++;
+            }
+        }
+        console.log(`\n[Position] ✅ Backfill complete:`);
+        console.log(`   Total: ${positions.length}`);
+        console.log(`   Updated: ${updated}`);
+        console.log(`   Failed: ${failed}`);
+        console.log(`   Success rate: ${((updated / positions.length) * 100).toFixed(1)}%\n`);
+        return { total: positions.length, updated, failed };
     }
 }
 exports.PositionService = PositionService;

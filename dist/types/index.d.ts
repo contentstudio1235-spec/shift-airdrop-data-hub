@@ -16,6 +16,8 @@ export interface Position {
     position_size_usd: number;
     token_amount: number | null;
     price_at_open: number | null;
+    price_at_close: number | null;
+    close_value_usd: number | null;
     opened_at: Date;
     closed_at: Date | null;
     current_multiplier: number;
@@ -24,6 +26,7 @@ export interface Position {
     status: PositionStatus;
     tx_signature_open: string;
     tx_signature_close: string | null;
+    extracted_at: Date | null;
     created_at: Date;
 }
 export type PositionStatus = 'open' | 'closed' | 'filtered';
