@@ -6,9 +6,11 @@
 // trackWalletConnect() — SILENT stitch on every wallet connect.
 //                        Backend stores confidence='probabilistic'.
 //                        Zero UX friction — no signature, no popup.
-// verifyWalletStitch() — OPT-IN signature flow for high-intent CTAs
-//                        (e.g., "Join Airdrop", admin "Verify wallet").
-//                        Backend upgrades to confidence='deterministic'.
+//
+// FUTURE — verifyWalletStitch() will sign + POST {signature, message} to the
+// same backend endpoint to upgrade the link to confidence='deterministic'.
+// That helper will ship in the same PR that wires up a high-intent CTA
+// ("Join Airdrop" / admin "Verify wallet" button), along with the bs58 dep.
 // ============================================================
 
 const API_URL =
@@ -100,53 +102,3 @@ export async function trackWalletConnect(args: { wallet: string }): Promise<{ st
   }
 }
 
-/**
- * OPT-IN wallet verification — call this from a high-intent CTA (e.g., "Join Airdrop"
- * button handler, admin "Verify wallet" action). Prompts the user to sign a message,
- * then POSTs to backend which upgrades the link to confidence='deterministic'.
- *
- * Caller MUST tie this to an explicit user action with contextual copy so the
- * signature prompt makes sense.
- */
-export async function verifyWalletStitch(args: {
-  wallet: string;
-  signMessage: (message: Uint8Array) => Promise<Uint8Array>;
-}): Promise<{ verified: boolean; reason?: string }> {
-  const { wallet, signMessage } = args;
-  const client_id = getGAClientId();
-  if (!client_id) return { verified: false, reason: 'no_ga_client_id' };
-
-  const timestamp = Date.now();
-  const message = [
-    `SHIFT RWA — Verify Wallet`,
-    ``,
-    `Wallet: ${wallet}`,
-    `Timestamp: ${timestamp}`,
-    `Session: ${client_id}`,
-    ``,
-    `Sign to verify this wallet for your airdrop entry.`,
-    `This signature does not authorize any transaction.`,
-  ].join('\n');
-
-  let signatureB58: string;
-  try {
-    const messageBytes = new TextEncoder().encode(message);
-    const sigBytes = await signMessage(messageBytes);
-    const bs58 = (await import('bs58')).default;
-    signatureB58 = bs58.encode(sigBytes);
-  } catch {
-    return { verified: false, reason: 'signature_rejected' };
-  }
-
-  try {
-    const res = await fetch(`${API_URL}/api/track/wallet_connect`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wallet, signature: signatureB58, message, client_id }),
-    });
-    if (!res.ok) return { verified: false, reason: `http_${res.status}` };
-    return { verified: true };
-  } catch {
-    return { verified: false, reason: 'network_error' };
-  }
-}
