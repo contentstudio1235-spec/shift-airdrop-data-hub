@@ -46,14 +46,14 @@ export async function computeChannelROI(params: FunnelQueryParams): Promise<Chan
     avg_position_usd: string;
   }>(
     `
+    -- Check the 6-char Snag-referral pattern on raw values BEFORE the COALESCE
+    -- falls through to 'direct'. Otherwise 'direct' (literally 6 letters) gets
+    -- matched and EVERY direct user becomes a snag_referral.
     WITH user_source AS (
       SELECT
         CASE
-          WHEN COALESCE(
-            NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy'),
-            NULLIF(u.referred_by_code, ''),
-            'direct'
-          ) ~ '^[a-zA-Z0-9]{6}$' THEN 'snag_referrals'
+          WHEN NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy') ~ '^[a-zA-Z0-9]{6}$' THEN 'snag_referrals'
+          WHEN NULLIF(u.referred_by_code, '') ~ '^[a-zA-Z0-9]{6}$' THEN 'snag_referrals'
           ELSE COALESCE(
             NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy'),
             NULLIF(u.referred_by_code, ''),
