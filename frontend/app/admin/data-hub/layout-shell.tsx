@@ -1,6 +1,6 @@
 "use client";
 import React from 'react';
-import { Target, MagnifyingGlass, Waves, ChartBar } from '@phosphor-icons/react';
+import { Target, MagnifyingGlass, Waves, ChartBar, UserCircle } from '@phosphor-icons/react';
 import type { Icon as PhosphorIcon } from '@phosphor-icons/react';
 import { FilterBar } from '@/components/DataHub/shared/FilterBar';
 
@@ -9,12 +9,13 @@ const accentDim = "rgba(0,200,150,0.15)";
 const accentBorder = "rgba(0,200,150,0.2)";
 const bg = "#030d0a";
 
-export type TopView = 'funnels' | 'attribution' | 'cohorts' | 'raw';
+export type TopView = 'funnels' | 'attribution' | 'cohorts' | 'users' | 'raw';
 
 const TABS: Array<{ id: TopView; label: string; Icon: PhosphorIcon }> = [
   { id: 'funnels',     label: 'Funnels',            Icon: Target },
   { id: 'attribution', label: 'Source Attribution', Icon: MagnifyingGlass },
   { id: 'cohorts',     label: 'Trader Cohorts',     Icon: Waves },
+  { id: 'users',       label: 'Users',              Icon: UserCircle },
   { id: 'raw',         label: 'Raw Data',           Icon: ChartBar },
 ];
 
