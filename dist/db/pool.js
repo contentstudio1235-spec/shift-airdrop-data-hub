@@ -6,11 +6,19 @@ exports.queryOne = queryOne;
 exports.execute = execute;
 const pg_1 = require("pg");
 const config_1 = require("../config");
+// Render Postgres internal URL: no SSL needed (same private network).
+// Neon/external URLs: require SSL with rejectUnauthorized: false.
+// Keep pool at 5 — enough for cron + webhooks + API requests without exhausting DB limits.
+const isExternalDb = config_1.config.databaseUrl.includes('neon.tech') ||
+    config_1.config.databaseUrl.includes('neon.db') ||
+    config_1.config.databaseUrl.includes('ohio-postgres.render.com') || // Render external
+    config_1.config.databaseUrl.includes('rlwy.net'); // Railway
 exports.pool = new pg_1.Pool({
     connectionString: config_1.config.databaseUrl,
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
+    max: 5,
+    idleTimeoutMillis: 20000,
+    connectionTimeoutMillis: 10000,
+    ssl: isExternalDb ? { rejectUnauthorized: false } : false,
 });
 // Graceful shutdown
 process.on('SIGTERM', async () => {
