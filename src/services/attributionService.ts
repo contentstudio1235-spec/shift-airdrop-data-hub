@@ -31,6 +31,8 @@ export async function computeChannelROI(params: FunnelQueryParams): Promise<Chan
   //   1. user_profiles.first_utm_source  (Sprint 2.3 live stitch)
   //   2. users.referred_by_code          (Sprint 0 referral signal)
   //   3. 'direct'                        (no signal)
+  // 'unknown_legacy' is a Sprint 2.0 backfill placeholder — NOT a real UTM signal,
+  // so we filter it out via NULLIF before the COALESCE chain falls through.
   const rows = await query<{
     source: string;
     users: string;
@@ -44,7 +46,7 @@ export async function computeChannelROI(params: FunnelQueryParams): Promise<Chan
     WITH user_source AS (
       SELECT
         COALESCE(
-          NULLIF(LOWER(p.first_utm_source), ''),
+          NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy'),
           NULLIF(u.referred_by_code, ''),
           'direct'
         ) AS source,
@@ -115,6 +117,7 @@ export async function computeTopCampaigns(params: FunnelQueryParams, limit = 10)
     WHERE merged_into_profile_id IS NULL
       AND first_utm_campaign IS NOT NULL
       AND first_utm_campaign <> ''
+      AND first_utm_campaign <> 'unknown_legacy'
       AND ($1::timestamp IS NULL OR first_seen_at >= $1)
       AND ($2::timestamp IS NULL OR first_seen_at <= $2)
     GROUP BY first_utm_campaign, first_utm_source, first_utm_medium
@@ -149,7 +152,7 @@ export async function computeAttributionCoverage(params: FunnelQueryParams): Pro
     WITH base AS (
       SELECT
         u.wallet,
-        p.first_utm_source AS utm,
+        NULLIF(NULLIF(p.first_utm_source, ''), 'unknown_legacy') AS utm,
         NULLIF(u.referred_by_code, '') AS ref
       FROM users u
       LEFT JOIN user_profiles p ON p.primary_wallet = u.wallet AND p.merged_into_profile_id IS NULL
