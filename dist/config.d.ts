@@ -50,6 +50,7 @@ export declare const config: {
         readonly washTradeWindowMinutes: number;
         readonly cooldownMinutes: number;
     };
+    readonly adminKey: string;
     readonly claimMultiplier: {
         readonly weeklyBonus: 0.1;
         readonly monthlyBonus: 0.2;

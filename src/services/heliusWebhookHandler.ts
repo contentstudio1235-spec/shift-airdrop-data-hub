@@ -98,6 +98,7 @@ export class HeliusWebhookHandler {
 
     // On a buy, extract the stablecoin INPUT amount as the USD position size
     // This is far more reliable than trying to price the RWA token via Jupiter
+    const assetSymbol = assetMint ? jupiterPriceService.getSymbol(assetMint) : 'UNKNOWN';
     if (direction === 'buy' && assetMint) {
       console.log(`[Helius] Buy detected - asset: ${assetSymbol} | looking for stablecoin inputs...`);
       for (const input of tokenInputs) {
@@ -148,8 +149,6 @@ export class HeliusWebhookHandler {
       console.log(`[Helius] Could not determine asset for tx: ${signature.slice(0, 16)}...`);
       return;
     }
-
-    const assetSymbol = jupiterPriceService.getSymbol(assetMint);
 
     if (direction === 'buy') {
       const nativeInput = swap.nativeInput ? parseFloat(swap.nativeInput.amount) / 1e9 : undefined;

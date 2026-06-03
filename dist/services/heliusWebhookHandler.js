@@ -12,6 +12,8 @@ const config_1 = require("../config");
 const positionService_1 = require("./positionService");
 const jupiterPriceService_1 = require("./jupiterPriceService");
 const antiFarmService_1 = require("./antiFarmService");
+const streamService_1 = require("./streamService");
+const funnelService_1 = require("./funnelService");
 // Jupiter Program ID
 const JUPITER_PROGRAM = 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4';
 // Stablecoin mints (positions denominated against these)
@@ -86,11 +88,14 @@ class HeliusWebhookHandler {
         }
         // On a buy, extract the stablecoin INPUT amount as the USD position size
         // This is far more reliable than trying to price the RWA token via Jupiter
+        const assetSymbol = assetMint ? jupiterPriceService_1.jupiterPriceService.getSymbol(assetMint) : 'UNKNOWN';
         if (direction === 'buy' && assetMint) {
+            console.log(`[Helius] Buy detected - asset: ${assetSymbol} | looking for stablecoin inputs...`);
             for (const input of tokenInputs) {
                 if (STABLECOIN_MINTS.has(input.mint)) {
                     const decimals = input.rawTokenAmount?.decimals ?? 6;
                     stablecoinUsdValue = parseFloat(input.rawTokenAmount.tokenAmount) / Math.pow(10, decimals);
+                    console.log(`[Helius] Found stablecoin input: $${stablecoinUsdValue.toFixed(2)} (${input.mint.slice(0, 10)}...)`);
                     break;
                 }
             }
@@ -99,6 +104,10 @@ class HeliusWebhookHandler {
                 const solAmount = parseFloat(swap.nativeInput.amount) / 1e9;
                 const solPrice = await jupiterPriceService_1.jupiterPriceService.getPrice('So11111111111111111111111111111111111111112');
                 stablecoinUsdValue = solAmount * (solPrice ?? 0);
+                console.log(`[Helius] Using SOL price fallback: ${solAmount} SOL @ $${solPrice} = $${stablecoinUsdValue.toFixed(2)}`);
+            }
+            if (stablecoinUsdValue === null) {
+                console.log(`[Helius] ⚠️ No stablecoin or SOL input found for ${assetSymbol} - will fall back to Jupiter pricing`);
             }
         }
         // If no non-stable output, check inputs (what user sent = sell)
@@ -127,7 +136,6 @@ class HeliusWebhookHandler {
             console.log(`[Helius] Could not determine asset for tx: ${signature.slice(0, 16)}...`);
             return;
         }
-        const assetSymbol = jupiterPriceService_1.jupiterPriceService.getSymbol(assetMint);
         if (direction === 'buy') {
             const nativeInput = swap.nativeInput ? parseFloat(swap.nativeInput.amount) / 1e9 : undefined;
             await this.handleBuy(wallet, assetSymbol, assetMint, assetAmount, signature, timestamp, stablecoinUsdValue ?? undefined, nativeInput);
@@ -138,12 +146,14 @@ class HeliusWebhookHandler {
     }
     /**
      * Fallback: extract position data from raw token transfers when no swap event.
+     * CRITICAL: Check for stablecoin inputs to set positionSizeUSD correctly
      */
     async processFromTokenTransfers(tx) {
         if (!tx.tokenTransfers || tx.tokenTransfers.length === 0)
             return;
         const wallet = tx.feePayer;
         const timestamp = new Date(tx.timestamp * 1000);
+        const signature = tx.signature;
         // Find non-stablecoin tokens received (buy) or sent (sell)
         for (const transfer of tx.tokenTransfers) {
             if (STABLECOIN_MINTS.has(transfer.mint))
@@ -151,9 +161,22 @@ class HeliusWebhookHandler {
             const assetSymbol = jupiterPriceService_1.jupiterPriceService.getSymbol(transfer.mint);
             if (transfer.toUserAccount === wallet) {
                 // User received tokens = buy
-                // Try to find SOL input amount from native transfers
-                let nativeInputAmount;
-                if (tx.nativeTransfers) {
+                let stablecoinUsdValue = undefined;
+                let nativeInputAmount = undefined;
+                // CRITICAL: Look for USDC/USDT input in the same transaction
+                if (tx.tokenTransfers) {
+                    for (const tf of tx.tokenTransfers) {
+                        if (STABLECOIN_MINTS.has(tf.mint) && tf.fromUserAccount === wallet) {
+                            // Found stablecoin input from this wallet
+                            const decimals = tf.decimals ?? 6;
+                            stablecoinUsdValue = tf.tokenAmount / Math.pow(10, decimals);
+                            console.log(`[Helius] Detected stablecoin input: $${stablecoinUsdValue.toFixed(2)} (${tf.mint.slice(0, 10)}...)`);
+                            break;
+                        }
+                    }
+                }
+                // Fallback: Try to find SOL input amount from native transfers
+                if (!stablecoinUsdValue && tx.nativeTransfers) {
                     for (const nt of tx.nativeTransfers) {
                         if (nt.fromUserAccount === wallet && nt.toUserAccount !== wallet) {
                             nativeInputAmount = nt.amount / 1e9;
@@ -161,11 +184,13 @@ class HeliusWebhookHandler {
                         }
                     }
                 }
-                await this.handleBuy(wallet, assetSymbol, transfer.mint, transfer.tokenAmount, tx.signature, timestamp, undefined, nativeInputAmount);
+                console.log(`[Helius] Buy detected: ${wallet.slice(0, 8)}... | ${assetSymbol} | USDC: $${stablecoinUsdValue?.toFixed(2) ?? 'N/A'} | TX: ${signature.slice(0, 16)}...`);
+                await this.handleBuy(wallet, assetSymbol, transfer.mint, transfer.tokenAmount, signature, timestamp, stablecoinUsdValue, nativeInputAmount);
             }
             else if (transfer.fromUserAccount === wallet) {
                 // User sent tokens = sell
-                await this.handleSell(wallet, assetSymbol, tx.signature, timestamp);
+                console.log(`[Helius] Sell detected: ${wallet.slice(0, 8)}... | ${assetSymbol} | TX: ${signature.slice(0, 16)}...`);
+                await this.handleSell(wallet, assetSymbol, signature, timestamp);
             }
         }
     }
@@ -179,18 +204,30 @@ class HeliusWebhookHandler {
         let positionSizeUSD = precomputedUsdValue ?? 0;
         let priceAtOpen = null;
         if (!positionSizeUSD) {
+            console.log(`[Helius] No precomputed USD value - attempting Jupiter pricing for ${asset}...`);
             // Fallback: try Jupiter pricing (works for SOL, SOL-paired tokens)
             const priceData = await jupiterPriceService_1.jupiterPriceService.calculateUSDValue(assetMint, tokenAmount);
             positionSizeUSD = priceData?.usdValue || 0;
             priceAtOpen = priceData?.price || null;
+            if (priceData?.usdValue) {
+                console.log(`[Helius] Jupiter pricing succeeded: $${positionSizeUSD.toFixed(2)}`);
+            }
+            else {
+                console.log(`[Helius] ⚠️ Jupiter pricing failed for ${assetMint.slice(0, 10)}...`);
+            }
             // If Jupiter pricing fails and we have SOL input amount, use that as fallback
             if (!positionSizeUSD && nativeInputAmount && nativeInputAmount > 0) {
                 const solPrice = await jupiterPriceService_1.jupiterPriceService.getPrice('So11111111111111111111111111111111111111112');
                 positionSizeUSD = nativeInputAmount * (solPrice ?? 0);
+                console.log(`[Helius] Using SOL fallback: ${nativeInputAmount} SOL @ $${solPrice} = $${positionSizeUSD.toFixed(2)}`);
             }
         }
         else {
             priceAtOpen = tokenAmount > 0 ? positionSizeUSD / tokenAmount : null;
+        }
+        // CRITICAL WARNING: Log if position size is still 0
+        if (!positionSizeUSD || positionSizeUSD <= 0) {
+            console.error(`[Helius] ⚠️ CRITICAL: Position size is $0 for ${wallet.slice(0, 8)}... | ${asset} | TX: ${txSignature.slice(0, 16)}... | precomputed: $${precomputedUsdValue ?? 'N/A'} | nativeInput: ${nativeInputAmount ?? 'N/A'} SOL`);
         }
         // Anti-farm check
         const farmCheck = await antiFarmService_1.antiFarmService.shouldFilter(wallet, asset, positionSizeUSD, timestamp);
@@ -199,13 +236,43 @@ class HeliusWebhookHandler {
             return;
         }
         // Open position
-        await positionService_1.positionService.openPosition(wallet, asset, assetMint, positionSizeUSD, tokenAmount, priceAtOpen, txSignature, timestamp);
+        const opened = await positionService_1.positionService.openPosition(wallet, asset, assetMint, positionSizeUSD, tokenAmount, priceAtOpen, txSignature, timestamp);
+        // Publish to whale SSE stream (threshold enforced inside publishWhaleEvent)
+        if (opened) {
+            (0, streamService_1.publishWhaleEvent)({
+                type: 'trade',
+                wallet,
+                asset,
+                sizeUSD: positionSizeUSD,
+                side: 'long',
+                timestamp: timestamp.toISOString(),
+            });
+            // Invalidate funnels affected by trade activity; retention uses NOW() math so skip it
+            (0, funnelService_1.invalidateFunnelCache)('whale_pipeline');
+            (0, funnelService_1.invalidateFunnelCache)('conversion');
+            (0, funnelService_1.invalidateFunnelCache)('activation');
+        }
     }
     /**
      * Handle a sell (close position).
      */
     async handleSell(wallet, asset, txSignature, timestamp) {
-        await positionService_1.positionService.closePosition(wallet, asset, txSignature, timestamp);
+        const closed = await positionService_1.positionService.closePosition(wallet, asset, txSignature, timestamp);
+        // Publish to whale SSE stream (threshold enforced inside publishWhaleEvent)
+        if (closed) {
+            (0, streamService_1.publishWhaleEvent)({
+                type: 'trade',
+                wallet,
+                asset,
+                sizeUSD: Number(closed.position_size_usd),
+                side: 'short',
+                timestamp: timestamp.toISOString(),
+            });
+            // Invalidate funnels affected by trade activity; retention uses NOW() math so skip it
+            (0, funnelService_1.invalidateFunnelCache)('whale_pipeline');
+            (0, funnelService_1.invalidateFunnelCache)('conversion');
+            (0, funnelService_1.invalidateFunnelCache)('activation');
+        }
     }
     /**
      * Verify Helius webhook signature (HMAC-SHA256).
@@ -217,7 +284,11 @@ class HeliusWebhookHandler {
             .createHmac('sha256', config_1.config.heliusWebhookSecret)
             .update(body)
             .digest('base64');
-        return crypto_1.default.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+        const sigBuf = Buffer.from(signature ?? '', 'utf-8');
+        const expectedBuf = Buffer.from(expected, 'utf-8');
+        if (sigBuf.length !== expectedBuf.length)
+            return false;
+        return crypto_1.default.timingSafeEqual(sigBuf, expectedBuf);
     }
 }
 exports.HeliusWebhookHandler = HeliusWebhookHandler;

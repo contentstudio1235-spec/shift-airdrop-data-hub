@@ -60,6 +60,10 @@ const events_1 = __importDefault(require("./routes/events"));
 const snag_1 = __importDefault(require("./routes/snag"));
 const auth_1 = __importDefault(require("./routes/auth"));
 const analytics_1 = __importDefault(require("./routes/analytics"));
+const funnels_1 = __importDefault(require("./routes/funnels"));
+const attribution_1 = __importDefault(require("./routes/attribution"));
+const cohorts_1 = __importDefault(require("./routes/cohorts"));
+const stream_1 = __importDefault(require("./routes/stream"));
 const app = (0, express_1.default)();
 // ── Middleware ──
 // Security headers
@@ -102,6 +106,10 @@ app.use('/api/events', events_1.default);
 app.use('/api/snag', snag_1.default);
 app.use('/api/auth', auth_1.default);
 app.use('/api/analytics', analytics_1.default);
+app.use('/api/funnels', funnels_1.default);
+app.use('/api/attribution', attribution_1.default);
+app.use('/api/cohorts', cohorts_1.default);
+app.use('/api/stream', stream_1.default);
 // ── Data Hub Static Dashboard ──
 // Serves the SHIFT RWA Cross-Channel Data Hub frontend at /hub
 app.use('/hub', express_1.default.static(path_1.default.join(__dirname, '../public'), {

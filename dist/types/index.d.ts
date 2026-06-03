@@ -93,6 +93,7 @@ export interface HeliusTokenTransfer {
     tokenAmount: number;
     mint: string;
     tokenStandard: string;
+    decimals?: number;
 }
 export interface HeliusAccountData {
     account: string;
