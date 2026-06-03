@@ -300,6 +300,71 @@ export async function computeWhaleOrigins(params: FunnelQueryParams): Promise<Wh
   return result;
 }
 
+export async function computeKOLLeaderboard(params: FunnelQueryParams, limit = 50): Promise<KOLResponse> {
+  const cacheKey = `kol|${buildCacheKey('kol', { ...params, limit } as Record<string, unknown>)}`;
+  const cached = cache.get<KOLResponse>(cacheKey);
+  if (cached) return cached;
+
+  const rows = await query<{ referrer: string; users: string; holders: string; whales: string; volume: string; first_seen: string; last_seen: string; }>(
+    `
+    WITH agg AS (
+      SELECT u.referred_by_code AS referrer,
+             u.wallet,
+             u.created_at,
+             COALESCE(SUM(p.position_size_usd), 0) AS user_volume
+      FROM users u
+      LEFT JOIN positions p ON p.wallet = u.wallet
+      WHERE u.referred_by_code IS NOT NULL AND u.referred_by_code <> ''
+        AND ($1::timestamp IS NULL OR u.created_at >= $1)
+        AND ($2::timestamp IS NULL OR u.created_at <= $2)
+      GROUP BY u.referred_by_code, u.wallet, u.created_at
+    )
+    SELECT referrer,
+           COUNT(*)::text AS users,
+           COUNT(*) FILTER (WHERE user_volume > 0)::text AS holders,
+           COUNT(*) FILTER (WHERE user_volume >= 1000)::text AS whales,
+           SUM(user_volume)::text AS volume,
+           MIN(created_at)::text AS first_seen,
+           MAX(created_at)::text AS last_seen
+    FROM agg
+    GROUP BY referrer
+    HAVING COUNT(*) >= 5
+    LIMIT $3
+    `,
+    [params.from ?? null, params.to ?? null, limit * 4],
+  );
+
+  const entries: KOLEntry[] = rows.map(r => {
+    const users = Number(r.users);
+    const holders = Number(r.holders);
+    const volume = Number(r.volume);
+    const holderRate = users === 0 ? 0 : Math.round((holders / users) * 1000) / 10;
+    const score = holderRate * Math.log10(1 + volume) * Math.log10(1 + users);
+    const isSnag = /^[a-zA-Z0-9]{6}$/.test(r.referrer);
+    return {
+      referrer: r.referrer,
+      source: isSnag ? 'snag_referrals' : 'other',
+      users, holders, whales: Number(r.whales),
+      holderRate,
+      totalVolumeUSD: volume,
+      avgVolumePerUserUSD: users === 0 ? 0 : Math.round(volume / users),
+      score: Math.round(score * 100) / 100,
+      firstSeenAt: r.first_seen,
+      lastSeenAt: r.last_seen,
+    };
+  });
+  entries.sort((a, b) => b.score - a.score);
+
+  const result: KOLResponse = {
+    rows: entries.slice(0, limit),
+    totals: { totalReferrers: entries.length, activeReferrers: entries.filter(e => e.holders > 0).length },
+    computedAt: new Date().toISOString(),
+    dataQuality: 'sprint_2_3_live',
+  };
+  cache.set(cacheKey, result);
+  return result;
+}
+
 export function invalidateAttributionCache(): void {
   cache.invalidate(() => true);
 }
