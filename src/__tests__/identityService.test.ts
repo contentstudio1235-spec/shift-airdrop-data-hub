@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { findOrCreateProfile, linkIdentity, unlinkIdentity } from '../services/identityService';
+import { findOrCreateProfile, linkIdentity, unlinkIdentity, recordEvent, getProfile } from '../services/identityService';
 import { IdentityConflictError } from '../types/identity';
 import * as db from '../db/pool';
 
@@ -132,5 +132,74 @@ describe('unlinkIdentity', () => {
     const params = exec.mock.calls[0][1] as unknown[];
     expect(params).toContain('duplicate snag account');
     expect(params).toContain('admin-wallet');
+  });
+});
+
+describe('recordEvent', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('inserts an attribution_event and returns its id', async () => {
+    vi.spyOn(db, 'queryOne').mockResolvedValueOnce({ id: 1001 } as any);
+
+    const result = await recordEvent({
+      event_name: 'position_open',
+      event_id: 'tx-abc-123',
+      profile_id: 'p-1',
+      wallet: 'AbCd1234',
+      value_usd: 1500,
+      asset: 'TSL2L',
+    });
+    expect(result.eventId).toBe(1001);
+  });
+
+  it('is idempotent — returns existing id on UNIQUE conflict', async () => {
+    vi.spyOn(db, 'queryOne').mockResolvedValueOnce({ id: 555 } as any);
+
+    const result = await recordEvent({
+      event_name: 'position_open',
+      event_id: 'tx-abc-123',
+      profile_id: 'p-1',
+    });
+    expect(result.eventId).toBe(555);
+  });
+});
+
+describe('getProfile', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('returns null when profile not found', async () => {
+    vi.spyOn(db, 'queryOne').mockResolvedValueOnce(null);
+    const result = await getProfile('does-not-exist');
+    expect(result).toBeNull();
+  });
+
+  it('returns profile with links and lifetime stats', async () => {
+    vi.spyOn(db, 'queryOne')
+      .mockResolvedValueOnce(makeProfileRow({
+        profile_id: 'p-1',
+        first_utm_source: 'twitter',
+        last_utm_source: 'twitter',
+      }) as any)
+      .mockResolvedValueOnce({
+        xp: '8420.5',
+        volume_usd: '42500.0',
+        positions: '12',
+        badges: '4',
+      } as any);
+
+    vi.spyOn(db, 'query').mockResolvedValueOnce([
+      {
+        id: 1, profile_id: 'p-1', identity_type: 'wallet', identity_value: 'AbCd1234',
+        confidence: 'deterministic', evidence_event_id: null, linked_at: '2026-06-01T00:00:00Z',
+        linked_by: 'backfill', unlinked_at: null, unlinked_by: null, unlink_reason: null,
+      },
+    ] as any);
+
+    const profile = await getProfile('p-1');
+    expect(profile).not.toBeNull();
+    expect(profile!.profileId).toBe('p-1');
+    expect(profile!.links).toHaveLength(1);
+    expect(profile!.lifetimeStats?.xp).toBe(8420.5);
+    expect(profile!.lifetimeStats?.volumeUSD).toBe(42500);
   });
 });
