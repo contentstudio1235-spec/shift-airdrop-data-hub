@@ -2,8 +2,8 @@ name: Sync Fork with Upstream
 
 on:
   schedule:
-    # Sync every 5 minutes
-    - cron: '*/5 * * * *'
+    # Sync every 1 minute for near-instant upstream updates
+    - cron: '* * * * *'
   # Also allow manual trigger
   workflow_dispatch:
 
