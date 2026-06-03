@@ -168,23 +168,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       prevWalletRef.current = wallet;
       if (walletChain === 'solana') {
         triggerWalletSync(wallet);
-        // Sprint 2.3: identity-stitch wallet ↔ GA4 client_id.
-        // signMessage from the wallet adapter context is undefined for adapters
-        // that don't support message signing (rare on Solana).
-        const signMessage = solanaWallet.signMessage;
-        if (signMessage) {
-          import('@/lib/tracking').then(({ trackWalletConnect }) =>
-            trackWalletConnect({ wallet, signMessage })
-              .then(r => console.log('[Stitch]', r))
-              .catch(err => console.warn('[Stitch] failed', err))
-          );
-        }
+        // Sprint 2.3 (Option C): SILENT probabilistic stitch — no signature prompt.
+        // This is attribution-only. A future "Verify wallet" CTA at high-intent
+        // moments (Join Airdrop, Claim, etc.) can call verifyWalletStitch() to
+        // upgrade the link to deterministic confidence.
+        import('@/lib/tracking').then(({ trackWalletConnect }) =>
+          trackWalletConnect({ wallet })
+            .then(r => console.log('[Stitch]', r))
+            .catch(err => console.warn('[Stitch] failed', err))
+        );
       }
     }
     if (!wallet) {
       prevWalletRef.current = null;
     }
-  }, [wallet, walletChain, solanaWallet.signMessage]);
+  }, [wallet, walletChain]);
 
   // ── Solana Wallet Adapters (auto-handled by @solana/wallet-adapter-react) ─
 

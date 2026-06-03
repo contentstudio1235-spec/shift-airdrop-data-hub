@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { getGAClientId, trackLanding } from '../tracking';
+import { getGAClientId, trackLanding, trackWalletConnect } from '../tracking';
 
 describe('getGAClientId', () => {
   beforeEach(() => {
@@ -73,5 +73,71 @@ describe('trackLanding', () => {
     document.cookie = '_ga=GA1.2.1.2';
     fetchSpy.mockRejectedValueOnce(new Error('network down'));
     await expect(trackLanding('/')).resolves.toBeUndefined();
+  });
+});
+
+describe('trackWalletConnect (silent, Option C)', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    Object.defineProperty(document, 'cookie', {
+      writable: true,
+      configurable: true,
+      value: '',
+    });
+    localStorage.clear();
+    fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ profileId: 'p1', stitched: true, confidence: 'probabilistic' }), { status: 200 }),
+    );
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  it('returns no_ga_client_id when cookie missing — never POSTs', async () => {
+    const r = await trackWalletConnect({ wallet: 'WAL1' });
+    expect(r.stitched).toBe(false);
+    expect(r.reason).toBe('no_ga_client_id');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('POSTs wallet+client_id without signature on first call (silent mode)', async () => {
+    document.cookie = '_ga=GA1.2.42.43';
+    const r = await trackWalletConnect({ wallet: 'WAL1' });
+    expect(r.stitched).toBe(true);
+    expect(r.confidence).toBe('probabilistic');
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+    expect(body).toEqual({ wallet: 'WAL1', client_id: '42.43' });
+    expect(body.signature).toBeUndefined();
+    expect(body.message).toBeUndefined();
+  });
+
+  it('localStorage gate prevents duplicate POSTs for same (wallet, client_id)', async () => {
+    document.cookie = '_ga=GA1.2.42.43';
+    await trackWalletConnect({ wallet: 'WAL1' });
+    const r2 = await trackWalletConnect({ wallet: 'WAL1' });
+    expect(r2.stitched).toBe(false);
+    expect(r2.reason).toBe('already_stitched_this_session');
+    expect(fetchSpy).toHaveBeenCalledOnce(); // still just 1 — the gate worked
+  });
+
+  it('different wallet on same client_id bypasses the gate', async () => {
+    document.cookie = '_ga=GA1.2.42.43';
+    await trackWalletConnect({ wallet: 'WAL1' });
+    await trackWalletConnect({ wallet: 'WAL2' });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not set the gate when fetch returns non-2xx', async () => {
+    document.cookie = '_ga=GA1.2.42.43';
+    fetchSpy.mockResolvedValueOnce(new Response('rate_limited', { status: 429 }));
+    const r = await trackWalletConnect({ wallet: 'WAL1' });
+    expect(r.stitched).toBe(false);
+    expect(r.reason).toBe('http_429');
+    // gate not set → next call should hit network
+    await trackWalletConnect({ wallet: 'WAL1' });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });

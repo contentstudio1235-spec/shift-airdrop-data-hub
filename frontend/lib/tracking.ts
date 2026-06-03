@@ -1,6 +1,14 @@
 // ============================================================
-// SHIFT Airdrop — Frontend Tracking (Sprint 2.3)
+// SHIFT Airdrop — Frontend Tracking (Sprint 2.3, Option C — Hybrid)
 // Bridges GA4 client_id ↔ wallet to backend identity layer
+//
+// trackLanding()       — fire-and-forget on every page load
+// trackWalletConnect() — SILENT stitch on every wallet connect.
+//                        Backend stores confidence='probabilistic'.
+//                        Zero UX friction — no signature, no popup.
+// verifyWalletStitch() — OPT-IN signature flow for high-intent CTAs
+//                        (e.g., "Join Airdrop", admin "Verify wallet").
+//                        Backend upgrades to confidence='deterministic'.
 // ============================================================
 
 const API_URL =
@@ -10,7 +18,6 @@ const API_URL =
 /**
  * Read the GA4 client_id from the `_ga` cookie.
  * Format: `GA1.2.1234567890.1234567890` — we return the last two segments joined.
- * Returns null if cookie not present (GA not loaded yet, ad-blocker, etc.).
  */
 export function getGAClientId(): string | null {
   if (typeof document === 'undefined') return null;
@@ -35,11 +42,11 @@ function readUTMs(): Record<string, string | undefined> {
 
 /**
  * Fire-and-forget landing event. Backend records into attribution_events,
- * which will later be backfilled to a profile when the user signs a wallet.
+ * which will later be backfilled to a profile when the user connects a wallet.
  */
 export async function trackLanding(pathname: string): Promise<void> {
   const client_id = getGAClientId();
-  if (!client_id) return; // GA not ready yet; the next page navigation will catch it
+  if (!client_id) return;
 
   try {
     const body = {
@@ -57,38 +64,67 @@ export async function trackLanding(pathname: string): Promise<void> {
       keepalive: true,
     });
   } catch {
-    // Non-critical — analytics tracking must never break the page
+    // Analytics tracking must never break the page
   }
 }
 
 /**
- * Sign-and-stitch on wallet connect. Idempotent per (browser, wallet) — the
- * localStorage gate prevents re-prompting for signature on every reconnect.
+ * SILENT wallet stitch — no signature, no popup. Fires automatically on every
+ * wallet_connect event detected by WalletContext. Backend stores the link with
+ * confidence='probabilistic'. localStorage gate prevents duplicate POSTs per
+ * (browser, wallet) within a session.
  */
-export async function trackWalletConnect(args: {
-  wallet: string;
-  signMessage: (message: Uint8Array) => Promise<Uint8Array>;
-}): Promise<{ stitched: boolean; reason?: string }> {
-  const { wallet, signMessage } = args;
+export async function trackWalletConnect(args: { wallet: string }): Promise<{ stitched: boolean; reason?: string; confidence?: string }> {
+  const { wallet } = args;
   const client_id = getGAClientId();
   if (!client_id) return { stitched: false, reason: 'no_ga_client_id' };
 
-  // Gate: only sign once per (browser, wallet)
-  const gateKey = `shift_stitch_done_${wallet}`;
+  const gateKey = `shift_stitch_silent_${wallet}_${client_id}`;
   if (typeof localStorage !== 'undefined' && localStorage.getItem(gateKey)) {
-    return { stitched: false, reason: 'already_stitched' };
+    return { stitched: false, reason: 'already_stitched_this_session' };
   }
 
-  // Build a fresh, timestamped, human-readable message
+  try {
+    const res = await fetch(`${API_URL}/api/track/wallet_connect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wallet, client_id }),
+      keepalive: true,
+    });
+    if (!res.ok) return { stitched: false, reason: `http_${res.status}` };
+    const data = await res.json().catch(() => ({}));
+    if (typeof localStorage !== 'undefined') localStorage.setItem(gateKey, String(Date.now()));
+    return { stitched: true, confidence: data?.confidence };
+  } catch {
+    return { stitched: false, reason: 'network_error' };
+  }
+}
+
+/**
+ * OPT-IN wallet verification — call this from a high-intent CTA (e.g., "Join Airdrop"
+ * button handler, admin "Verify wallet" action). Prompts the user to sign a message,
+ * then POSTs to backend which upgrades the link to confidence='deterministic'.
+ *
+ * Caller MUST tie this to an explicit user action with contextual copy so the
+ * signature prompt makes sense.
+ */
+export async function verifyWalletStitch(args: {
+  wallet: string;
+  signMessage: (message: Uint8Array) => Promise<Uint8Array>;
+}): Promise<{ verified: boolean; reason?: string }> {
+  const { wallet, signMessage } = args;
+  const client_id = getGAClientId();
+  if (!client_id) return { verified: false, reason: 'no_ga_client_id' };
+
   const timestamp = Date.now();
   const message = [
-    `SHIFT Airdrop — Identity Stitch`,
+    `SHIFT RWA — Verify Wallet`,
     ``,
     `Wallet: ${wallet}`,
     `Timestamp: ${timestamp}`,
-    `Client: ${client_id}`,
+    `Session: ${client_id}`,
     ``,
-    `Sign to link this wallet to your browser session for attribution.`,
+    `Sign to verify this wallet for your airdrop entry.`,
     `This signature does not authorize any transaction.`,
   ].join('\n');
 
@@ -96,32 +132,21 @@ export async function trackWalletConnect(args: {
   try {
     const messageBytes = new TextEncoder().encode(message);
     const sigBytes = await signMessage(messageBytes);
-    // bs58-encode the signature for backend verification (tweetnacl ed25519)
     const bs58 = (await import('bs58')).default;
     signatureB58 = bs58.encode(sigBytes);
-  } catch (err) {
-    // User rejected signature — don't gate, they may approve next time
-    return { stitched: false, reason: 'signature_rejected' };
+  } catch {
+    return { verified: false, reason: 'signature_rejected' };
   }
 
   try {
     const res = await fetch(`${API_URL}/api/track/wallet_connect`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        wallet,
-        signature: signatureB58,
-        message,
-        client_id,
-        session_id: typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('shift_session_id') : undefined,
-      }),
+      body: JSON.stringify({ wallet, signature: signatureB58, message, client_id }),
     });
-    if (!res.ok) {
-      return { stitched: false, reason: `http_${res.status}` };
-    }
-    if (typeof localStorage !== 'undefined') localStorage.setItem(gateKey, String(timestamp));
-    return { stitched: true };
-  } catch (err) {
-    return { stitched: false, reason: 'network_error' };
+    if (!res.ok) return { verified: false, reason: `http_${res.status}` };
+    return { verified: true };
+  } catch {
+    return { verified: false, reason: 'network_error' };
   }
 }
