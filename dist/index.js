@@ -40,6 +40,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
+const path_1 = __importDefault(require("path"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
@@ -58,6 +59,7 @@ const badges_1 = __importDefault(require("./routes/badges"));
 const events_1 = __importDefault(require("./routes/events"));
 const snag_1 = __importDefault(require("./routes/snag"));
 const auth_1 = __importDefault(require("./routes/auth"));
+const analytics_1 = __importDefault(require("./routes/analytics"));
 const app = (0, express_1.default)();
 // ── Middleware ──
 // Security headers
@@ -71,6 +73,7 @@ app.use((0, cors_1.default)({
         'https://airdrop.shiftrwa.xyz', // airdrop subdomain
         'https://www.shiftrwa.xyz',
         'https://shiftrwa.xyz',
+        'https://shift-airdrop-backend.onrender.com', // Render backend
         'https://frontend-axelblaze-projects.vercel.app',
         /\.vercel\.app$/, // allow all Vercel preview URLs
     ],
@@ -98,6 +101,16 @@ app.use('/api/badges', badges_1.default);
 app.use('/api/events', events_1.default);
 app.use('/api/snag', snag_1.default);
 app.use('/api/auth', auth_1.default);
+app.use('/api/analytics', analytics_1.default);
+// ── Data Hub Static Dashboard ──
+// Serves the SHIFT RWA Cross-Channel Data Hub frontend at /hub
+app.use('/hub', express_1.default.static(path_1.default.join(__dirname, '../public'), {
+    index: 'index.html',
+    maxAge: '5m',
+}));
+app.get('/hub/*', (_req, res) => {
+    res.sendFile(path_1.default.join(__dirname, '../public', 'index.html'));
+});
 // ── Health Check ──
 app.get('/health', (_req, res) => {
     res.json({
