@@ -85,5 +85,45 @@ describe('POST /api/track/wallet_connect', () => {
     expect(res.status).toBe(200);
     expect(res.body.profileId).toBe('p-new');
     expect(res.body.stitched).toBe(true);
+    expect(res.body.confidence).toBe('deterministic');
+  });
+
+  it('SILENT mode: stitches with probabilistic confidence when signature absent (Option C)', async () => {
+    const verifySpy = vi.spyOn(walletSig, 'verifyWalletSignature');
+    const freshSpy = vi.spyOn(walletSig, 'isSignatureFresh');
+    vi.spyOn(svc, 'findOrCreateProfile').mockResolvedValueOnce({
+      profileId: 'p-silent', primaryWallet: 'AbCd', displayName: null,
+      firstSeenAt: '2026-06-03T00:00:00Z', lastSeenAt: '2026-06-03T00:00:00Z',
+      firstUtmSource: null, firstUtmMedium: null, firstUtmCampaign: null,
+      firstUtmContent: null, firstUtmTerm: null, firstReferrer: null,
+      firstLandingPath: null, attributionLockedAt: null,
+      lastUtmSource: null, lastUtmMedium: null, lastUtmCampaign: null,
+      walletType: null, countryCode: null, mergedIntoProfileId: null, mergedAt: null,
+      createdAt: '2026-06-03T00:00:00Z', updatedAt: '2026-06-03T00:00:00Z',
+    });
+    const linkSpy = vi.spyOn(svc, 'linkIdentity').mockResolvedValueOnce({} as any);
+    vi.spyOn(svc, 'recordEvent').mockResolvedValueOnce({ eventId: 1 });
+
+    const res = await request(makeApp())
+      .post('/api/track/wallet_connect')
+      .send({ wallet: 'AbCd', client_id: 'cid-abc' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.stitched).toBe(true);
+    expect(res.body.confidence).toBe('probabilistic');
+    // Signature verification was NOT called in silent mode
+    expect(verifySpy).not.toHaveBeenCalled();
+    expect(freshSpy).not.toHaveBeenCalled();
+    // linkIdentity received 'probabilistic' confidence
+    expect(linkSpy).toHaveBeenCalledWith(
+      'p-silent', 'ga_client_id', 'cid-abc', 'probabilistic', expect.anything(),
+    );
+  });
+
+  it('still rejects when wallet or client_id missing', async () => {
+    const res = await request(makeApp())
+      .post('/api/track/wallet_connect')
+      .send({ wallet: 'AbCd' }); // no client_id
+    expect(res.status).toBe(400);
   });
 });

@@ -55,14 +55,23 @@ router.post('/landing', landingLimiter, async (req: Request, res: Response) => {
 router.post('/wallet_connect', walletConnectLimiter, async (req: Request, res: Response) => {
   try {
     const { wallet, signature, message, client_id, session_id } = req.body ?? {};
-    if (!wallet || !signature || !message || !client_id) {
+    if (!wallet || !client_id) {
       return res.status(400).json({ error: 'missing required fields' });
     }
-    if (!isSignatureFresh(message, 300)) {
-      return res.status(401).json({ error: 'stale_signature' });
-    }
-    if (!verifyWalletSignature({ wallet, signature, message })) {
-      return res.status(401).json({ error: 'invalid_signature' });
+
+    // Hybrid: signature is OPTIONAL. With signature → deterministic. Without → probabilistic.
+    // The attribution-only use case (admin analytics) doesn't need auth-grade verification.
+    // A future user/admin "verify wallet" CTA can call this same endpoint WITH a signature
+    // to upgrade the confidence level on a previously-created probabilistic link.
+    let confidence: 'deterministic' | 'probabilistic' = 'probabilistic';
+    if (signature && message) {
+      if (!isSignatureFresh(message, 300)) {
+        return res.status(401).json({ error: 'stale_signature' });
+      }
+      if (!verifyWalletSignature({ wallet, signature, message })) {
+        return res.status(401).json({ error: 'invalid_signature' });
+      }
+      confidence = 'deterministic';
     }
 
     // 1. Find or create profile keyed by wallet
@@ -70,7 +79,7 @@ router.post('/wallet_connect', walletConnectLimiter, async (req: Request, res: R
 
     // 2. Link the ga_client_id — handle IdentityConflictError gracefully (log, skip, continue)
     try {
-      await linkIdentity(profile.profileId, 'ga_client_id', client_id, 'deterministic', { byActor: 'system' });
+      await linkIdentity(profile.profileId, 'ga_client_id', client_id, confidence, { byActor: 'system' });
     } catch (linkErr: any) {
       if (linkErr?.name === 'IdentityConflictError') {
         console.warn('[track/wallet_connect] ga_client_id conflict', { wallet, client_id, existingProfile: linkErr.existingProfileId });
@@ -126,7 +135,7 @@ router.post('/wallet_connect', walletConnectLimiter, async (req: Request, res: R
       session_id: typeof session_id === 'string' ? session_id : undefined,
     });
 
-    res.json({ profileId: profile.profileId, stitched: true });
+    res.json({ profileId: profile.profileId, stitched: true, confidence });
   } catch (err) {
     console.error('[track/wallet_connect]', err);
     res.status(500).json({ error: 'internal_error' });
