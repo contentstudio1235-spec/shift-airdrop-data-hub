@@ -391,8 +391,8 @@ export async function searchProfiles(
     LEFT JOIN identity_links il ON il.profile_id = p.profile_id AND il.unlinked_at IS NULL
     LEFT JOIN identity_links wl ON wl.profile_id = p.profile_id AND wl.identity_type = 'wallet' AND wl.unlinked_at IS NULL
     LEFT JOIN positions pos ON pos.wallet = wl.identity_value
-    LEFT JOIN identity_links ilx ON ilx.profile_id = p.profile_id AND ilx.identity_type = 'social_x' AND ilx.unlinked_at IS NULL
-    LEFT JOIN identity_links ild ON ild.profile_id = p.profile_id AND ild.identity_type = 'social_discord' AND ild.unlinked_at IS NULL
+    LEFT JOIN identity_links ilx ON ilx.profile_id = p.profile_id AND ilx.identity_type = 'x_handle' AND ilx.unlinked_at IS NULL
+    LEFT JOIN identity_links ild ON ild.profile_id = p.profile_id AND ild.identity_type = 'discord_id' AND ild.unlinked_at IS NULL
     ${whereSql}
     GROUP BY p.profile_id
     ${havingSql}

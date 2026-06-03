@@ -80,8 +80,8 @@ export interface ProfileSummary {
   stitchedPct: number;                // 0-100 — derived from links count vs ideal-coverage
   lifetimeVolumeUSD: number;          // pre-aggregated for list display
   holdings: number;                   // count of open positions
-  hasX: boolean;                      // has linked social_x identity
-  hasDiscord: boolean;                // has linked social_discord identity
+  hasX: boolean;                      // has linked x_handle identity
+  hasDiscord: boolean;                // has linked discord_id identity
 }
 
 export interface ProfileFilters {

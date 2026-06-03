@@ -4,7 +4,7 @@ import { apiGet } from '@/lib/api';
 
 export interface IdentityLink {
   linkId: string;
-  type: 'wallet' | 'ga_client_id' | 'snag_user_id' | 'social_x' | 'social_discord' | 'social_telegram';
+  type: 'wallet' | 'ga_client_id' | 'snag_user_id' | 'x_handle' | 'discord_id' | 'telegram_id' | 'email';
   value: string;
   confidence: 'deterministic' | 'probabilistic' | 'manual';
   linkedAt: string;
