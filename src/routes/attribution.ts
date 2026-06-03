@@ -5,15 +5,19 @@ import {
   computeWhaleOrigins,
   computeTopCampaigns,
   computeAttributionCoverage,
+  computeKOLLeaderboard,
 } from '../services/attributionService';
+import { fetchInitialWhales, pollNewWhales } from '../services/whaleStreamService';
 import { parseQueryParams } from '../lib/queryParams';
 import { config } from '../config';
 
 const router = Router();
 
 router.use((req: Request, res: Response, next) => {
-  const adminKey = req.header('x-admin-key');
-  if (!adminKey || adminKey !== config.adminKey) {
+  const headerKey = req.header('x-admin-key');
+  const queryKey = typeof req.query.adminKey === 'string' ? req.query.adminKey : undefined;
+  const key = headerKey ?? queryKey;
+  if (!key || key !== config.adminKey) {
     return res.status(401).json({ error: 'unauthorized' });
   }
   next();
@@ -57,19 +61,78 @@ router.get('/overview', async (req: Request, res: Response) => {
   }
 });
 
+router.get('/kol-leaderboard', async (req: Request, res: Response) => {
+  try {
+    const params = parseQueryParams(req.query as Record<string, string>);
+    const limitRaw = Number(req.query.limit);
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 && limitRaw <= 200 ? Math.floor(limitRaw) : 50;
+    const result = await computeKOLLeaderboard(params, limit);
+    res.json(result);
+  } catch (err) {
+    console.error('[attribution/kol-leaderboard]', err);
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
+
 router.get('/whale-origins', async (req: Request, res: Response) => {
   try {
     const params = parseQueryParams(req.query as Record<string, string>);
     const result = await computeWhaleOrigins(params);
-    res.json({
-      edges: result,
-      computedAt: new Date().toISOString(),
-      dataQuality: 'sprint_0_placeholder',
-      note: 'Source attribution uses referred_by_code only. Full UTM stitching lands per Tracking Specialist spec in later sprint.',
-    });
+    res.json(result);
   } catch (err) {
     console.error('[attribution/whale-origins]', err);
     res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+const MAX_STREAM_CONNECTIONS = 10;
+let activeStreams = 0;
+
+router.get('/whale-stream', async (req: Request, res: Response) => {
+  if (activeStreams >= MAX_STREAM_CONNECTIONS) {
+    return res.status(503).json({ error: 'stream_capacity_reached' });
+  }
+  activeStreams++;
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders?.();
+
+  let closed = false;
+  req.on('close', () => { closed = true; activeStreams--; });
+
+  try {
+    const initial = await fetchInitialWhales(20);
+    for (const event of initial) {
+      res.write(`event: whale\ndata: ${JSON.stringify(event)}\n\n`);
+    }
+
+    let cursor = initial.length > 0 ? new Date(initial[0].openedAt) : new Date();
+    const pollInterval = 5000;
+    const heartbeatInterval = 30000;
+    let lastHeartbeat = Date.now();
+
+    while (!closed) {
+      await new Promise(r => setTimeout(r, pollInterval));
+      if (closed) break;
+      const events = await pollNewWhales(cursor);
+      for (const event of events) {
+        res.write(`event: whale\ndata: ${JSON.stringify(event)}\n\n`);
+        const t = new Date(event.openedAt);
+        if (t > cursor) cursor = t;
+      }
+      if (Date.now() - lastHeartbeat >= heartbeatInterval) {
+        res.write(`event: ping\ndata: {}\n\n`);
+        lastHeartbeat = Date.now();
+      }
+    }
+  } catch (err) {
+    console.error('[attribution/whale-stream]', err);
+  } finally {
+    res.end();
   }
 });
 
