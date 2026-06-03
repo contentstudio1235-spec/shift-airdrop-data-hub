@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.computeChannelROI = computeChannelROI;
+exports.computeTopCampaigns = computeTopCampaigns;
+exports.computeAttributionCoverage = computeAttributionCoverage;
 exports.computeWhaleOrigins = computeWhaleOrigins;
 exports.invalidateAttributionCache = invalidateAttributionCache;
 // src/services/attributionService.ts
@@ -13,20 +15,27 @@ async function computeChannelROI(params) {
     const cached = cache.get(cacheKey);
     if (cached)
         return cached;
-    // v1: source attribution based on referred_by_code; Tracking Specialist output
-    // will replace this with proper UTM-source columns in a later sprint
+    // UTM-first with referral fallback. Source order of truth:
+    //   1. user_profiles.first_utm_source  (Sprint 2.3 live stitch)
+    //   2. users.referred_by_code          (Sprint 0 referral signal)
+    //   3. 'direct'                        (no signal)
     const rows = await (0, pool_1.query)(`
     WITH user_source AS (
       SELECT
-        COALESCE(NULLIF(referred_by_code, ''), 'direct') AS source,
-        wallet,
-        (ga_user_id IS NOT NULL OR snag_user_id IS NOT NULL) AS is_stitched
-      FROM users
-      WHERE ($1::timestamp IS NULL OR created_at >= $1)
-        AND ($2::timestamp IS NULL OR created_at <= $2)
+        COALESCE(
+          NULLIF(LOWER(p.first_utm_source), ''),
+          NULLIF(u.referred_by_code, ''),
+          'direct'
+        ) AS source,
+        u.wallet,
+        (u.ga_user_id IS NOT NULL OR u.snag_user_id IS NOT NULL OR p.profile_id IS NOT NULL) AS is_stitched
+      FROM users u
+      LEFT JOIN user_profiles p ON p.primary_wallet = u.wallet AND p.merged_into_profile_id IS NULL
+      WHERE ($1::timestamp IS NULL OR u.created_at >= $1)
+        AND ($2::timestamp IS NULL OR u.created_at <= $2)
     ),
     holders AS (
-      SELECT DISTINCT wallet, SUM(position_size_usd) AS volume
+      SELECT wallet, SUM(position_size_usd) AS volume
       FROM positions
       WHERE ($1::timestamp IS NULL OR opened_at >= $1)
         AND ($2::timestamp IS NULL OR opened_at <= $2)
@@ -39,11 +48,11 @@ async function computeChannelROI(params) {
       COUNT(*) FILTER (WHERE h.wallet IS NOT NULL)::bigint AS holders,
       COUNT(*) FILTER (WHERE h.volume >= 1000)::bigint AS whales,
       COALESCE(SUM(h.volume), 0)::bigint AS total_volume_usd,
-      COALESCE(AVG(h.volume), 0)::bigint AS avg_position_usd
+      COALESCE(AVG(h.volume) FILTER (WHERE h.wallet IS NOT NULL), 0)::bigint AS avg_position_usd
     FROM user_source us
     LEFT JOIN holders h ON h.wallet = us.wallet
     GROUP BY us.source
-    ORDER BY total_volume_usd DESC
+    ORDER BY users DESC
     LIMIT 50
     `, [params.from ?? null, params.to ?? null]);
     const result = rows.map(r => ({
@@ -56,6 +65,72 @@ async function computeChannelROI(params) {
         avgPositionUSD: Number(r.avg_position_usd),
         attribution: 'first_touch',
     }));
+    cache.set(cacheKey, result);
+    return result;
+}
+async function computeTopCampaigns(params, limit = 10) {
+    const cacheKey = `top_campaigns|${(0, cache_1.buildCacheKey)('top_campaigns', { ...params, limit })}`;
+    const cached = cache.get(cacheKey);
+    if (cached)
+        return cached;
+    const rows = await (0, pool_1.query)(`
+    SELECT
+      first_utm_campaign AS campaign,
+      first_utm_source   AS source,
+      first_utm_medium   AS medium,
+      COUNT(*)::bigint   AS profiles
+    FROM user_profiles
+    WHERE merged_into_profile_id IS NULL
+      AND first_utm_campaign IS NOT NULL
+      AND first_utm_campaign <> ''
+      AND ($1::timestamp IS NULL OR first_seen_at >= $1)
+      AND ($2::timestamp IS NULL OR first_seen_at <= $2)
+    GROUP BY first_utm_campaign, first_utm_source, first_utm_medium
+    ORDER BY profiles DESC
+    LIMIT $3
+    `, [params.from ?? null, params.to ?? null, limit]);
+    const result = rows.map(r => ({
+        campaign: r.campaign,
+        source: r.source,
+        medium: r.medium,
+        profiles: Number(r.profiles),
+    }));
+    cache.set(cacheKey, result);
+    return result;
+}
+async function computeAttributionCoverage(params) {
+    const cacheKey = `coverage|${(0, cache_1.buildCacheKey)('coverage', params)}`;
+    const cached = cache.get(cacheKey);
+    if (cached)
+        return cached;
+    const rows = await (0, pool_1.query)(`
+    WITH base AS (
+      SELECT
+        u.wallet,
+        p.first_utm_source AS utm,
+        NULLIF(u.referred_by_code, '') AS ref
+      FROM users u
+      LEFT JOIN user_profiles p ON p.primary_wallet = u.wallet AND p.merged_into_profile_id IS NULL
+      WHERE ($1::timestamp IS NULL OR u.created_at >= $1)
+        AND ($2::timestamp IS NULL OR u.created_at <= $2)
+    )
+    SELECT
+      COUNT(*)::bigint AS total,
+      COUNT(*) FILTER (WHERE utm IS NOT NULL)::bigint AS with_utm,
+      COUNT(*) FILTER (WHERE utm IS NULL AND ref IS NOT NULL)::bigint AS with_referral_only
+    FROM base
+    `, [params.from ?? null, params.to ?? null]);
+    const row = rows[0] ?? { total: '0', with_utm: '0', with_referral_only: '0' };
+    const total = Number(row.total);
+    const withUtm = Number(row.with_utm);
+    const withReferralOnly = Number(row.with_referral_only);
+    const neither = Math.max(0, total - withUtm - withReferralOnly);
+    const pct = (n) => total === 0 ? 0 : Math.round((n / total) * 1000) / 10;
+    const result = {
+        total, withUtm, withReferralOnly, neither,
+        percentWithSignal: pct(withUtm + withReferralOnly),
+        percentWithUtm: pct(withUtm),
+    };
     cache.set(cacheKey, result);
     return result;
 }
