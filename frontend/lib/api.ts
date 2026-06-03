@@ -246,3 +246,37 @@ export function getLoyaltyPageUrl(): string {
 export function getAirdropUrl(): string {
   return process.env.NEXT_PUBLIC_AIRDROP_URL || 'https://airdrop.shiftrwa.xyz';
 }
+
+// ── Admin API client (funnel / attribution / data-hub) ────────
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://shift-airdrop-backend.onrender.com';
+const ADMIN_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || 'ShiftRwa2026@@$$Key';
+
+export interface ApiOptions {
+  signal?: AbortSignal;
+  query?: Record<string, string | number | undefined>;
+}
+
+export async function apiGet<T>(path: string, opts: ApiOptions = {}): Promise<T> {
+  const qs = opts.query
+    ? '?' + new URLSearchParams(
+        Object.fromEntries(
+          Object.entries(opts.query)
+            .filter(([, v]) => v !== undefined && v !== '')
+            .map(([k, v]) => [k, String(v)]),
+        ),
+      ).toString()
+    : '';
+  const res = await fetch(`${API_BASE}${path}${qs}`, {
+    headers: { 'x-admin-key': ADMIN_KEY, 'Content-Type': 'application/json' },
+    signal: opts.signal,
+  });
+  if (!res.ok) {
+    throw new Error(`API ${path} → ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export function sseURL(path: string): string {
+  return `${API_BASE}${path}?adminKey=${encodeURIComponent(ADMIN_KEY)}`;
+}
