@@ -1,5 +1,5 @@
 // src/services/identityService.ts
-import { query, queryOne, execute } from '../db/pool';
+import { query, queryOne, execute, pool } from '../db/pool';
 import type {
   Profile,
   IdentitySeed,
@@ -13,7 +13,7 @@ import type {
   ProfileFilters,
   TimelineEntry,
 } from '../types/identity';
-import { IdentityConflictError } from '../types/identity';
+import { IdentityConflictError, ProfileNotFoundError, MergeWithoutEvidenceError } from '../types/identity';
 
 // Identity value normalization rule:
 // - 'wallet' stays case-sensitive (base58 is case-sensitive on Solana)
@@ -444,6 +444,145 @@ export async function getTimeline(
     valueUSD: r.value_usd !== null ? Number(r.value_usd) : null,
     payload: r.payload ?? {},
   }));
+}
+
+// ─── mergeProfiles ────────────────────────────────────────────────────────────
+// TXN-wrapped merge: locks both rows in deterministic order, moves all child
+// records from loser → winner, marks loser as merged, recomputes winner's
+// attribution fields, and writes an audit log entry.
+export async function mergeProfiles(
+  winnerId: string,
+  loserId: string,
+  evidence: { byActor: string; reason: string },
+): Promise<Profile> {
+  if (winnerId === loserId) {
+    throw new Error('cannot merge profile into itself');
+  }
+
+  if (!evidence.reason || evidence.reason.trim().length === 0) {
+    throw new MergeWithoutEvidenceError();
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Lock both rows with consistent lock order (ORDER BY profile_id) to prevent deadlocks
+    const lockResult = await client.query<ProfileRow>(
+      `
+      SELECT * FROM user_profiles
+      WHERE profile_id = ANY($1::uuid[]) AND merged_into_profile_id IS NULL
+      ORDER BY profile_id
+      FOR UPDATE
+      `,
+      [[winnerId, loserId]],
+    );
+
+    if (lockResult.rows.length !== 2) {
+      // Determine which one is missing — outer catch will ROLLBACK
+      const foundIds = new Set(lockResult.rows.map(r => r.profile_id));
+      const missing = [winnerId, loserId].find(id => !foundIds.has(id)) ?? 'unknown';
+      throw new ProfileNotFoundError(missing);
+    }
+
+    const winnerRow = lockResult.rows.find(r => r.profile_id === winnerId)!;
+    const loserRow = lockResult.rows.find(r => r.profile_id === loserId)!;
+
+    // Move identity_links from loser to winner, skipping (type, value) pairs that already exist on winner
+    // The unique index idx_links_unique_active enforces one active link per (type, value) — we filter via NOT EXISTS
+    await client.query(
+      `
+      UPDATE identity_links SET profile_id = $1
+      WHERE profile_id = $2 AND unlinked_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM identity_links il2
+          WHERE il2.profile_id = $1
+            AND il2.identity_type = identity_links.identity_type
+            AND il2.identity_value = identity_links.identity_value
+            AND il2.unlinked_at IS NULL
+        )
+      `,
+      [winnerId, loserId],
+    );
+
+    // Move attribution_events
+    await client.query(
+      `UPDATE attribution_events SET profile_id = $1 WHERE profile_id = $2`,
+      [winnerId, loserId],
+    );
+
+    // Move attribution_touches
+    await client.query(
+      `UPDATE attribution_touches SET profile_id = $1 WHERE profile_id = $2`,
+      [winnerId, loserId],
+    );
+
+    // Move users.user_profile_id
+    await client.query(
+      `UPDATE users SET user_profile_id = $1 WHERE user_profile_id = $2`,
+      [winnerId, loserId],
+    );
+
+    // Mark loser as merged
+    await client.query(
+      `
+      UPDATE user_profiles
+      SET merged_into_profile_id = $1, merged_at = NOW(), updated_at = NOW()
+      WHERE profile_id = $2
+      `,
+      [winnerId, loserId],
+    );
+
+    // Recompute winner: first_seen_at MIN, last_seen_at MAX, first_utm_* COALESCE(winner, loser)
+    await client.query(
+      `
+      UPDATE user_profiles winner
+      SET
+        first_seen_at      = LEAST(winner.first_seen_at, loser.first_seen_at),
+        last_seen_at       = GREATEST(winner.last_seen_at, loser.last_seen_at),
+        first_utm_source   = COALESCE(winner.first_utm_source, loser.first_utm_source),
+        first_utm_medium   = COALESCE(winner.first_utm_medium, loser.first_utm_medium),
+        first_utm_campaign = COALESCE(winner.first_utm_campaign, loser.first_utm_campaign),
+        first_utm_content  = COALESCE(winner.first_utm_content, loser.first_utm_content),
+        first_utm_term     = COALESCE(winner.first_utm_term, loser.first_utm_term),
+        first_referrer     = COALESCE(winner.first_referrer, loser.first_referrer),
+        first_landing_path = COALESCE(winner.first_landing_path, loser.first_landing_path),
+        updated_at         = NOW()
+      FROM user_profiles loser
+      WHERE winner.profile_id = $1 AND loser.profile_id = $2
+      `,
+      [winnerId, loserId],
+    );
+
+    // Write to admin_logs — actual schema uses old_value/new_value/reason (NOT metadata as plan suggested)
+    await client.query(
+      `
+      INSERT INTO admin_logs (action, resource_type, resource_id, admin_wallet, reason, old_value, new_value)
+      VALUES ('merge_profiles', 'user_profile', $1, $2, $3, $4::jsonb, $5::jsonb)
+      `,
+      [
+        winnerId,
+        evidence.byActor,
+        evidence.reason,
+        JSON.stringify({ loserId, loserSnapshot: loserRow }),
+        JSON.stringify({ winnerId, winnerSnapshotPreMerge: winnerRow }),
+      ],
+    );
+
+    // Return updated winner row
+    const winnerResult = await client.query<ProfileRow>(
+      `SELECT * FROM user_profiles WHERE profile_id = $1`,
+      [winnerId],
+    );
+
+    await client.query('COMMIT');
+    return rowToProfile(winnerResult.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => { /* ignore — preserve original error */ });
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────

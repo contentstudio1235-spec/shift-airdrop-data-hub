@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { findOrCreateProfile, linkIdentity, unlinkIdentity, recordEvent, getProfile, searchProfiles, getTimeline } from '../services/identityService';
-import { IdentityConflictError } from '../types/identity';
+import { findOrCreateProfile, linkIdentity, unlinkIdentity, recordEvent, getProfile, searchProfiles, getTimeline, mergeProfiles } from '../services/identityService';
+import { IdentityConflictError, ProfileNotFoundError, MergeWithoutEvidenceError } from '../types/identity';
 import * as db from '../db/pool';
 
 vi.mock('../db/pool');
@@ -249,5 +249,46 @@ describe('getTimeline', () => {
     expect(entries).toHaveLength(2);
     expect(entries[0].eventName).toBe('position_open');
     expect(entries[0].valueUSD).toBe(1500);
+  });
+});
+
+describe('mergeProfiles', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('rejects merge into self', async () => {
+    await expect(
+      mergeProfiles('p-1', 'p-1', { byActor: 'admin', reason: 'test' })
+    ).rejects.toThrow(/itself/i);
+  });
+
+  it('rejects merge with empty reason', async () => {
+    await expect(
+      mergeProfiles('p-1', 'p-2', { byActor: 'admin', reason: '   ' })
+    ).rejects.toBeInstanceOf(MergeWithoutEvidenceError);
+  });
+
+  it('rejects merge when one of the profiles is not found', async () => {
+    // Mock pool.connect to return a client whose SELECT FOR UPDATE returns only 1 row
+    const mockClient = {
+      query: vi.fn()
+        .mockResolvedValueOnce({})                    // BEGIN
+        .mockResolvedValueOnce({ rows: [             // SELECT ... FOR UPDATE — only 1 of 2 found
+          { profile_id: 'p-1', primary_wallet: 'AbCd', display_name: null,
+            first_seen_at: '2026-06-01T00:00:00Z', last_seen_at: '2026-06-03T00:00:00Z',
+            first_utm_source: null, first_utm_medium: null, first_utm_campaign: null,
+            first_utm_content: null, first_utm_term: null, first_referrer: null,
+            first_landing_path: null, attribution_locked_at: null,
+            last_utm_source: null, last_utm_medium: null, last_utm_campaign: null,
+            wallet_type: null, country_code: null, merged_into_profile_id: null,
+            merged_at: null, created_at: '2026-06-01T00:00:00Z', updated_at: '2026-06-03T00:00:00Z' },
+        ] })
+        .mockResolvedValueOnce({}),                   // ROLLBACK
+      release: vi.fn(),
+    };
+    vi.spyOn(db.pool, 'connect').mockResolvedValueOnce(mockClient as any);
+
+    await expect(
+      mergeProfiles('p-1', 'p-missing', { byActor: 'admin', reason: 'duplicate' })
+    ).rejects.toBeInstanceOf(ProfileNotFoundError);
   });
 });
