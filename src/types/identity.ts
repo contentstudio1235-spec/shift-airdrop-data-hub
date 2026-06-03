@@ -68,6 +68,9 @@ export interface ProfileWithLinks extends Profile {
   lifetimeStats?: LifetimeStats;
 }
 
+export type SortKey = 'last_seen' | 'volume' | 'holdings' | 'x' | 'discord' | 'referral_source';
+export type SortDir = 'asc' | 'desc';
+
 export interface ProfileSummary {
   profileId: string;
   primaryWallet: string;
@@ -76,6 +79,9 @@ export interface ProfileSummary {
   firstUtmSource: string | null;
   stitchedPct: number;                // 0-100 — derived from links count vs ideal-coverage
   lifetimeVolumeUSD: number;          // pre-aggregated for list display
+  holdings: number;                   // count of open positions
+  hasX: boolean;                      // has linked social_x identity
+  hasDiscord: boolean;                // has linked social_discord identity
 }
 
 export interface ProfileFilters {
@@ -86,6 +92,8 @@ export interface ProfileFilters {
   walletSizeMin?: number;             // USD
   activitySince?: string;             // ISO date — last_seen_at >= this
   q?: string;                         // free-text: wallet prefix, display_name, identity_value
+  sortBy?: SortKey;
+  sortDir?: SortDir;
 }
 
 export interface RecordEventInput {
