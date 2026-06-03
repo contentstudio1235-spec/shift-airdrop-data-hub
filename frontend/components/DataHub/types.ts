@@ -102,19 +102,21 @@ export interface GA4DailyPoint {
 export interface GA4Data {
   available: boolean;
   reason?: string;
-  period: string;
+  period?: string;
   totals: {
     activeUsers: number;
     sessions: number;
-    pageViews: number;
+    pageViews?: number;
+    screenPageViews?: number;
     newUsers: number;
-    bounceRate: number;
-    avgSessionDuration: number;
-    eventCount: number;
+    bounceRate?: number;
+    avgSessionDuration?: number;
+    eventCount?: number;
   };
   channels: GA4ChannelRow[];
-  topPages: GA4TopPage[];
-  dailyTrend: GA4DailyPoint[];
+  topPages?: GA4TopPage[];
+  pages?: Array<{ pagePath: string; screenPageViews: string; activeUsers: string }>;
+  dailyTrend?: GA4DailyPoint[];
   cachedAt?: string;
 }
 

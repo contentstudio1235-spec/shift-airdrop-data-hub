@@ -40,17 +40,9 @@ const GA4_PROPERTIES: Record<string, string> = {
 };
 
 // ── Service Account JWT auth (RS256, no google-auth-library) ──────────────────
-const SA_KEY_PATH = (() => {
-  // Support both local dev path and Render deployment path
-  const localPath = path.resolve(
-    '/Users/tomer/Library/Mobile Documents/com~apple~CloudDocs/Claude/Projects/SHIFT Airdrop',
-    'micro-vine-498016-n0-f99594ed911d.json'
-  );
-  const renderPath = path.resolve(process.cwd(), 'micro-vine-498016-n0-f99594ed911d.json');
-  if (fs.existsSync(localPath)) return localPath;
-  if (fs.existsSync(renderPath)) return renderPath;
-  return localPath;
-})();
+// The SA JSON is loaded from GA4_SERVICE_ACCOUNT_JSON env var (set in Render).
+// This means the backend self-mints a fresh GA4 token every 55 min automatically —
+// no manual token rotation ever needed.
 
 interface ServiceAccountKey {
   client_email: string;
@@ -59,13 +51,32 @@ interface ServiceAccountKey {
 }
 
 function loadServiceAccount(): ServiceAccountKey | null {
-  try {
-    if (!fs.existsSync(SA_KEY_PATH)) return null;
-    const raw = fs.readFileSync(SA_KEY_PATH, 'utf-8');
-    return JSON.parse(raw) as ServiceAccountKey;
-  } catch {
-    return null;
+  // Priority 1: GA4_SERVICE_ACCOUNT_JSON env var (base64 or raw JSON)
+  const envJson = process.env.GA4_SERVICE_ACCOUNT_JSON;
+  if (envJson) {
+    try {
+      // Try raw JSON first, then base64-decoded
+      const raw = envJson.trimStart().startsWith('{')
+        ? envJson
+        : Buffer.from(envJson, 'base64').toString('utf-8');
+      return JSON.parse(raw) as ServiceAccountKey;
+    } catch {
+      console.warn('[GA4] GA4_SERVICE_ACCOUNT_JSON is set but could not be parsed');
+    }
   }
+
+  // Priority 2: local file (dev fallback)
+  const candidates = [
+    path.resolve('/Users/tomer/Library/Mobile Documents/com~apple~CloudDocs/Claude/Projects/SHIFT Airdrop', 'micro-vine-498016-n0-f99594ed911d.json'),
+    path.resolve(process.cwd(), 'micro-vine-498016-n0-f99594ed911d.json'),
+    path.resolve(process.cwd(), '..', 'micro-vine-498016-n0-f99594ed911d.json'),
+  ];
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf-8')) as ServiceAccountKey;
+    } catch { /* continue */ }
+  }
+  return null;
 }
 
 function makeJwt(sa: ServiceAccountKey): string {
@@ -74,7 +85,7 @@ function makeJwt(sa: ServiceAccountKey): string {
   const payload = Buffer.from(JSON.stringify({
     iss: sa.client_email,
     scope: 'https://www.googleapis.com/auth/analytics.readonly',
-    aud: sa.token_uri,
+    aud: sa.token_uri || 'https://oauth2.googleapis.com/token',
     iat: now,
     exp: now + 3600,
   })).toString('base64url');
@@ -85,72 +96,66 @@ function makeJwt(sa: ServiceAccountKey): string {
   return `${unsigned}.${sig}`;
 }
 
-// ── Primary auth: GA4_OAUTH_TOKEN env var (tomer@prim3.vc OAuth2 token) ───────
-// When the SA lacks GA4 property access, use this OAuth token.
-// Set GA4_OAUTH_TOKEN in Render env vars. When expired, update via:
-//   1. developers.google.com/oauthplayground (scope: analytics.readonly)
-//   2. Copy new access token into Render env var
-// For persistent refresh: set GA4_OAUTH_REFRESH_TOKEN + GA4_OAUTH_CLIENT_ID + GA4_OAUTH_CLIENT_SECRET
 async function refreshOAuthToken(): Promise<string | null> {
   const refreshToken = process.env.GA4_OAUTH_REFRESH_TOKEN;
-  const clientId = process.env.GA4_OAUTH_CLIENT_ID || '407408718192.apps.googleusercontent.com';
+  const clientId     = process.env.GA4_OAUTH_CLIENT_ID;
   const clientSecret = process.env.GA4_OAUTH_CLIENT_SECRET;
-  if (!refreshToken || !clientSecret) return null;
+  if (!refreshToken || !clientId || !clientSecret) return null;
 
   try {
     const { data } = await axios.post(
       'https://oauth2.googleapis.com/token',
       new URLSearchParams({
-        grant_type: 'refresh_token',
+        grant_type:    'refresh_token',
         refresh_token: refreshToken,
-        client_id: clientId,
+        client_id:     clientId,
         client_secret: clientSecret,
       }),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     );
     const token = data.access_token as string;
     cacheSet('ga4_access_token', token, 55 * 60 * 1000);
-    console.log('[GA4] ✅ Refreshed OAuth token via refresh_token');
+    console.log('[GA4] ✅ Auto-refreshed via OAuth refresh_token (permanent, never expires)');
     return token;
   } catch (e: any) {
-    console.warn('[GA4] Failed to refresh OAuth token:', e.message);
+    console.warn('[GA4] refresh_token exchange failed:', e.message);
     return null;
   }
+}
+
+async function mintSaToken(sa: ServiceAccountKey): Promise<string> {
+  const jwt = makeJwt(sa);
+  const { data } = await axios.post(
+    'https://oauth2.googleapis.com/token',
+    new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion:  jwt,
+    }),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  );
+  const token = data.access_token as string;
+  cacheSet('ga4_access_token', token, 55 * 60 * 1000);
+  console.log('[GA4] ✅ Minted SA JWT token');
+  return token;
 }
 
 async function getGa4AccessToken(): Promise<string> {
   const cached = cacheGet('ga4_access_token');
   if (cached) return cached;
 
-  // Priority 1: env var static token (for quick deployment)
-  const envToken = process.env.GA4_OAUTH_TOKEN;
-  if (envToken) {
-    cacheSet('ga4_access_token', envToken, 45 * 60 * 1000); // assume ~45 min left
-    console.log('[GA4] Using GA4_OAUTH_TOKEN from env');
-    return envToken;
-  }
-
-  // Priority 2: refresh token flow (persistent)
+  // Priority 1: OAuth refresh_token — Tomer's real account, already has GA4 access
   const refreshed = await refreshOAuthToken();
   if (refreshed) return refreshed;
 
-  // Priority 3: Service account JWT (works if SA has GA4 access)
+  // Priority 2: Service Account JWT (needs GA4 property access granted separately)
   const sa = loadServiceAccount();
-  if (!sa) throw new Error('No GA4 auth available: set GA4_OAUTH_TOKEN or GA4_OAUTH_REFRESH_TOKEN in env');
+  if (sa) {
+    try { return await mintSaToken(sa); } catch (e: any) {
+      console.warn('[GA4] SA JWT failed:', e.message);
+    }
+  }
 
-  const jwt = makeJwt(sa);
-  const { data } = await axios.post(
-    'https://oauth2.googleapis.com/token',
-    new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion: jwt,
-    }),
-    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-  );
-
-  const token = data.access_token as string;
-  cacheSet('ga4_access_token', token, 55 * 60 * 1000);
-  return token;
+  throw new Error('No GA4 auth. Set GA4_OAUTH_REFRESH_TOKEN + GA4_OAUTH_CLIENT_ID + GA4_OAUTH_CLIENT_SECRET in Render.');
 }
 
 async function ga4RunReport(

@@ -11,6 +11,10 @@ exports.pool = new pg_1.Pool({
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
+    // Required for external connections to Render-hosted Postgres
+    ssl: config_1.config.databaseUrl?.includes('render.com')
+        ? { rejectUnauthorized: false }
+        : false,
 });
 // Graceful shutdown
 process.on('SIGTERM', async () => {
