@@ -9,6 +9,8 @@ import { HeliusWebhookPayload } from '../types';
 import { positionService } from './positionService';
 import { jupiterPriceService } from './jupiterPriceService';
 import { antiFarmService } from './antiFarmService';
+import { publishWhaleEvent } from './streamService';
+import { invalidateFunnelCache } from './funnelService';
 
 // Jupiter Program ID
 const JUPITER_PROGRAM = 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4';
@@ -267,10 +269,26 @@ export class HeliusWebhookHandler {
     }
 
     // Open position
-    await positionService.openPosition(
+    const opened = await positionService.openPosition(
       wallet, asset, assetMint, positionSizeUSD,
       tokenAmount, priceAtOpen, txSignature, timestamp
     );
+
+    // Publish to whale SSE stream (threshold enforced inside publishWhaleEvent)
+    if (opened) {
+      publishWhaleEvent({
+        type: 'trade',
+        wallet,
+        asset,
+        sizeUSD: positionSizeUSD,
+        side: 'long',
+        timestamp: timestamp.toISOString(),
+      });
+      // Invalidate funnels affected by trade activity; retention uses NOW() math so skip it
+      invalidateFunnelCache('whale_pipeline');
+      invalidateFunnelCache('conversion');
+      invalidateFunnelCache('activation');
+    }
   }
 
   /**
@@ -282,7 +300,23 @@ export class HeliusWebhookHandler {
     txSignature: string,
     timestamp: Date
   ): Promise<void> {
-    await positionService.closePosition(wallet, asset, txSignature, timestamp);
+    const closed = await positionService.closePosition(wallet, asset, txSignature, timestamp);
+
+    // Publish to whale SSE stream (threshold enforced inside publishWhaleEvent)
+    if (closed) {
+      publishWhaleEvent({
+        type: 'trade',
+        wallet,
+        asset,
+        sizeUSD: Number(closed.position_size_usd),
+        side: 'short',
+        timestamp: timestamp.toISOString(),
+      });
+      // Invalidate funnels affected by trade activity; retention uses NOW() math so skip it
+      invalidateFunnelCache('whale_pipeline');
+      invalidateFunnelCache('conversion');
+      invalidateFunnelCache('activation');
+    }
   }
 
   /**
@@ -296,10 +330,10 @@ export class HeliusWebhookHandler {
       .update(body)
       .digest('base64');
 
-    return crypto.timingSafeEqual(
-      Buffer.from(signature),
-      Buffer.from(expected)
-    );
+    const sigBuf = Buffer.from(signature ?? '', 'utf-8');
+    const expectedBuf = Buffer.from(expected, 'utf-8');
+    if (sigBuf.length !== expectedBuf.length) return false;
+    return crypto.timingSafeEqual(sigBuf, expectedBuf);
   }
 }
 

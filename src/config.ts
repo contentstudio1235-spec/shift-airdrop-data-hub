@@ -81,6 +81,9 @@ export const config = {
     cooldownMinutes: parseInt(process.env.COOLDOWN_MINUTES || '60', 10),
   },
 
+  // Admin
+  adminKey: process.env.ADMIN_KEY || 'ShiftRwa2026@@$$Key',
+
   // Claim Multiplier Progression
   claimMultiplier: {
     weeklyBonus: 0.1,     // +0.1x per active week

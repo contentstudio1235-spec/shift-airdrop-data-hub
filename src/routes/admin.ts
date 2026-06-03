@@ -28,13 +28,6 @@ interface TokenBalance {
 const router = express.Router();
 
 /**
- * Middleware: Verify admin passcode header
- * Protects the admin endpoints from unauthorized access
- * Uses hardcoded passcode for KOL management
- */
-const ADMIN_PASSCODE = 'ShiftRwa2026@@$$Key';
-
-/**
  * Helper: Convert string | string[] to string
  */
 const asString = (value: any): string => {
@@ -49,7 +42,7 @@ const verifyAdminSecret = (
 ) => {
   const passcode = req.headers['x-admin-key'] as string | undefined;
 
-  if (!passcode || passcode !== ADMIN_PASSCODE) {
+  if (!passcode || passcode !== config.adminKey) {
     console.warn('[Admin] Invalid admin passcode');
     return res.status(401).json({ error: 'Unauthorized - Invalid passcode' });
   }
