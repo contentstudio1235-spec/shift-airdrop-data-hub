@@ -41,10 +41,9 @@ CREATE INDEX IF NOT EXISTS idx_profiles_first_utm
 CREATE INDEX IF NOT EXISTS idx_profiles_last_seen
   ON user_profiles(last_seen_at DESC);
 
-DO $$ BEGIN
-  ALTER TABLE user_profiles ADD CONSTRAINT chk_first_utm_lower
-    CHECK (first_utm_source IS NULL OR first_utm_source = LOWER(first_utm_source));
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+ALTER TABLE user_profiles DROP CONSTRAINT IF EXISTS chk_first_utm_lower;
+ALTER TABLE user_profiles ADD CONSTRAINT chk_first_utm_lower
+  CHECK (first_utm_source IS NULL OR first_utm_source = LOWER(first_utm_source));
 
 CREATE TABLE IF NOT EXISTS identity_links (
   id                BIGSERIAL PRIMARY KEY,
