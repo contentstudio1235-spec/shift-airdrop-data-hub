@@ -47,6 +47,16 @@ const cardSubtitleStyle: React.CSSProperties = {
   marginBottom: 16,
 };
 
+// Display-only labels for synthetic source values returned by the backend.
+const SOURCE_LABEL: Record<string, string> = {
+  snag_referrals: 'Snag Referrals',
+  direct: 'Direct',
+};
+
+function formatSource(source: string): string {
+  return SOURCE_LABEL[source] ?? source;
+}
+
 export function AttributionView() {
   const { data, loading, error, refetch } = useAttributionOverview();
 
@@ -162,18 +172,17 @@ function ChannelsCard({ rows }: { rows: ChannelROIRow[] }) {
               <div key={r.source} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div
                   style={{
-                    width: 84,
+                    width: 100,
                     fontSize: 11,
                     fontWeight: 700,
                     color: TOKENS.textSecondary,
-                    textTransform: 'lowercase',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                   }}
                   title={r.source}
                 >
-                  {r.source}
+                  {formatSource(r.source)}
                 </div>
                 <div style={{ flex: 1, height: 8, background: TOKENS.chartGrid, borderRadius: 2, overflow: 'hidden' }}>
                   <div
