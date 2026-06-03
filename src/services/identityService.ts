@@ -505,6 +505,17 @@ export async function mergeProfiles(
       [winnerId, loserId],
     );
 
+    // Soft-unlink any loser links that couldn't move (conflicted with winner's existing links).
+    // This keeps audit timelines clean — orphaned active links would otherwise persist on the merged loser.
+    await client.query(
+      `
+      UPDATE identity_links
+      SET unlinked_at = NOW(), unlinked_by = 'system', unlink_reason = 'merged_duplicate'
+      WHERE profile_id = $1 AND unlinked_at IS NULL
+      `,
+      [loserId],
+    );
+
     // Move attribution_events
     await client.query(
       `UPDATE attribution_events SET profile_id = $1 WHERE profile_id = $2`,
