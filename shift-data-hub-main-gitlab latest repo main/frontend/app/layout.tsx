@@ -1,0 +1,89 @@
+import type { Metadata } from 'next';
+import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google';
+import { Analytics } from '@vercel/analytics/react';
+import Script from 'next/script';
+import './globals.css';
+import '@solana/wallet-adapter-react-ui/styles.css';
+import { AdapterProvider } from '@/components/AdapterProvider';
+import { ToastProvider } from '@/components/ToastContext';
+import NavBar from '@/components/NavBar';
+import { LandingTracker } from '@/components/LandingTracker';
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  weight: ['600', '700'],
+  variable: '--font-space-grotesk',
+  display: 'swap',
+});
+
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-inter-var',
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-jetbrains',
+  display: 'swap',
+});
+
+export const metadata: Metadata = {
+  title: 'SHIFT Airdrop — Earn XP Through Trading',
+  description: 'Trade RWA tokens on Jupiter and earn XP. Hold longer for multiplier bonuses. Compete for the SHIFT airdrop.',
+  icons: {
+    icon: '/shift_favicon.png',
+    apple: '/shift_favicon.png',
+  },
+  openGraph: {
+    title: 'SHIFT Airdrop',
+    description: 'Earn XP by trading real-world asset tokens on Solana',
+    images: ['/og.png'],
+  },
+};
+
+const GA_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html
+      lang="en"
+      className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`}
+    >
+      <head>
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
+        />
+        {GA_ID && (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
+              strategy="afterInteractive"
+            />
+            <Script id="google-analytics" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${GA_ID}');
+              `}
+            </Script>
+          </>
+        )}
+      </head>
+      <body>
+        <AdapterProvider>
+          <ToastProvider>
+            <NavBar />
+            <LandingTracker />
+            <main>{children}</main>
+            <Analytics />
+          </ToastProvider>
+        </AdapterProvider>
+      </body>
+    </html>
+  );
+}
