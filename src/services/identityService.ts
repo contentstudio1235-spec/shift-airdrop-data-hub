@@ -12,6 +12,8 @@ import type {
   ProfileSummary,
   ProfileFilters,
   TimelineEntry,
+  SortKey,
+  SortDir,
 } from '../types/identity';
 import { IdentityConflictError, ProfileNotFoundError, MergeWithoutEvidenceError } from '../types/identity';
 
@@ -304,12 +306,35 @@ export async function getProfile(profileId: string): Promise<ProfileWithLinks | 
 
 // ─── searchProfiles ───────────────────────────────────────────────────────────
 
+// Safelist: maps SortKey values to their SQL expressions.
+// NEVER concatenate user-supplied sortBy directly — always index through this map.
+const SORT_EXPR: Record<SortKey, string> = {
+  last_seen: 'p.last_seen_at',
+  volume: 'COALESCE(SUM(pos.position_size_usd), 0)',
+  holdings: "COUNT(DISTINCT pos.id) FILTER (WHERE pos.status = 'open')",
+  x: 'COUNT(DISTINCT ilx.id)',
+  discord: 'COUNT(DISTINCT ild.id)',
+  referral_source: `CASE
+    WHEN NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy') ~ '^[a-zA-Z0-9]{6}$' THEN 'snag_referrals'
+    ELSE COALESCE(NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy'), 'zzz_direct')
+  END`,
+};
+
+const VALID_SORT_KEYS = new Set<SortKey>(['last_seen', 'volume', 'holdings', 'x', 'discord', 'referral_source']);
+
 export async function searchProfiles(
   filters: ProfileFilters,
 ): Promise<{ rows: ProfileSummary[]; total: number; page: number; pageSize: number }> {
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(200, Math.max(1, filters.pageSize ?? 50));
   const offset = (page - 1) * pageSize;
+
+  // Safelist sortBy — fall back to last_seen if unknown value supplied
+  const sortKey: SortKey = (filters.sortBy && VALID_SORT_KEYS.has(filters.sortBy))
+    ? filters.sortBy
+    : 'last_seen';
+  const sortDir: SortDir = filters.sortDir === 'asc' ? 'asc' : 'desc';
+  const orderBySql = `ORDER BY ${SORT_EXPR[sortKey]} ${sortDir.toUpperCase()} NULLS LAST`;
 
   const where: string[] = ['p.merged_into_profile_id IS NULL'];
   const params: unknown[] = [];
@@ -358,15 +383,20 @@ export async function searchProfiles(
       p.last_seen_at,
       p.first_utm_source,
       (COUNT(DISTINCT il.identity_type) * 100.0 / 7.0) AS stitched_pct,
-      COALESCE(SUM(pos.position_size_usd), 0) AS lifetime_volume_usd
+      COALESCE(SUM(pos.position_size_usd), 0) AS lifetime_volume_usd,
+      (COUNT(DISTINCT pos.id) FILTER (WHERE pos.status = 'open'))::int AS holdings,
+      (COUNT(DISTINCT ilx.id) > 0) AS has_x,
+      (COUNT(DISTINCT ild.id) > 0) AS has_discord
     FROM user_profiles p
     LEFT JOIN identity_links il ON il.profile_id = p.profile_id AND il.unlinked_at IS NULL
     LEFT JOIN identity_links wl ON wl.profile_id = p.profile_id AND wl.identity_type = 'wallet' AND wl.unlinked_at IS NULL
     LEFT JOIN positions pos ON pos.wallet = wl.identity_value
+    LEFT JOIN identity_links ilx ON ilx.profile_id = p.profile_id AND ilx.identity_type = 'social_x' AND ilx.unlinked_at IS NULL
+    LEFT JOIN identity_links ild ON ild.profile_id = p.profile_id AND ild.identity_type = 'social_discord' AND ild.unlinked_at IS NULL
     ${whereSql}
     GROUP BY p.profile_id
     ${havingSql}
-    ORDER BY p.last_seen_at DESC NULLS LAST
+    ${orderBySql}
     LIMIT ${pageSize} OFFSET ${offset}
   `;
 
@@ -378,6 +408,9 @@ export async function searchProfiles(
     first_utm_source: string | null;
     stitched_pct: string;
     lifetime_volume_usd: string;
+    holdings: string;
+    has_x: boolean;
+    has_discord: boolean;
   }>(rowsQuery, params);
 
   const countQuery = `
@@ -400,6 +433,9 @@ export async function searchProfiles(
       firstUtmSource: r.first_utm_source,
       stitchedPct: Math.round(Number(r.stitched_pct) * 10) / 10,
       lifetimeVolumeUSD: Number(r.lifetime_volume_usd),
+      holdings: Number(r.holdings),
+      hasX: r.has_x,
+      hasDiscord: r.has_discord,
     })),
     total: Number(totalRow?.total ?? 0),
     page,

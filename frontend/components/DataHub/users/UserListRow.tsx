@@ -1,5 +1,6 @@
 "use client";
 import React from 'react';
+import { XLogo, DiscordLogo } from '@phosphor-icons/react';
 import { TOKENS, MOTION, thresholdColor } from '@/lib/chartTokens';
 import { fmtUSD, fmtWallet, fmtRelativeTime } from '@/lib/format';
 import type { ProfileSummary } from '@/hooks/useUsersList';
@@ -39,8 +40,16 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
       <span style={{ fontSize: 13, fontWeight: 800, color: TOKENS.textPrimary, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {fmtWallet(row.primaryWallet)}
       </span>
-      <span style={{ fontSize: 12, fontWeight: 700, color: row.displayName ? TOKENS.textPrimary : TOKENS.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {row.displayName || '—'}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: row.displayName ? TOKENS.textPrimary : TOKENS.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {row.displayName || '—'}
+        </span>
+        {row.hasX && (
+          <XLogo size={11} weight="fill" style={{ color: TOKENS.accent, flexShrink: 0 }} aria-label="X linked" />
+        )}
+        {row.hasDiscord && (
+          <DiscordLogo size={11} weight="fill" style={{ color: TOKENS.accent, flexShrink: 0 }} aria-label="Discord linked" />
+        )}
       </span>
       <span style={{ textAlign: 'right', fontSize: 13, fontWeight: 800, color: row.lifetimeVolumeUSD > 0 ? TOKENS.accent : TOKENS.textFaint, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>
         {fmtUSD(row.lifetimeVolumeUSD)}

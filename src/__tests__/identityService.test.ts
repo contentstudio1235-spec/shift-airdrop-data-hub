@@ -213,6 +213,7 @@ describe('searchProfiles', () => {
         profile_id: 'p-1', primary_wallet: 'AbCd1234', display_name: null,
         last_seen_at: '2026-06-03T00:00:00Z', first_utm_source: 'twitter',
         stitched_pct: '95.0', lifetime_volume_usd: '4200.0',
+        holdings: '3', has_x: true, has_discord: false,
       },
     ] as any);
     vi.spyOn(db, 'queryOne').mockResolvedValueOnce({ total: '1' } as any);
@@ -221,6 +222,9 @@ describe('searchProfiles', () => {
     expect(result.rows).toHaveLength(1);
     expect(result.rows[0].profileId).toBe('p-1');
     expect(result.rows[0].stitchedPct).toBe(95);
+    expect(result.rows[0].holdings).toBe(3);
+    expect(result.rows[0].hasX).toBe(true);
+    expect(result.rows[0].hasDiscord).toBe(false);
     expect(result.total).toBe(1);
   });
 
@@ -231,6 +235,38 @@ describe('searchProfiles', () => {
     await searchProfiles({ source: 'twitter', page: 1, pageSize: 50 });
     const params = qSpy.mock.calls[0][1] as unknown[];
     expect(params).toContain('twitter');
+  });
+});
+
+describe('searchProfiles sort', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('defaults to last_seen DESC when sortBy not provided', async () => {
+    const spy = vi.spyOn(db, 'query').mockResolvedValueOnce([] as any);
+    vi.spyOn(db, 'queryOne').mockResolvedValueOnce({ total: '0' } as any);
+
+    await searchProfiles({});
+    const sql = spy.mock.calls[0][0] as string;
+    expect(sql).toMatch(/ORDER BY p\.last_seen_at DESC NULLS LAST/);
+  });
+
+  it('uses volume SUM expression when sortBy=volume', async () => {
+    const spy = vi.spyOn(db, 'query').mockResolvedValueOnce([] as any);
+    vi.spyOn(db, 'queryOne').mockResolvedValueOnce({ total: '0' } as any);
+
+    await searchProfiles({ sortBy: 'volume', sortDir: 'desc' });
+    const sql = spy.mock.calls[0][0] as string;
+    expect(sql).toMatch(/ORDER BY COALESCE\(SUM\(pos\.position_size_usd\), 0\) DESC/);
+  });
+
+  it('rejects unknown sortBy by falling back to last_seen', async () => {
+    const spy = vi.spyOn(db, 'query').mockResolvedValueOnce([] as any);
+    vi.spyOn(db, 'queryOne').mockResolvedValueOnce({ total: '0' } as any);
+
+    await searchProfiles({ sortBy: 'DROP TABLE users' as any });
+    const sql = spy.mock.calls[0][0] as string;
+    expect(sql).toMatch(/ORDER BY p\.last_seen_at/);
+    expect(sql).not.toMatch(/DROP TABLE/);
   });
 });
 

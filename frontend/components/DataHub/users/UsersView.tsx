@@ -22,6 +22,15 @@ const inputStyle: React.CSSProperties = {
 
 const SOURCE_OPTIONS = ['all', 'organic', 'twitter', 'discord', 'telegram', 'kol', 'direct'];
 
+const SORT_OPTIONS: { value: NonNullable<UsersListFilters['sortBy']>; label: string }[] = [
+  { value: 'last_seen', label: 'Last seen' },
+  { value: 'volume', label: 'Volume' },
+  { value: 'holdings', label: 'Holdings' },
+  { value: 'x', label: 'X (Twitter)' },
+  { value: 'discord', label: 'Discord' },
+  { value: 'referral_source', label: 'Referral source' },
+];
+
 export function UsersView() {
   const router = useRouter();
   const params = useSearchParams();
@@ -29,10 +38,14 @@ export function UsersView() {
   const initialProfileId = params?.get('profileId') ?? null;
   const initialQuery = params?.get('q') ?? '';
   const initialSource = params?.get('source') ?? 'all';
+  const initialSortBy = (params?.get('sortBy') ?? 'last_seen') as NonNullable<UsersListFilters['sortBy']>;
+  const initialSortDir = (params?.get('sortDir') === 'asc' ? 'asc' : 'desc') as NonNullable<UsersListFilters['sortDir']>;
 
   const [filters, setFilters] = useState<UsersListFilters>({
     q: initialQuery || undefined,
     source: initialSource === 'all' ? undefined : initialSource,
+    sortBy: initialSortBy,
+    sortDir: initialSortDir,
   });
 
   const [page, setPage] = useState(1);
@@ -47,11 +60,13 @@ export function UsersView() {
     if (selectedProfileId) next.set('profileId', selectedProfileId);
     if (filters.q) next.set('q', filters.q);
     if (filters.source) next.set('source', filters.source);
+    if (filters.sortBy && filters.sortBy !== 'last_seen') next.set('sortBy', filters.sortBy);
+    if (filters.sortDir && filters.sortDir !== 'desc') next.set('sortDir', filters.sortDir);
     const target = `/admin/data-hub?${next.toString()}`;
     if (typeof window !== 'undefined' && window.location.pathname + window.location.search !== target) {
       router.replace(target, { scroll: false });
     }
-  }, [router, selectedProfileId, filters.q, filters.source]);
+  }, [router, selectedProfileId, filters.q, filters.source, filters.sortBy, filters.sortDir]);
 
   const handleSelect = useCallback((profileId: string) => {
     setSelectedProfileId(profileId);
@@ -114,6 +129,25 @@ export function UsersView() {
             </option>
           ))}
         </select>
+
+        <select
+          value={filters.sortBy ?? 'last_seen'}
+          onChange={e => handleFiltersChange(f => ({ ...f, sortBy: e.target.value as NonNullable<UsersListFilters['sortBy']> }))}
+          style={inputStyle}
+          aria-label="Sort by"
+        >
+          {SORT_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>Sort: {o.label}</option>
+          ))}
+        </select>
+
+        <button
+          onClick={() => handleFiltersChange(f => ({ ...f, sortDir: f.sortDir === 'asc' ? 'desc' : 'asc' }))}
+          style={{ ...inputStyle, cursor: 'pointer', padding: '8px 10px', fontWeight: 800 }}
+          aria-label={`Sort ${filters.sortDir === 'asc' ? 'ascending' : 'descending'}`}
+        >
+          {filters.sortDir === 'asc' ? '↑' : '↓'}
+        </button>
 
         <div style={{ marginLeft: 'auto', fontSize: 11, color: TOKENS.textMuted, fontVariantNumeric: 'tabular-nums' }}>
           {list.data ? (
