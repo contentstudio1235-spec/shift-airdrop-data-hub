@@ -1,7 +1,8 @@
 // src/services/attributionService.ts
 import { query } from '../db/pool';
 import { FunnelCache, buildCacheKey } from '../lib/cache';
-import type { ChannelROIRow, FunnelQueryParams, WhaleOriginEdge } from '../types/funnel';
+import type { ChannelROIRow, FunnelQueryParams } from '../types/funnel';
+import type { WhaleOriginsResponse, SankeyNode, SankeyEdge, KOLResponse, KOLEntry } from '../types/sankey';
 
 const ATTRIBUTION_TTL_SECONDS = 300;
 const cache = new FunnelCache({ ttlSeconds: ATTRIBUTION_TTL_SECONDS, maxEntries: 200 });
@@ -208,38 +209,93 @@ export async function computeAttributionCoverage(params: FunnelQueryParams): Pro
   return result;
 }
 
-export async function computeWhaleOrigins(params: FunnelQueryParams): Promise<WhaleOriginEdge[]> {
-  const cacheKey = `whale_origins|${buildCacheKey('whale_origins', params as Record<string, unknown>)}`;
-  const cached = cache.get<WhaleOriginEdge[]>(cacheKey);
+export async function computeWhaleOrigins(params: FunnelQueryParams): Promise<WhaleOriginsResponse> {
+  const cacheKey = `whale_origins_v2|${buildCacheKey('whale_origins_v2', params as Record<string, unknown>)}`;
+  const cached = cache.get<WhaleOriginsResponse>(cacheKey);
   if (cached) return cached;
 
-  const rows = await query<{ from_node: string; to_node: string; value: string }>(
+  const rows = await query<{ source: string; cohort: string; outcome: string; users: string; volume: string; }>(
     `
-    WITH whales AS (
-      SELECT DISTINCT p.wallet FROM positions p
-      WHERE p.position_size_usd >= 1000
-        AND ($1::timestamp IS NULL OR p.opened_at >= $1)
-        AND ($2::timestamp IS NULL OR p.opened_at <= $2)
+    WITH base AS (
+      SELECT
+        CASE
+          WHEN NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy') ~ '^[a-zA-Z0-9]{6}$' THEN 'snag_referrals'
+          WHEN NULLIF(u.referred_by_code, '') ~ '^[a-zA-Z0-9]{6}$' THEN 'snag_referrals'
+          ELSE COALESCE(
+            NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy'),
+            NULLIF(u.referred_by_code, ''),
+            'direct'
+          )
+        END AS source,
+        u.wallet,
+        p.last_seen_at
+      FROM users u
+      LEFT JOIN user_profiles p ON p.primary_wallet = u.wallet AND p.merged_into_profile_id IS NULL
+      WHERE ($1::timestamp IS NULL OR u.created_at >= $1)
+        AND ($2::timestamp IS NULL OR u.created_at <= $2)
     ),
-    whale_sources AS (
-      SELECT COALESCE(NULLIF(u.referred_by_code, ''), 'direct') AS source, w.wallet
-      FROM whales w INNER JOIN users u ON u.wallet = w.wallet
+    vol AS (
+      SELECT b.wallet, b.source, b.last_seen_at,
+             COALESCE(SUM(pos.position_size_usd), 0) AS volume
+      FROM base b
+      LEFT JOIN positions pos ON pos.wallet = b.wallet
+      GROUP BY b.wallet, b.source, b.last_seen_at
     )
-    SELECT source AS from_node, 'whale_trade'::text AS to_node, COUNT(*)::bigint AS value
-    FROM whale_sources
-    GROUP BY source
-    ORDER BY value DESC
-    LIMIT 50
+    SELECT source,
+           CASE WHEN volume >= 1000 THEN 'whale'
+                WHEN volume > 0 THEN 'dolphin'
+                ELSE 'fish' END AS cohort,
+           CASE WHEN last_seen_at IS NULL THEN 'churned'
+                WHEN last_seen_at > NOW() - INTERVAL '30 days' THEN 'active'
+                ELSE 'dormant' END AS outcome,
+           COUNT(*)::text AS users,
+           SUM(volume)::text AS volume
+    FROM vol
+    GROUP BY source, cohort, outcome
     `,
     [params.from ?? null, params.to ?? null],
   );
 
-  const result: WhaleOriginEdge[] = rows.map(r => ({
-    from: r.from_node,
-    to: r.to_node,
-    value: Number(r.value),
-  }));
+  const sources = new Map<string, number>();
+  const cohorts = new Map<string, number>();
+  const outcomes = new Map<string, number>();
+  const sourceToCohort = new Map<string, number>();
+  const cohortToOutcome = new Map<string, number>();
+  let totalWhales = 0, totalWhaleVolume = 0, totalSourceUsers = 0;
 
+  for (const r of rows) {
+    const users = Number(r.users);
+    const volume = Number(r.volume);
+    sources.set(r.source, (sources.get(r.source) ?? 0) + users);
+    cohorts.set(r.cohort, (cohorts.get(r.cohort) ?? 0) + users);
+    outcomes.set(r.outcome, (outcomes.get(r.outcome) ?? 0) + users);
+    const sKey = `src:${r.source}|coh:${r.cohort}`;
+    sourceToCohort.set(sKey, (sourceToCohort.get(sKey) ?? 0) + users);
+    const cKey = `coh:${r.cohort}|out:${r.outcome}`;
+    cohortToOutcome.set(cKey, (cohortToOutcome.get(cKey) ?? 0) + users);
+    totalSourceUsers += users;
+    if (r.cohort === 'whale') {
+      totalWhales += users;
+      totalWhaleVolume += volume;
+    }
+  }
+
+  const nodes: SankeyNode[] = [
+    ...Array.from(sources.entries()).map(([s, v]) => ({ id: `src:${s}`, label: s, kind: 'source' as const, value: v })),
+    ...Array.from(cohorts.entries()).map(([c, v]) => ({ id: `coh:${c}`, label: c, kind: 'cohort' as const, value: v })),
+    ...Array.from(outcomes.entries()).map(([o, v]) => ({ id: `out:${o}`, label: o, kind: 'outcome' as const, value: v })),
+  ];
+  const edges: SankeyEdge[] = [
+    ...Array.from(sourceToCohort.entries()).map(([k, v]) => { const [from, to] = k.split('|'); return { from, to, value: v }; }),
+    ...Array.from(cohortToOutcome.entries()).map(([k, v]) => { const [from, to] = k.split('|'); return { from, to, value: v }; }),
+  ];
+
+  const result: WhaleOriginsResponse = {
+    nodes, edges,
+    totals: { sourceUsers: totalSourceUsers, whales: totalWhales, whaleVolumeUSD: totalWhaleVolume },
+    computedAt: new Date().toISOString(),
+    dataQuality: 'sprint_2_3_live',
+  };
   cache.set(cacheKey, result);
   return result;
 }
