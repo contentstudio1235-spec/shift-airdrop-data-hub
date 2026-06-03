@@ -7,6 +7,8 @@ import crypto from 'crypto';
 import { Request, Response } from 'express';
 import { config } from '../config';
 import { execute, queryOne } from '../db/pool';
+import { findOrCreateProfile, linkIdentity, recordEvent } from './identityService';
+import { IdentityConflictError } from '../types/identity';
 
 export class SnagWebhookHandler {
   /**
@@ -74,7 +76,7 @@ export class SnagWebhookHandler {
       try {
         await this.processEvent(event);
       } catch (err) {
-        console.error('[SnagWebhook] Error processing event:', err, event);
+        console.error('[SnagWebhook] Error processing event:', err, typeof event === 'object' ? JSON.stringify(event).slice(0, 200) : '[non-object event]');
       }
     }
 
@@ -102,6 +104,7 @@ export class SnagWebhookHandler {
   private async handleRuleCompleted(data: any): Promise<void> {
     const walletAddress = data?.walletAddress || data?.wallet_address || data?.user?.walletAddress;
     const ruleId = data?.ruleId || data?.rule_id || data?.rule?.id;
+    const snagUserId: string | undefined = data?.userId || data?.user_id || data?.user?.id || data?.accountId || data?.account_id;
 
     if (!walletAddress || !ruleId) {
       console.warn('[SnagWebhook] Missing walletAddress or ruleId in rule.completed event');
@@ -141,6 +144,41 @@ export class SnagWebhookHandler {
     );
 
     console.log(`[SnagWebhook] ✅ Task "${taskId}" completed for ${walletAddress.slice(0, 8)}...`);
+
+    // Identity wiring — non-fatal
+    try {
+      const profile = await findOrCreateProfile({ type: 'wallet', value: walletAddress }, 'system');
+
+      // Link snag_user_id if present in the event payload
+      if (snagUserId) {
+        try {
+          await linkIdentity(profile.profileId, 'snag_user_id', snagUserId, 'deterministic', { byActor: 'system' });
+        } catch (linkErr) {
+          if (!(linkErr instanceof IdentityConflictError)) throw linkErr;
+          // Already linked to another profile — log and continue
+          console.warn('[snag/handleRuleCompleted] snag_user_id conflict, skipping link', (linkErr as IdentityConflictError).existingProfileId);
+        }
+
+        await recordEvent({
+          event_name: 'snag_link',
+          event_id: `snag-${walletAddress}-${snagUserId}`,
+          profile_id: profile.profileId,
+          wallet: walletAddress,
+          payload: { snag_user_id: snagUserId },
+        });
+      }
+
+      await recordEvent({
+        event_name: 'snag_task_complete',
+        event_id: `snag-task-${walletAddress}-${ruleId}`,
+        profile_id: profile.profileId,
+        wallet: walletAddress,
+        payload: { rule_id: ruleId, task_id: taskId },
+      });
+    } catch (err) {
+      console.error('[snag] identity wiring failed', err);
+      // Non-fatal — Snag event processing continues
+    }
   }
 
   private async handleReferralCreated(data: any): Promise<void> {

@@ -280,3 +280,39 @@ export async function apiGet<T>(path: string, opts: ApiOptions = {}): Promise<T>
 export function sseURL(path: string): string {
   return `${API_BASE}${path}?adminKey=${encodeURIComponent(ADMIN_KEY)}`;
 }
+
+// ── Admin mutations (POST / PATCH / DELETE) ────────────────────
+
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    public path: string,
+    public body: any,
+  ) {
+    super(`API ${path} → ${status}: ${typeof body === 'string' ? body : JSON.stringify(body)}`);
+    this.name = 'ApiError';
+  }
+}
+
+async function apiMutate<T>(
+  method: 'POST' | 'PATCH' | 'DELETE',
+  path: string,
+  body?: unknown,
+  opts: { signal?: AbortSignal } = {},
+): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: { 'x-admin-key': ADMIN_KEY, 'Content-Type': 'application/json' },
+    body: body == null ? undefined : JSON.stringify(body),
+    signal: opts.signal,
+  });
+  const text = await res.text();
+  let parsed: any = null;
+  try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
+  if (!res.ok) throw new ApiError(res.status, path, parsed);
+  return parsed as T;
+}
+
+export const apiPost   = <T>(p: string, b?: unknown, o?: { signal?: AbortSignal }) => apiMutate<T>('POST',   p, b, o);
+export const apiPatch  = <T>(p: string, b?: unknown, o?: { signal?: AbortSignal }) => apiMutate<T>('PATCH',  p, b, o);
+export const apiDelete = <T>(p: string, b?: unknown, o?: { signal?: AbortSignal }) => apiMutate<T>('DELETE', p, b, o);

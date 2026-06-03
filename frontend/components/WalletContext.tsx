@@ -168,6 +168,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       prevWalletRef.current = wallet;
       if (walletChain === 'solana') {
         triggerWalletSync(wallet);
+        // Sprint 2.3 (Option C): SILENT probabilistic stitch — no signature prompt.
+        // This is attribution-only. A future "Verify wallet" CTA at high-intent
+        // moments (Join Airdrop, Claim, etc.) can call verifyWalletStitch() to
+        // upgrade the link to deterministic confidence.
+        import('@/lib/tracking').then(({ trackWalletConnect }) =>
+          trackWalletConnect({ wallet })
+            .then(r => console.log('[Stitch]', r))
+            .catch(err => console.warn('[Stitch] failed', err))
+        );
       }
     }
     if (!wallet) {

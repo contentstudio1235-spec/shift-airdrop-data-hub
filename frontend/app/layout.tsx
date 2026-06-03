@@ -7,6 +7,7 @@ import '@solana/wallet-adapter-react-ui/styles.css';
 import { AdapterProvider } from '@/components/AdapterProvider';
 import { ToastProvider } from '@/components/ToastContext';
 import NavBar from '@/components/NavBar';
+import { LandingTracker } from '@/components/LandingTracker';
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
@@ -77,6 +78,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AdapterProvider>
           <ToastProvider>
             <NavBar />
+            <LandingTracker />
             <main>{children}</main>
             <Analytics />
           </ToastProvider>

@@ -11,6 +11,7 @@ import { jupiterPriceService } from './jupiterPriceService';
 import { antiFarmService } from './antiFarmService';
 import { publishWhaleEvent } from './streamService';
 import { invalidateFunnelCache } from './funnelService';
+import { findOrCreateProfile, recordEvent } from './identityService';
 
 // Jupiter Program ID
 const JUPITER_PROGRAM = 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4';
@@ -288,6 +289,23 @@ export class HeliusWebhookHandler {
       invalidateFunnelCache('conversion');
       invalidateFunnelCache('activation');
     }
+
+    // Identity wiring — non-fatal
+    try {
+      const profile = await findOrCreateProfile({ type: 'wallet', value: wallet }, 'system');
+      await recordEvent({
+        event_name: 'position_open',
+        event_id: txSignature,
+        profile_id: profile.profileId,
+        wallet,
+        asset,
+        value_usd: positionSizeUSD,
+        occurred_at: timestamp.toISOString(),
+        payload: { side: 'long' },
+      });
+    } catch (err) {
+      console.error('[helius/handleBuy] identity wiring failed', err);
+    }
   }
 
   /**
@@ -315,6 +333,23 @@ export class HeliusWebhookHandler {
       invalidateFunnelCache('whale_pipeline');
       invalidateFunnelCache('conversion');
       invalidateFunnelCache('activation');
+    }
+
+    // Identity wiring — non-fatal
+    try {
+      const profile = await findOrCreateProfile({ type: 'wallet', value: wallet }, 'system');
+      await recordEvent({
+        event_name: 'position_close',
+        event_id: txSignature,
+        profile_id: profile.profileId,
+        wallet,
+        asset,
+        value_usd: closed?.position_size_usd != null ? Number(closed.position_size_usd) : undefined,
+        occurred_at: timestamp.toISOString(),
+        payload: { side: 'short' },
+      });
+    } catch (err) {
+      console.error('[helius/handleSell] identity wiring failed', err);
     }
   }
 
