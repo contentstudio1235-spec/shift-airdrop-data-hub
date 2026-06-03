@@ -1,4 +1,5 @@
-import type { ChannelROIRow, FunnelQueryParams, WhaleOriginEdge } from '../types/funnel';
+import type { ChannelROIRow, FunnelQueryParams } from '../types/funnel';
+import type { WhaleOriginsResponse, KOLResponse } from '../types/sankey';
 export interface TopCampaignRow {
     campaign: string;
     source: string | null;
@@ -16,6 +17,7 @@ export interface AttributionCoverage {
 export declare function computeChannelROI(params: FunnelQueryParams): Promise<ChannelROIRow[]>;
 export declare function computeTopCampaigns(params: FunnelQueryParams, limit?: number): Promise<TopCampaignRow[]>;
 export declare function computeAttributionCoverage(params: FunnelQueryParams): Promise<AttributionCoverage>;
-export declare function computeWhaleOrigins(params: FunnelQueryParams): Promise<WhaleOriginEdge[]>;
+export declare function computeWhaleOrigins(params: FunnelQueryParams): Promise<WhaleOriginsResponse>;
+export declare function computeKOLLeaderboard(params: FunnelQueryParams, limit?: number): Promise<KOLResponse>;
 export declare function invalidateAttributionCache(): void;
 //# sourceMappingURL=attributionService.d.ts.map
