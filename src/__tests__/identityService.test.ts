@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { findOrCreateProfile } from '../services/identityService';
+import { findOrCreateProfile, linkIdentity, unlinkIdentity } from '../services/identityService';
+import { IdentityConflictError } from '../types/identity';
 import * as db from '../db/pool';
 
 vi.mock('../db/pool');
@@ -77,5 +78,59 @@ describe('findOrCreateProfile', () => {
 
     const profile = await findOrCreateProfile({ type: 'wallet', value: 'AbCd1234XyZ' }, 'system');
     expect(profile.primaryWallet).toBe('AbCd1234XyZ');
+  });
+});
+
+describe('linkIdentity', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('inserts a new link', async () => {
+    vi.spyOn(db, 'queryOne')
+      .mockResolvedValueOnce(null)   // no existing active link
+      .mockResolvedValueOnce({
+        id: 42, profile_id: 'p-1', identity_type: 'snag_user_id', identity_value: 'snag-abc',
+        confidence: 'deterministic', evidence_event_id: null, linked_at: '2026-06-03T00:00:00Z',
+        linked_by: 'system', unlinked_at: null, unlinked_by: null, unlink_reason: null,
+      } as any);
+
+    const link = await linkIdentity('p-1', 'snag_user_id', 'snag-abc', 'deterministic', { byActor: 'system' });
+    expect(link.id).toBe(42);
+    expect(link.identityValue).toBe('snag-abc');
+  });
+
+  it('throws IdentityConflictError when identity already linked to another profile', async () => {
+    vi.spyOn(db, 'queryOne').mockResolvedValueOnce({
+      profile_id: 'p-other', id: 1, identity_type: 'snag_user_id', identity_value: 'snag-abc',
+      confidence: 'deterministic', evidence_event_id: null, linked_at: '...',
+      linked_by: 'system', unlinked_at: null, unlinked_by: null, unlink_reason: null,
+    } as any);
+
+    await expect(
+      linkIdentity('p-1', 'snag_user_id', 'snag-abc', 'deterministic', { byActor: 'system' })
+    ).rejects.toBeInstanceOf(IdentityConflictError);
+  });
+
+  it('is idempotent when identity already linked to the SAME profile', async () => {
+    vi.spyOn(db, 'queryOne').mockResolvedValueOnce({
+      profile_id: 'p-1', id: 99, identity_type: 'snag_user_id', identity_value: 'snag-abc',
+      confidence: 'deterministic', evidence_event_id: null, linked_at: '2026-06-03T00:00:00Z',
+      linked_by: 'system', unlinked_at: null, unlinked_by: null, unlink_reason: null,
+    } as any);
+
+    const link = await linkIdentity('p-1', 'snag_user_id', 'snag-abc', 'deterministic', { byActor: 'system' });
+    expect(link.id).toBe(99);
+  });
+});
+
+describe('unlinkIdentity', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('soft-deletes the link', async () => {
+    const exec = vi.spyOn(db, 'execute').mockResolvedValueOnce(1);
+    await unlinkIdentity(42, 'duplicate snag account', 'admin-wallet');
+    expect(exec).toHaveBeenCalled();
+    const params = exec.mock.calls[0][1] as unknown[];
+    expect(params).toContain('duplicate snag account');
+    expect(params).toContain('admin-wallet');
   });
 });
