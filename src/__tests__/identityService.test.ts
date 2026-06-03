@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { findOrCreateProfile, linkIdentity, unlinkIdentity, recordEvent, getProfile } from '../services/identityService';
+import { findOrCreateProfile, linkIdentity, unlinkIdentity, recordEvent, getProfile, searchProfiles, getTimeline } from '../services/identityService';
 import { IdentityConflictError } from '../types/identity';
 import * as db from '../db/pool';
 
@@ -201,5 +201,53 @@ describe('getProfile', () => {
     expect(profile!.links).toHaveLength(1);
     expect(profile!.lifetimeStats?.xp).toBe(8420.5);
     expect(profile!.lifetimeStats?.volumeUSD).toBe(42500);
+  });
+});
+
+describe('searchProfiles', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('returns paginated profile summaries', async () => {
+    vi.spyOn(db, 'query').mockResolvedValueOnce([
+      {
+        profile_id: 'p-1', primary_wallet: 'AbCd1234', display_name: null,
+        last_seen_at: '2026-06-03T00:00:00Z', first_utm_source: 'twitter',
+        stitched_pct: '95.0', lifetime_volume_usd: '4200.0',
+      },
+    ] as any);
+    vi.spyOn(db, 'queryOne').mockResolvedValueOnce({ total: '1' } as any);
+
+    const result = await searchProfiles({ page: 1, pageSize: 50 });
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].profileId).toBe('p-1');
+    expect(result.rows[0].stitchedPct).toBe(95);
+    expect(result.total).toBe(1);
+  });
+
+  it('applies source filter via parameterized SQL', async () => {
+    const qSpy = vi.spyOn(db, 'query').mockResolvedValueOnce([] as any);
+    vi.spyOn(db, 'queryOne').mockResolvedValueOnce({ total: '0' } as any);
+
+    await searchProfiles({ source: 'twitter', page: 1, pageSize: 50 });
+    const params = qSpy.mock.calls[0][1] as unknown[];
+    expect(params).toContain('twitter');
+  });
+});
+
+describe('getTimeline', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('returns events for a profile, newest first', async () => {
+    vi.spyOn(db, 'query').mockResolvedValueOnce([
+      { id: 1, event_name: 'position_open', occurred_at: '2026-06-03T01:00:00Z',
+        source: 'twitter', asset: 'TSL2L', value_usd: '1500.0', payload: {} },
+      { id: 2, event_name: 'wallet_connect', occurred_at: '2026-06-02T01:00:00Z',
+        source: 'twitter', asset: null, value_usd: null, payload: {} },
+    ] as any);
+
+    const entries = await getTimeline('p-1', { limit: 30 });
+    expect(entries).toHaveLength(2);
+    expect(entries[0].eventName).toBe('position_open');
+    expect(entries[0].valueUSD).toBe(1500);
   });
 });
