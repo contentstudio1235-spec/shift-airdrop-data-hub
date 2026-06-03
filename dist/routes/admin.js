@@ -57,12 +57,6 @@ const configService_1 = require("../services/configService");
 const certificateService_1 = require("../services/certificateService");
 const router = express_1.default.Router();
 /**
- * Middleware: Verify admin passcode header
- * Protects the admin endpoints from unauthorized access
- * Uses hardcoded passcode for KOL management
- */
-const ADMIN_PASSCODE = 'ShiftRwa2026@@$$Key';
-/**
  * Helper: Convert string | string[] to string
  */
 const asString = (value) => {
@@ -72,7 +66,7 @@ const asString = (value) => {
 };
 const verifyAdminSecret = (req, res, next) => {
     const passcode = req.headers['x-admin-key'];
-    if (!passcode || passcode !== ADMIN_PASSCODE) {
+    if (!passcode || passcode !== config_1.config.adminKey) {
         console.warn('[Admin] Invalid admin passcode');
         return res.status(401).json({ error: 'Unauthorized - Invalid passcode' });
     }

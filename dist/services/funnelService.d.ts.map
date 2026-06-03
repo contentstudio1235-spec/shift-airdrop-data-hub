@@ -1,1 +1,0 @@
-{"version":3,"file":"funnelService.d.ts","sourceRoot":"","sources":["../../src/services/funnelService.ts"],"names":[],"mappings":"AAGA,OAAO,KAAK,EAAE,QAAQ,EAAE,iBAAiB,EAAE,YAAY,EAAoB,MAAM,iBAAiB,CAAC;AAgQnG,wBAAsB,aAAa,CACjC,QAAQ,EAAE,QAAQ,EAClB,MAAM,EAAE,iBAAiB,GACxB,OAAO,CAAC,YAAY,CAAC,CAgGvB;AAED,wBAAgB,qBAAqB,CAAC,QAAQ,CAAC,EAAE,QAAQ,GAAG,IAAI,CAM/D"}

@@ -28,6 +28,8 @@ import funnelsRoutes from './routes/funnels';
 import attributionRoutes from './routes/attribution';
 import cohortsRoutes from './routes/cohorts';
 import streamRoutes from './routes/stream';
+import usersRoutes from './routes/users';
+import trackRoutes from './routes/track';
 
 const app = express();
 
@@ -83,6 +85,8 @@ app.use('/api/funnels', funnelsRoutes);
 app.use('/api/attribution', attributionRoutes);
 app.use('/api/cohorts', cohortsRoutes);
 app.use('/api/stream', streamRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/track', trackRoutes);
 
 // ── Data Hub Static Dashboard ──
 // Serves the SHIFT RWA Cross-Channel Data Hub frontend at /hub
