@@ -19,6 +19,7 @@ import { FunnelsView } from './views/FunnelsView';
 import { AttributionView } from './views/AttributionView';
 import { CohortsView } from './views/CohortsView';
 import { RawDataView } from './views/RawDataView';
+import { UsersView } from '@/components/DataHub/users/UsersView';
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://shift-airdrop-backend.onrender.com";
 const KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || "ShiftRwa2026@@$$Key";
@@ -970,6 +971,7 @@ export default function DataHubPage() {
         {topView === 'funnels' && <FunnelsView />}
         {topView === 'attribution' && <AttributionView />}
         {topView === 'cohorts' && <CohortsView />}
+        {topView === 'users' && <UsersView />}
         {topView === 'raw' && (
           <RawDataView>
             <div style={{ minHeight: "100vh", background: bg, color: "#fff" }}>
