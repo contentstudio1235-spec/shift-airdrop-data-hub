@@ -102,7 +102,11 @@ router.get('/whale-stream', async (req: Request, res: Response) => {
   res.flushHeaders?.();
 
   let closed = false;
-  req.on('close', () => { closed = true; activeStreams--; });
+  // Per Database Optimizer review (docs/db/sprint-3-query-review.md): keep the
+  // close handler for cooperative shutdown but make `finally` the authoritative
+  // decrement so a torn-down TCP connection (no clean FIN) or a poll-loop throw
+  // cannot leak the slot. activeStreams-- runs exactly once in the finally block.
+  req.on('close', () => { closed = true; });
 
   try {
     const initial = await fetchInitialWhales(20);
@@ -132,6 +136,7 @@ router.get('/whale-stream', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('[attribution/whale-stream]', err);
   } finally {
+    activeStreams--;
     res.end();
   }
 });
