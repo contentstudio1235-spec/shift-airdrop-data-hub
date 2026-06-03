@@ -1,1 +1,0 @@
-{"version":3,"file":"cohortService.d.ts","sourceRoot":"","sources":["../../src/services/cohortService.ts"],"names":[],"mappings":"AAGA,OAAO,KAAK,EAAE,SAAS,EAAE,YAAY,EAAE,iBAAiB,EAAE,MAAM,iBAAiB,CAAC;AA2BlF,wBAAsB,mBAAmB,CACvC,GAAG,EAAE,SAAS,EACd,MAAM,EAAE,iBAAiB,GACxB,OAAO,CAAC,YAAY,CAAC,CA6EvB;AAED,wBAAgB,qBAAqB,IAAI,IAAI,CAE5C"}
