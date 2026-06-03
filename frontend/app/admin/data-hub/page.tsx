@@ -14,6 +14,11 @@ import type {
   AggregatedKPIs,
   FunnelTab,
 } from "@/components/DataHub/types";
+import { LayoutShell, type TopView } from './layout-shell';
+import { FunnelsView } from './views/FunnelsView';
+import { AttributionView } from './views/AttributionView';
+import { CohortsView } from './views/CohortsView';
+import { RawDataView } from './views/RawDataView';
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://shift-airdrop-backend.onrender.com";
 const KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || "ShiftRwa2026@@$$Key";
@@ -874,6 +879,7 @@ export default function DataHubPage() {
   const { isAuthenticated } = useAdminAuth();
   const [authed, setAuthed] = useState(false);
   const [page, setPage] = useState<HubPage>("overview");
+  const [topView, setTopView] = useState<TopView>('raw');
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [syncing, setSyncing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -960,7 +966,13 @@ export default function DataHubPage() {
         a { text-decoration: none; }
       `}</style>
 
-      <div style={{ minHeight: "100vh", background: bg, color: "#fff" }}>
+      <LayoutShell activeView={topView} onChangeView={setTopView}>
+        {topView === 'funnels' && <FunnelsView />}
+        {topView === 'attribution' && <AttributionView />}
+        {topView === 'cohorts' && <CohortsView />}
+        {topView === 'raw' && (
+          <RawDataView>
+            <div style={{ minHeight: "100vh", background: bg, color: "#fff" }}>
         {/* ── Top Bar ──────────────────────────────────────────────── */}
         <div style={{ position: "sticky", top: 0, zIndex: 100, background: "rgba(3,13,10,0.95)", backdropFilter: "blur(16px)", borderBottom: `1px solid ${accentBorder}` }}>
           <div style={{ maxWidth: "1440px", margin: "0 auto", padding: "0 24px", display: "flex", alignItems: "center", gap: "0", height: "56px" }}>
@@ -1024,6 +1036,9 @@ export default function DataHubPage() {
           </div>
         </div>
       </div>
+          </RawDataView>
+        )}
+      </LayoutShell>
     </>
   );
 }
