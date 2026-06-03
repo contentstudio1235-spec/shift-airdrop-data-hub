@@ -19,16 +19,26 @@ async function computeChannelROI(params) {
     //   1. user_profiles.first_utm_source  (Sprint 2.3 live stitch)
     //   2. users.referred_by_code          (Sprint 0 referral signal)
     //   3. 'direct'                        (no signal)
-    // 'unknown_legacy' is a Sprint 2.0 backfill placeholder — NOT a real UTM signal,
-    // so we filter it out via NULLIF before the COALESCE chain falls through.
+    // Special handling:
+    //   - 'unknown_legacy' is a Sprint 2.0 backfill placeholder, filtered to NULL
+    //   - 6-char alphanumeric values are Snag referral codes (e.g. ?ref=3VAN8Y),
+    //     collapsed into a single 'snag_referrals' channel rather than appearing
+    //     as 50+ pseudo-source rows
     const rows = await (0, pool_1.query)(`
     WITH user_source AS (
       SELECT
-        COALESCE(
-          NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy'),
-          NULLIF(u.referred_by_code, ''),
-          'direct'
-        ) AS source,
+        CASE
+          WHEN COALESCE(
+            NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy'),
+            NULLIF(u.referred_by_code, ''),
+            'direct'
+          ) ~ '^[a-zA-Z0-9]{6}$' THEN 'snag_referrals'
+          ELSE COALESCE(
+            NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy'),
+            NULLIF(u.referred_by_code, ''),
+            'direct'
+          )
+        END AS source,
         u.wallet,
         (u.ga_user_id IS NOT NULL OR u.snag_user_id IS NOT NULL OR p.profile_id IS NOT NULL) AS is_stitched
       FROM users u
@@ -86,6 +96,7 @@ async function computeTopCampaigns(params, limit = 10) {
       AND first_utm_campaign IS NOT NULL
       AND first_utm_campaign <> ''
       AND first_utm_campaign <> 'unknown_legacy'
+      AND first_utm_campaign !~ '^[a-zA-Z0-9]{6}$'
       AND ($1::timestamp IS NULL OR first_seen_at >= $1)
       AND ($2::timestamp IS NULL OR first_seen_at <= $2)
     GROUP BY first_utm_campaign, first_utm_source, first_utm_medium
@@ -107,11 +118,24 @@ async function computeAttributionCoverage(params) {
     if (cached)
         return cached;
     const rows = await (0, pool_1.query)(`
+    -- 6-char alphanumeric values in first_utm_source are Snag referral codes
+    -- that Sprint 2.0 backfill wrote into the UTM column — they're referral
+    -- signal, not UTM signal, so we reclassify here.
     WITH base AS (
       SELECT
         u.wallet,
-        NULLIF(NULLIF(p.first_utm_source, ''), 'unknown_legacy') AS utm,
-        NULLIF(u.referred_by_code, '') AS ref
+        CASE
+          WHEN NULLIF(NULLIF(p.first_utm_source, ''), 'unknown_legacy') ~ '^[a-zA-Z0-9]{6}$' THEN NULL
+          ELSE NULLIF(NULLIF(p.first_utm_source, ''), 'unknown_legacy')
+        END AS utm,
+        COALESCE(
+          NULLIF(u.referred_by_code, ''),
+          CASE
+            WHEN NULLIF(NULLIF(p.first_utm_source, ''), 'unknown_legacy') ~ '^[a-zA-Z0-9]{6}$'
+              THEN p.first_utm_source
+            ELSE NULL
+          END
+        ) AS ref
       FROM users u
       LEFT JOIN user_profiles p ON p.primary_wallet = u.wallet AND p.merged_into_profile_id IS NULL
       WHERE ($1::timestamp IS NULL OR u.created_at >= $1)
