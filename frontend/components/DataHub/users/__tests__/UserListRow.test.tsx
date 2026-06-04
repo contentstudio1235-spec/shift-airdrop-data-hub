@@ -78,7 +78,7 @@ describe('UserListRow', () => {
     expect(row.style.borderLeft).toMatch(/rgb\(0,\s*200,\s*150\)/);
   });
 
-  it('renders wallet address in truncated form', () => {
+  it('renders wallet address in truncated form (8+6 chars)', () => {
     const { container } = render(
       <UserListRow
         row={BASE_ROW}
@@ -87,8 +87,10 @@ describe('UserListRow', () => {
         style={{}}
       />
     );
-    // fmtWallet truncates with ASCII ellipsis: Ab3f...XXXX
+    // fmtWallet(w, 8, 6) truncates with ASCII ellipsis
     expect(container.textContent).toContain('...');
+    // Should show 8 prefix chars: "Ab3fXYZ1"
+    expect(container.textContent).toContain('Ab3fXYZ1');
   });
 
   it('renders dim dash for displayName when null', () => {
@@ -114,5 +116,54 @@ describe('UserListRow', () => {
     );
     const discordBadge = container.querySelector('[aria-label="Discord linked"]');
     expect(discordBadge).toBeTruthy();
+  });
+
+  it('renders firstSeenAt cell with relative time format', () => {
+    const firstSeenAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { container } = render(
+      <UserListRow
+        row={{ ...BASE_ROW, firstSeenAt }}
+        isSelected={false}
+        onClick={vi.fn()}
+        style={{}}
+      />
+    );
+    // 30 days ago → "1mo ago" (fmtRelativeTime)
+    expect(container.textContent).toContain('mo ago');
+  });
+
+  it('renders holdings count with accent fontWeight 800 when holdings > 0', () => {
+    const { container } = render(
+      <UserListRow
+        row={{ ...BASE_ROW, holdings: 5 }}
+        isSelected={false}
+        onClick={vi.fn()}
+        style={{}}
+      />
+    );
+    // Holdings value "5" should appear
+    expect(container.textContent).toContain('5');
+    // Find the span containing "5" (holdings cell is the 6th grid cell)
+    const spans = Array.from(container.querySelectorAll('span'));
+    const holdingsSpan = spans.find(s => s.textContent?.trim() === '5');
+    expect(holdingsSpan).toBeTruthy();
+    expect(holdingsSpan?.style.fontWeight).toBe('800');
+  });
+
+  it('renders holdings cell with "0" in textSecondary when holdings is 0', () => {
+    const { container } = render(
+      <UserListRow
+        row={{ ...BASE_ROW, holdings: 0 }}
+        isSelected={false}
+        onClick={vi.fn()}
+        style={{}}
+      />
+    );
+    expect(container.textContent).toContain('0');
+    // TOKENS.textSecondary = '#9fb5aa' → rgb(159, 181, 170) in JSDOM
+    const spans = Array.from(container.querySelectorAll('span'));
+    const holdingsSpan = spans.find(s => s.textContent?.trim() === '0' && s.style.textAlign === 'right' && s.style.fontVariantNumeric === 'tabular-nums');
+    expect(holdingsSpan).toBeTruthy();
+    expect(holdingsSpan?.style.color).toMatch(/rgb\(159,\s*181,\s*170\)/);
   });
 });

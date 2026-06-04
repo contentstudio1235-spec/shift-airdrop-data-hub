@@ -5,6 +5,11 @@ import { TOKENS, MOTION, thresholdColor } from '@/lib/chartTokens';
 import { fmtUSD, fmtWallet, fmtRelativeTime } from '@/lib/format';
 import type { ProfileSummary } from '@/hooks/useUsersList';
 
+// ─── Grid template — single source of truth ──────────────────────────────────
+// Exported so UserListPane can import it — ensures header, row, and skeleton
+// always use identical column widths and never drift.
+export const GRID_COLUMNS = '240px 160px 92px 80px 80px 56px 28px 28px 28px 32px';
+
 export interface UserListRowProps {
   row: ProfileSummary;
   isSelected: boolean;
@@ -25,7 +30,7 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
         height: 56,
         padding: '0 14px 0 12px',
         display: 'grid',
-        gridTemplateColumns: '148px 96px 76px 64px 24px 24px 24px 28px',
+        gridTemplateColumns: GRID_COLUMNS,
         columnGap: 10,
         alignItems: 'center',
         borderLeft: isSelected ? `2px solid ${TOKENS.accent}` : '2px solid transparent',
@@ -37,7 +42,7 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
       onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = TOKENS.tableRowHover; }}
       onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
     >
-      {/* WALLET — 148px, monospace truncated */}
+      {/* 1: WALLET — 240px, monospace 13px tabular-nums, 8+6 truncation */}
       <span style={{
         fontSize: 13,
         fontWeight: 800,
@@ -49,22 +54,22 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
         textOverflow: 'ellipsis',
         whiteSpace: 'nowrap',
       }}>
-        {fmtWallet(row.primaryWallet)}
+        {fmtWallet(row.primaryWallet, 8, 6)}
       </span>
 
-      {/* NAME — 96px, dim dash when null */}
+      {/* 2: NAME — 160px, dim dash when null */}
       <span style={{
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: 700,
         color: row.displayName ? TOKENS.textPrimary : TOKENS.textMuted,
         overflow: 'hidden',
         textOverflow: 'ellipsis',
         whiteSpace: 'nowrap',
       }}>
-        {row.displayName || '—'}
+        {row.displayName ?? '—'}
       </span>
 
-      {/* VOLUME — 76px, right-aligned, accent if >0 */}
+      {/* 3: VOLUME — 92px, right-aligned, accent if >0, textFaint if 0 */}
       <span style={{
         textAlign: 'right',
         fontSize: 13,
@@ -76,7 +81,17 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
         {fmtUSD(row.lifetimeVolumeUSD)}
       </span>
 
-      {/* LAST SEEN — 64px, right-aligned, faint */}
+      {/* 4: FIRST SEEN — 80px, right-aligned, 11px textFaint */}
+      <span style={{
+        textAlign: 'right',
+        fontSize: 11,
+        fontWeight: 600,
+        color: TOKENS.textFaint,
+      }}>
+        {fmtRelativeTime(row.firstSeenAt)}
+      </span>
+
+      {/* 5: LAST SEEN — 80px, right-aligned, 11px textFaint */}
       <span style={{
         textAlign: 'right',
         fontSize: 11,
@@ -86,7 +101,18 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
         {fmtRelativeTime(row.lastSeenAt)}
       </span>
 
-      {/* X — 24px badge */}
+      {/* 6: HOLDINGS — 56px, right-aligned, accent+bold when >0, textSecondary when 0 */}
+      <span style={{
+        textAlign: 'right',
+        fontSize: 13,
+        fontWeight: row.holdings > 0 ? 800 : 600,
+        color: row.holdings > 0 ? TOKENS.accent : TOKENS.textSecondary,
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        {row.holdings.toLocaleString()}
+      </span>
+
+      {/* 7: X — 28px badge */}
       <span
         role="img"
         aria-label={row.hasX ? 'X linked' : 'X not linked'}
@@ -94,7 +120,7 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          width: 24,
+          width: 28,
           height: 56,
         }}
       >
@@ -110,7 +136,7 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
         />
       </span>
 
-      {/* DISCORD — 24px badge */}
+      {/* 8: DISCORD — 28px badge */}
       <span
         role="img"
         aria-label={row.hasDiscord ? 'Discord linked' : 'Discord not linked'}
@@ -118,7 +144,7 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          width: 24,
+          width: 28,
           height: 56,
         }}
       >
@@ -134,7 +160,7 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
         />
       </span>
 
-      {/* TG — 24px badge, always regular/dim (no Snag data yet — intentional) */}
+      {/* 9: TG — 28px badge, always regular/dim (no Telegram data — intentional) */}
       <span
         role="img"
         aria-label="Telegram not linked"
@@ -142,7 +168,7 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          width: 24,
+          width: 28,
           height: 56,
         }}
       >
@@ -157,7 +183,7 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
         />
       </span>
 
-      {/* STITCH-DOT — 28px, threshold pill */}
+      {/* 10: STITCH — 32px, threshold dot */}
       <span style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
         <span aria-hidden style={{
           width: 8,
