@@ -30,4 +30,12 @@ describe('pollNewWhales', () => {
     expect(events[0].isHistorical).toBeUndefined();
     expect(events[0].source).toBe('snag_referrals');
   });
+
+  it('filters to status=open positions only (Code Reviewer BLOCKER 2)', async () => {
+    const cursor = new Date('2026-06-04T00:00:00Z');
+    const spy = vi.spyOn(pool, 'query').mockResolvedValueOnce([] as any);
+    await pollNewWhales(cursor);
+    const sql = spy.mock.calls[0][0] as string;
+    expect(sql).toMatch(/pos\.status\s*=\s*'open'/);
+  });
 });

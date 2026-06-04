@@ -12,7 +12,7 @@ describe('computeKOLLeaderboard', () => {
     const result = await computeKOLLeaderboard({}, 10);
     expect(result.rows).toHaveLength(2);
     expect(result.rows[0].referrer).toBe('abc123');
-    expect(result.rows[0].holderRate).toBe(15);
+    expect(result.rows[0].holderRate).toBe(0.15);
     expect(result.rows[0].avgVolumePerUserUSD).toBe(40);
     expect(result.rows[0].source).toBe('snag_referrals');
     expect(result.rows[0].score).toBeGreaterThan(result.rows[1].score);

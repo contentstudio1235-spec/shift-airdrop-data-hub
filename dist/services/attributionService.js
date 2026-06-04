@@ -279,8 +279,14 @@ async function computeKOLLeaderboard(params, limit = 50) {
         const users = Number(r.users);
         const holders = Number(r.holders);
         const volume = Number(r.volume);
-        const holderRate = users === 0 ? 0 : Math.round((holders / users) * 1000) / 10;
-        const score = holderRate * Math.log10(1 + volume) * Math.log10(1 + users);
+        // holderRate is a FRACTION (0..1). KOLLeaderboard frontend multiplies by 100
+        // for display and uses fraction thresholds (>=0.1=green, >=0.03=yellow).
+        // Per Code Reviewer sprint-3-code-review.md BLOCKER 1 — backend used to emit
+        // percent (15 for 15%) which the frontend then re-multiplied → "1500.0%".
+        const holderRate = users === 0 ? 0 : Math.round((holders / users) * 10000) / 10000;
+        // Score uses the percent representation so log10 spread reads sensibly.
+        // Multiplying every score by 100 is a monotonic transform — ranking preserved.
+        const score = (holderRate * 100) * Math.log10(1 + volume) * Math.log10(1 + users);
         const isSnag = /^[a-zA-Z0-9]{6}$/.test(r.referrer);
         return {
             referrer: r.referrer,

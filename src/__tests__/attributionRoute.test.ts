@@ -91,7 +91,7 @@ describe('GET /api/attribution/kol-leaderboard', () => {
     vi.spyOn(svc, 'computeKOLLeaderboard').mockResolvedValueOnce({
       rows: [{
         referrer: 'abc123', source: 'snag_referrals', users: 100, holders: 15,
-        whales: 1, holderRate: 15, totalVolumeUSD: 4000, avgVolumePerUserUSD: 40,
+        whales: 1, holderRate: 0.15, totalVolumeUSD: 4000, avgVolumePerUserUSD: 40,
         score: 42.5, firstSeenAt: '2026-01-01', lastSeenAt: '2026-06-04',
       }],
       totals: { totalReferrers: 1, activeReferrers: 1 },
@@ -104,7 +104,7 @@ describe('GET /api/attribution/kol-leaderboard', () => {
       .get('/api/attribution/kol-leaderboard?limit=10')
       .set('x-admin-key', 'ShiftRwa2026@@$$Key');
     expect(res.status).toBe(200);
-    expect(res.body.rows[0].holderRate).toBe(15);
+    expect(res.body.rows[0].holderRate).toBe(0.15);
   });
 
   it('clamps invalid limit to 50', async () => {

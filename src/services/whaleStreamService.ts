@@ -16,6 +16,9 @@ function truncateWallet(w: string): string {
   return `${w.slice(0, 8)}...${w.slice(-4)}`;
 }
 
+// Per Code Reviewer sprint-3-code-review.md BLOCKER 2: only OPEN positions
+// belong in the whale event stream. Closed positions ≥ $1k must NOT surface
+// (they aren't new opens — and rowToEvent hardcodes type:'open').
 const WHALE_SQL = `
   SELECT pos.wallet,
          p.first_utm_source AS first_utm,
@@ -27,6 +30,7 @@ const WHALE_SQL = `
   LEFT JOIN users u ON u.wallet = pos.wallet
   LEFT JOIN user_profiles p ON p.primary_wallet = pos.wallet AND p.merged_into_profile_id IS NULL
   WHERE pos.position_size_usd >= 1000
+    AND pos.status = 'open'
 `;
 
 interface Row { wallet: string; first_utm: string | null; ref: string | null; asset: string; size: string; opened_at: string; }
