@@ -2,22 +2,26 @@
  * src/__tests__/snagXlsxIngest.test.ts
  *
  * Unit tests for scripts/ingest-snag-xlsx.ts
- * Tests cover: row parsing, processRow dispatch, conflict isolation, display_name protection.
+ * Tests cover: row parsing, processRow dispatch, conflict isolation, display_name protection,
+ * and dry-run prediction accuracy (create / idempotent / conflict).
  *
  * Strategy: mock identityService + pool so no DB is touched.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { parseRow, processRow } from '../../scripts/ingest-snag-xlsx';
+import { parseRow, processRow, predictLink } from '../../scripts/ingest-snag-xlsx';
 import { IdentityConflictError } from '../types/identity';
 
 // ─── Mock identityService ─────────────────────────────────────────────────────
 vi.mock('../services/identityService', () => ({
   linkIdentity: vi.fn(),
   findOrCreateProfile: vi.fn(),
+  normalizeIdentityValue: vi.fn((type: string, value: string) =>
+    type === 'wallet' ? value : value.toLowerCase(),
+  ),
 }));
 
-// ─── Mock pool (used by maybeSetDisplayName) ──────────────────────────────────
+// ─── Mock pool (used by maybeSetDisplayName + predictLink) ────────────────────
 vi.mock('../db/pool', () => ({
   pool: {
     connect: vi.fn(),
@@ -128,8 +132,10 @@ describe('processRow — all fields present', () => {
     mockPoolClient({ rows: [{ display_name: null }], rowCount: 1 });
   });
 
-  it('calls linkIdentity 4 times: snag_user_id, x_handle, discord_id, email', async () => {
+  it('dry-run: does not call linkIdentity and counts all links as "created" when identity_links has no matches', async () => {
     vi.mocked(identityService.linkIdentity).mockResolvedValue({} as never);
+    // predictLink → queryOne returns null (no existing link) → outcome = 'created'
+    vi.mocked(dbPool.queryOne).mockResolvedValue(null);
 
     const row = {
       snagUserId: 'snag-111',
@@ -143,13 +149,14 @@ describe('processRow — all fields present', () => {
     const delta = await processRow(row, PROFILE_ID, LINKED_BY, true /* dryRun */);
 
     expect(identityService.linkIdentity).not.toHaveBeenCalled(); // dry-run = no writes
-    // In dry-run mode counters still reflect what would happen
-    // snagUserIdCreated = 1 (dry-run doesn't call but still counts in non-dry path)
-    // For dry-run the counts reflect calls that would be made — verify structure is correct
-    expect(delta).toHaveProperty('snagUserIdCreated');
-    expect(delta).toHaveProperty('xHandleCreated');
-    expect(delta).toHaveProperty('discordIdCreated');
-    expect(delta).toHaveProperty('emailCreated');
+    // All links are new → all counters reflect 'created'
+    expect(delta.snagUserIdCreated).toBe(1);
+    expect(delta.xHandleCreated).toBe(1);
+    expect(delta.discordIdCreated).toBe(1);
+    expect(delta.emailCreated).toBe(1);
+    // No idempotent or conflict increments
+    expect(delta.xHandleIdempotent).toBe(0);
+    expect(delta.xHandleConflict).toBe(0);
   });
 
   it('calls linkIdentity 4 times in non-dry-run mode', async () => {
@@ -341,5 +348,68 @@ describe('processRow — discord stored as snowflake', () => {
 
     expect(discordCall).toBeDefined();
     expect(discordCall![2]).toBe(snowflake);
+  });
+});
+
+// ─── dry-run prediction: predictLink accuracy ─────────────────────────────────
+
+describe('processRow — dry-run predicts idempotent when link exists for same profile', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('increments xHandleIdempotent, NOT xHandleCreated, when queryOne returns same profile_id', async () => {
+    vi.mocked(identityService.linkIdentity).mockResolvedValue({} as never);
+    // predictLink → queryOne returns existing row belonging to THE SAME profile → idempotent
+    vi.mocked(dbPool.queryOne).mockResolvedValue({ profile_id: PROFILE_ID });
+    // display_name check (maybeSetDisplayName dry-run path) — reuse mockPoolClient
+    mockPoolClient({ rows: [{ display_name: 'Existing' }], rowCount: 1 });
+
+    const row = {
+      snagUserId: 'snag-888',
+      wallet: 'WalletIdemp',
+      twitterName: 'already_linked_handle',
+    };
+
+    const delta = await processRow(row, PROFILE_ID, LINKED_BY, true /* dryRun */);
+
+    // linkIdentity must never be called in dry-run
+    expect(identityService.linkIdentity).not.toHaveBeenCalled();
+
+    // x_handle: link belongs to SAME profile → idempotent
+    expect(delta.xHandleIdempotent).toBe(1);
+    // Must NOT count as created
+    expect(delta.xHandleCreated).toBe(0);
+    // Must NOT count as conflict
+    expect(delta.xHandleConflict).toBe(0);
+  });
+});
+
+describe('processRow — dry-run predicts conflict when link exists for different profile', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('increments xHandleConflict, NOT xHandleCreated, when queryOne returns a different profile_id', async () => {
+    const OTHER_PROFILE = 'bbbbbbbb-0000-0000-0000-000000000002';
+    vi.mocked(identityService.linkIdentity).mockResolvedValue({} as never);
+    // predictLink → queryOne returns existing row belonging to a DIFFERENT profile → conflict
+    vi.mocked(dbPool.queryOne).mockResolvedValue({ profile_id: OTHER_PROFILE });
+    // display_name check
+    mockPoolClient({ rows: [{ display_name: 'OtherName' }], rowCount: 1 });
+
+    const row = {
+      snagUserId: 'snag-999',
+      wallet: 'WalletConfl',
+      twitterName: 'handle_owned_by_other',
+    };
+
+    const delta = await processRow(row, PROFILE_ID, LINKED_BY, true /* dryRun */);
+
+    // linkIdentity must never be called in dry-run
+    expect(identityService.linkIdentity).not.toHaveBeenCalled();
+
+    // x_handle: link belongs to DIFFERENT profile → conflict
+    expect(delta.xHandleConflict).toBe(1);
+    // Must NOT count as created
+    expect(delta.xHandleCreated).toBe(0);
+    // Must NOT count as idempotent
+    expect(delta.xHandleIdempotent).toBe(0);
   });
 });
