@@ -11,9 +11,9 @@
  * Design doc: docs/db/snag-xlsx-ingest-design.md
  */
 
-import * as XLSX from 'xlsx';
-import { pool } from '../src/db/pool';
-import { linkIdentity } from '../src/services/identityService';
+import ExcelJS from 'exceljs';
+import { pool, queryOne } from '../src/db/pool';
+import { linkIdentity, normalizeIdentityValue } from '../src/services/identityService';
 import type { IdentityType } from '../src/types/identity';
 import { IdentityConflictError } from '../src/types/identity';
 
@@ -32,14 +32,49 @@ interface IngestCounters {
   rowsProcessed: number;
   skippedNoProfile: number;    // wallet not in users table OR no user_profile_id
   xHandleCreated: number;
+  xHandleIdempotent: number;
   xHandleConflict: number;
   discordIdCreated: number;
+  discordIdIdempotent: number;
   discordIdConflict: number;
   emailCreated: number;
+  emailIdempotent: number;
   emailConflict: number;
   snagUserIdCreated: number;
+  snagUserIdIdempotent: number;
   displayNamesUpdated: number;
   unexpectedErrors: number;
+}
+
+// ─── XLSX loading (exceljs — no known CVEs) ───────────────────────────────────
+
+/**
+ * Load the first worksheet of an XLSX file and return rows as plain objects.
+ * Row 1 is treated as headers; subsequent rows are mapped to those headers.
+ */
+export async function loadWorkbook(path: string): Promise<Array<Record<string, unknown>>> {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(path);
+  const ws = wb.worksheets[0];
+  const headers: string[] = [];
+  const rows: Array<Record<string, unknown>> = [];
+
+  ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) {
+      // header row
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        headers[colNumber - 1] = String(cell.value ?? '').trim();
+      });
+      return;
+    }
+    const obj: Record<string, unknown> = {};
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      const key = headers[colNumber - 1];
+      if (key) obj[key] = cell.value;
+    });
+    rows.push(obj);
+  });
+  return rows;
 }
 
 // ─── Row parsing ──────────────────────────────────────────────────────────────
@@ -140,6 +175,31 @@ async function maybeSetDisplayName(
   }
 }
 
+// ─── Dry-run prediction ───────────────────────────────────────────────────────
+
+/**
+ * In dry-run mode, predict what linkIdentity would do for a given (type, value)
+ * by reading identity_links directly — no writes.
+ *
+ * Returns:
+ *   'created'    — no existing row → real run would INSERT
+ *   'idempotent' — existing row belongs to SAME profile → real run would no-op
+ *   'conflict'   — existing row belongs to DIFFERENT profile → real run would throw IdentityConflictError
+ */
+export async function predictLink(
+  profileId: string,
+  type: IdentityType,
+  value: string,
+): Promise<'created' | 'idempotent' | 'conflict'> {
+  const existing = await queryOne<{ profile_id: string }>(
+    `SELECT profile_id FROM identity_links WHERE identity_type = $1 AND identity_value = $2 AND unlinked_at IS NULL`,
+    [type, normalizeIdentityValue(type, value)],
+  );
+  if (!existing) return 'created';
+  if (existing.profile_id === profileId) return 'idempotent';
+  return 'conflict';
+}
+
 // ─── Per-row processor ────────────────────────────────────────────────────────
 
 /**
@@ -156,27 +216,43 @@ export async function processRow(
 ): Promise<Partial<IngestCounters>> {
   const delta: Partial<IngestCounters> = {
     xHandleCreated: 0,
+    xHandleIdempotent: 0,
     xHandleConflict: 0,
     discordIdCreated: 0,
+    discordIdIdempotent: 0,
     discordIdConflict: 0,
     emailCreated: 0,
+    emailIdempotent: 0,
     emailConflict: 0,
     snagUserIdCreated: 0,
+    snagUserIdIdempotent: 0,
     displayNamesUpdated: 0,
     unexpectedErrors: 0,
   };
 
-  // Helper: attempt one linkIdentity call, tally the result
+  // Helper: attempt one linkIdentity call, tally the result.
+  // In dry-run mode, queries identity_links to predict create/idempotent/conflict accurately.
   async function attemptLink(
     type: IdentityType,
     value: string,
     createdKey: keyof IngestCounters,
+    idempotentKey: keyof IngestCounters,
     conflictKey: keyof IngestCounters,
   ) {
     try {
-      if (!dryRun) {
-        await linkIdentity(profileId, type, value, 'deterministic', { byActor: linkedBy });
+      if (dryRun) {
+        const outcome = await predictLink(profileId, type, value);
+        if (outcome === 'created') {
+          (delta[createdKey] as number) = ((delta[createdKey] as number) ?? 0) + 1;
+        } else if (outcome === 'idempotent') {
+          (delta[idempotentKey] as number) = ((delta[idempotentKey] as number) ?? 0) + 1;
+        } else {
+          // conflict
+          (delta[conflictKey] as number) = ((delta[conflictKey] as number) ?? 0) + 1;
+        }
+        return;
       }
+      await linkIdentity(profileId, type, value, 'deterministic', { byActor: linkedBy });
       (delta[createdKey] as number) = ((delta[createdKey] as number) ?? 0) + 1;
     } catch (err) {
       if (err instanceof IdentityConflictError) {
@@ -192,21 +268,21 @@ export async function processRow(
   }
 
   // 1. snag_user_id (always present if we got here)
-  await attemptLink('snag_user_id', row.snagUserId, 'snagUserIdCreated', 'unexpectedErrors');
+  await attemptLink('snag_user_id', row.snagUserId, 'snagUserIdCreated', 'snagUserIdIdempotent', 'unexpectedErrors');
 
   // 2. x_handle
   if (row.twitterName) {
-    await attemptLink('x_handle', row.twitterName, 'xHandleCreated', 'xHandleConflict');
+    await attemptLink('x_handle', row.twitterName, 'xHandleCreated', 'xHandleIdempotent', 'xHandleConflict');
   }
 
   // 3. discord_id (stored as snowflake)
   if (row.discordId) {
-    await attemptLink('discord_id', row.discordId, 'discordIdCreated', 'discordIdConflict');
+    await attemptLink('discord_id', row.discordId, 'discordIdCreated', 'discordIdIdempotent', 'discordIdConflict');
   }
 
   // 4. email
   if (row.email) {
-    await attemptLink('email', row.email, 'emailCreated', 'emailConflict');
+    await attemptLink('email', row.email, 'emailCreated', 'emailIdempotent', 'emailConflict');
   }
 
   // 5. display_name — only if current value is NULL
@@ -223,7 +299,7 @@ export async function processRow(
 async function main() {
   // ── Argument parsing ──────────────────────────────────────────────────────
   const args = process.argv.slice(2);
-  const xlsxPath = args.find((a) => !a.startsWith('--'));
+  const xlsxPath = args.find((a) => !a.startsWith('--')); // first non-flag arg = file path
   const dryRun = args.includes('--dry-run');
   const limitArg = args.find((a) => a.startsWith('--limit='));
   const limit = limitArg ? parseInt(limitArg.split('=')[1], 10) : undefined;
@@ -243,9 +319,7 @@ async function main() {
 
   // ── Parse XLSX ────────────────────────────────────────────────────────────
   console.log('[snag-ingest] Loading workbook...');
-  const wb = XLSX.readFile(xlsxPath);
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
+  const rawRows = await loadWorkbook(xlsxPath);
 
   const targetRows = limit ? rawRows.slice(0, limit) : rawRows;
   console.log(`[snag-ingest] Rows to process: ${targetRows.length}`);
@@ -255,18 +329,22 @@ async function main() {
     rowsProcessed: 0,
     skippedNoProfile: 0,
     xHandleCreated: 0,
+    xHandleIdempotent: 0,
     xHandleConflict: 0,
     discordIdCreated: 0,
+    discordIdIdempotent: 0,
     discordIdConflict: 0,
     emailCreated: 0,
+    emailIdempotent: 0,
     emailConflict: 0,
     snagUserIdCreated: 0,
+    snagUserIdIdempotent: 0,
     displayNamesUpdated: 0,
     unexpectedErrors: 0,
   };
 
-  // ── Process in batches of 50 to avoid pool exhaustion ────────────────────
-  const BATCH_SIZE = 50;
+  // ── Process in batches to avoid pool exhaustion (pool max: 5) ────────────
+  const BATCH_SIZE = 10;
 
   for (let i = 0; i < targetRows.length; i += BATCH_SIZE) {
     const batch = targetRows.slice(i, i + BATCH_SIZE);
@@ -304,12 +382,16 @@ async function main() {
         try {
           const delta = await processRow(row, profileId, linkedBy, dryRun);
           counters.xHandleCreated += delta.xHandleCreated ?? 0;
+          counters.xHandleIdempotent += delta.xHandleIdempotent ?? 0;
           counters.xHandleConflict += delta.xHandleConflict ?? 0;
           counters.discordIdCreated += delta.discordIdCreated ?? 0;
+          counters.discordIdIdempotent += delta.discordIdIdempotent ?? 0;
           counters.discordIdConflict += delta.discordIdConflict ?? 0;
           counters.emailCreated += delta.emailCreated ?? 0;
+          counters.emailIdempotent += delta.emailIdempotent ?? 0;
           counters.emailConflict += delta.emailConflict ?? 0;
           counters.snagUserIdCreated += delta.snagUserIdCreated ?? 0;
+          counters.snagUserIdIdempotent += delta.snagUserIdIdempotent ?? 0;
           counters.displayNamesUpdated += delta.displayNamesUpdated ?? 0;
           counters.unexpectedErrors += delta.unexpectedErrors ?? 0;
         } catch (err) {
@@ -327,20 +409,19 @@ async function main() {
   }
 
   // ── Summary ───────────────────────────────────────────────────────────────
+  const dryLabel = dryRun ? ' (DRY RUN — no writes)' : '';
   console.log('');
-  console.log('[snag-ingest] === INGEST COMPLETE' + (dryRun ? ' (DRY RUN — no writes)' : '') + ' ===');
-  console.log(`[snag-ingest] Rows matched to profiles: ${counters.rowsProcessed}`);
-  console.log(`[snag-ingest] Rows skipped (not in users / no profile): ${counters.skippedNoProfile}`);
-  console.log(`[snag-ingest] x_handle links created:     ${counters.xHandleCreated}`);
-  console.log(`[snag-ingest] x_handle conflicts:         ${counters.xHandleConflict}`);
-  console.log(`[snag-ingest] discord_id links created:   ${counters.discordIdCreated}`);
-  console.log(`[snag-ingest] discord_id conflicts:       ${counters.discordIdConflict}`);
-  console.log(`[snag-ingest] email links created:        ${counters.emailCreated}`);
-  console.log(`[snag-ingest] email conflicts:            ${counters.emailConflict}`);
-  console.log(`[snag-ingest] snag_user_id links created: ${counters.snagUserIdCreated}`);
-  console.log(`[snag-ingest] display_names updated:      ${counters.displayNamesUpdated}`);
-  console.log(`[snag-ingest] unexpected errors:          ${counters.unexpectedErrors}`);
-  console.log(`[snag-ingest] linked_by tag:              ${linkedBy}`);
+  console.log(`[snag-ingest] === INGEST COMPLETE${dryLabel} ===`);
+  console.log(`[snag-ingest] Rows matched to profiles:    ${counters.rowsProcessed}`);
+  console.log(`[snag-ingest] Rows skipped (not in users): ${counters.skippedNoProfile}`);
+  console.log('');
+  console.log(`[snag-ingest] x_handle:    would create ${counters.xHandleCreated}, idempotent ${counters.xHandleIdempotent}, conflict ${counters.xHandleConflict}`);
+  console.log(`[snag-ingest] discord_id:  would create ${counters.discordIdCreated}, idempotent ${counters.discordIdIdempotent}, conflict ${counters.discordIdConflict}`);
+  console.log(`[snag-ingest] email:        would create ${counters.emailCreated}, idempotent ${counters.emailIdempotent}, conflict ${counters.emailConflict}`);
+  console.log(`[snag-ingest] snag_user_id: would create ${counters.snagUserIdCreated}, idempotent ${counters.snagUserIdIdempotent}`);
+  console.log(`[snag-ingest] display_names updated:       ${counters.displayNamesUpdated}`);
+  console.log(`[snag-ingest] unexpected errors:           ${counters.unexpectedErrors}`);
+  console.log(`[snag-ingest] linked_by tag:               ${linkedBy}`);
 
   await pool.end();
   process.exit(counters.unexpectedErrors > 0 ? 1 : 0);
