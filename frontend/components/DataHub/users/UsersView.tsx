@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { TOKENS } from '@/lib/chartTokens';
 import { MagnifyingGlass } from '@phosphor-icons/react';
@@ -22,14 +22,15 @@ const inputStyle: React.CSSProperties = {
 
 const SOURCE_OPTIONS = ['all', 'organic', 'twitter', 'discord', 'telegram', 'kol', 'direct'];
 
-const SORT_OPTIONS: { value: NonNullable<UsersListFilters['sortBy']>; label: string }[] = [
-  { value: 'last_seen', label: 'Last seen' },
-  { value: 'volume', label: 'Volume' },
-  { value: 'holdings', label: 'Holdings' },
-  { value: 'x', label: 'X (Twitter)' },
-  { value: 'discord', label: 'Discord' },
-  { value: 'referral_source', label: 'Referral source' },
-];
+const SOCIAL_FILTER_OPTIONS = [
+  { value: 'any', label: 'All users' },
+  { value: 'x', label: 'Has X' },
+  { value: 'discord', label: 'Has Discord' },
+  { value: 'both', label: 'Has X + Discord' },
+  { value: 'none', label: 'No social' },
+] as const;
+
+type SocialFilter = (typeof SOCIAL_FILTER_OPTIONS)[number]['value'];
 
 export function UsersView() {
   const router = useRouter();
@@ -50,8 +51,26 @@ export function UsersView() {
 
   const [page, setPage] = useState(1);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(initialProfileId);
+  // Client-side social filter — transient, not URL-synced
+  const [socialFilter, setSocialFilter] = useState<SocialFilter>('any');
 
   const list = useUsersList(filters, page, PAGE_SIZE);
+
+  // Client-side social filter applied after API response
+  const filteredRows = useMemo(() => {
+    const rows = list.data?.rows ?? [];
+    if (socialFilter === 'any') return rows;
+    return rows.filter(r => {
+      if (socialFilter === 'x') return r.hasX;
+      if (socialFilter === 'discord') return r.hasDiscord;
+      if (socialFilter === 'both') return r.hasX && r.hasDiscord;
+      if (socialFilter === 'none') return !r.hasX && !r.hasDiscord;
+      return true;
+    });
+  }, [list.data?.rows, socialFilter]);
+
+  // When social filter is active, show filtered count; else show API total
+  const displayTotal = socialFilter === 'any' ? (list.data?.total ?? 0) : filteredRows.length;
 
   // Sync state -> URL (replace, no history pollution)
   useEffect(() => {
@@ -75,6 +94,7 @@ export function UsersView() {
   const handleResetFilters = useCallback(() => {
     setFilters({});
     setPage(1);
+    setSocialFilter('any');
   }, []);
 
   // Reset page when filters change
@@ -82,6 +102,22 @@ export function UsersView() {
     setFilters(updater);
     setPage(1);
   }, []);
+
+  // Sort handler — toggles direction if same column, starts desc on new column
+  const handleSort = useCallback((col: string) => {
+    handleFiltersChange(f => ({
+      ...f,
+      sortBy: col as NonNullable<UsersListFilters['sortBy']>,
+      sortDir: f.sortBy === col ? (f.sortDir === 'asc' ? 'desc' : 'asc') : 'desc',
+    }));
+  }, [handleFiltersChange]);
+
+  // Count of active filters for Reset button label
+  const activeFilterCount = [
+    !!filters.q,
+    !!filters.source,
+    socialFilter !== 'any',
+  ].filter(Boolean).length;
 
   return (
     <div style={{
@@ -97,7 +133,8 @@ export function UsersView() {
         display: 'flex', alignItems: 'center', gap: 12,
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
       }}>
-        <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
+        {/* Search — widened to maxWidth:360 per design doc */}
+        <div style={{ position: 'relative', flex: 1, maxWidth: 360 }}>
           <MagnifyingGlass
             size={14}
             weight="regular"
@@ -115,13 +152,14 @@ export function UsersView() {
           />
         </div>
 
+        {/* Source filter — kept at 200px */}
         <select
           value={filters.source ?? 'all'}
           onChange={e => handleFiltersChange(f => ({
             ...f,
             source: e.target.value === 'all' ? undefined : e.target.value,
           }))}
-          style={inputStyle}
+          style={{ ...inputStyle, width: 200 }}
         >
           {SOURCE_OPTIONS.map(s => (
             <option key={s} value={s}>
@@ -130,34 +168,53 @@ export function UsersView() {
           ))}
         </select>
 
+        {/* Has Social quick-filter — NEW, 160px, client-side only */}
         <select
-          value={filters.sortBy ?? 'last_seen'}
-          onChange={e => handleFiltersChange(f => ({ ...f, sortBy: e.target.value as NonNullable<UsersListFilters['sortBy']> }))}
-          style={inputStyle}
-          aria-label="Sort by"
+          value={socialFilter}
+          onChange={e => setSocialFilter(e.target.value as SocialFilter)}
+          style={{ ...inputStyle, width: 160 }}
+          aria-label="Filter by social connection"
         >
-          {SORT_OPTIONS.map(o => (
-            <option key={o.value} value={o.value}>Sort: {o.label}</option>
+          {SOCIAL_FILTER_OPTIONS.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
 
-        <button
-          onClick={() => handleFiltersChange(f => ({ ...f, sortDir: f.sortDir === 'asc' ? 'desc' : 'asc' }))}
-          style={{ ...inputStyle, cursor: 'pointer', padding: '8px 10px', fontWeight: 800 }}
-          aria-label={`Sort ${filters.sortDir === 'asc' ? 'ascending' : 'descending'}`}
-        >
-          {filters.sortDir === 'asc' ? '↑' : '↓'}
-        </button>
+        {/* Reset button — includes socialFilter in active count */}
+        {activeFilterCount > 0 && (
+          <button
+            onClick={handleResetFilters}
+            style={{
+              ...inputStyle,
+              cursor: 'pointer',
+              marginLeft: 'auto',
+              color: TOKENS.accent,
+              fontWeight: 700,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Reset ({activeFilterCount})
+          </button>
+        )}
 
-        <div style={{ marginLeft: 'auto', fontSize: 11, color: TOKENS.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-          {list.data ? (
+        {/* Profile count */}
+        <div style={{
+          marginLeft: activeFilterCount > 0 ? 0 : 'auto',
+          fontSize: 11,
+          color: TOKENS.textMuted,
+          fontVariantNumeric: 'tabular-nums',
+          whiteSpace: 'nowrap',
+        }}>
+          {list.loading && !list.data ? (
+            'Loading…'
+          ) : list.data ? (
             <>
               <span style={{ color: TOKENS.textPrimary, fontWeight: 800 }}>
-                {list.data.total.toLocaleString()}
+                {displayTotal.toLocaleString()}
               </span>{' '}
-              profiles
+              {socialFilter !== 'any' ? 'shown (filtered)' : 'profiles'}
             </>
-          ) : list.loading ? 'Loading…' : '—'}
+          ) : '—'}
         </div>
       </div>
 
@@ -168,8 +225,8 @@ export function UsersView() {
       }}>
         {/* Left: list */}
         <UserListPane
-          rows={list.data?.rows ?? []}
-          total={list.data?.total ?? 0}
+          rows={filteredRows}
+          total={displayTotal}
           page={page}
           pageSize={PAGE_SIZE}
           loading={list.loading}
@@ -179,6 +236,9 @@ export function UsersView() {
           onPageChange={setPage}
           onResetFilters={handleResetFilters}
           onRetry={list.refetch}
+          sortBy={filters.sortBy ?? 'last_seen'}
+          sortDir={filters.sortDir ?? 'desc'}
+          onSort={handleSort}
         />
 
         {/* Phosphor scanline divider */}
