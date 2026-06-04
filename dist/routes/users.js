@@ -18,9 +18,15 @@ const VALID_IDENTITY_TYPES = [
     'wallet', 'ga_client_id', 'snag_user_id', 'x_handle', 'discord_id', 'telegram_id', 'email',
 ];
 const VALID_CONFIDENCE = ['deterministic', 'probabilistic', 'manual'];
+const VALID_SORT_KEYS = ['last_seen', 'volume', 'holdings', 'x', 'discord', 'referral_source'];
 // GET /api/users — paginated list
 router.get('/', async (req, res) => {
     try {
+        const sortByRaw = typeof req.query.sortBy === 'string' ? req.query.sortBy : undefined;
+        const sortDirRaw = typeof req.query.sortDir === 'string' ? req.query.sortDir : undefined;
+        const sortBy = (sortByRaw && VALID_SORT_KEYS.includes(sortByRaw))
+            ? sortByRaw : undefined;
+        const sortDir = sortDirRaw === 'asc' || sortDirRaw === 'desc' ? sortDirRaw : undefined;
         const result = await (0, identityService_1.searchProfiles)({
             page: req.query.page ? Number(req.query.page) : undefined,
             pageSize: req.query.pageSize ? Number(req.query.pageSize) : undefined,
@@ -29,6 +35,8 @@ router.get('/', async (req, res) => {
             walletSizeMin: req.query.walletSizeMin ? Number(req.query.walletSizeMin) : undefined,
             activitySince: typeof req.query.activitySince === 'string' ? req.query.activitySince : undefined,
             q: typeof req.query.q === 'string' ? req.query.q : undefined,
+            sortBy,
+            sortDir,
         });
         res.json(result);
     }

@@ -3,15 +3,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import { List } from 'react-window';
 import { ArrowUp, ArrowDown } from '@phosphor-icons/react';
 import { TOKENS, MOTION } from '@/lib/chartTokens';
-import { UserListRow } from './UserListRow';
+import { UserListRow, GRID_COLUMNS } from './UserListRow';
 import { EmptyState } from '../primitives/EmptyState';
 import { CaretLeft, CaretRight, MagnifyingGlass } from '@phosphor-icons/react';
 import type { ProfileSummary } from '@/hooks/useUsersList';
 
 const ROW_HEIGHT = 56;
 
-// Grid template shared by header and rows — single source of truth
-const GRID_TEMPLATE = '148px 96px 76px 64px 24px 24px 24px 28px';
+// ─── Grid template — imported from UserListRow (single source of truth) ──────
+// UserListPane re-exports GRID_COLUMNS so consumers can import from either file.
+export { GRID_COLUMNS };
 const GRID_GAP = 10;
 
 // ─── SortableHeader ───────────────────────────────────────────────────────────
@@ -21,7 +22,7 @@ interface SortableHeaderColumn {
   label: string;
   width: string;
   align?: 'left' | 'right' | 'center';
-  sortKey?: 'last_seen' | 'volume' | 'x' | 'discord' | 'wallet_alpha';
+  sortKey?: 'last_seen' | 'volume' | 'holdings' | 'x' | 'discord';
 }
 
 interface SortableHeaderProps {
@@ -46,7 +47,7 @@ function SortableHeader({ columns, activeSortKey, activeSortDir, onSort }: Sorta
           height: 36,
           padding: '0 14px 0 12px',
           display: 'grid',
-          gridTemplateColumns: GRID_TEMPLATE,
+          gridTemplateColumns: GRID_COLUMNS,
           columnGap: GRID_GAP,
           alignItems: 'center',
           background: TOKENS.panel,
@@ -65,9 +66,7 @@ function SortableHeader({ columns, activeSortKey, activeSortDir, onSort }: Sorta
             userSelect: 'none',
           };
 
-          // WALLET: design calls for sortable (wallet_alpha) but backend safelist
-          // not yet updated — render as static span until backend follow-up.
-          // Any column without sortKey gets a static span.
+          // Columns without sortKey render as static spans (non-interactive)
           if (!col.sortKey) {
             return (
               <span
@@ -117,16 +116,22 @@ function SortableHeader({ columns, activeSortKey, activeSortDir, onSort }: Sorta
   );
 }
 
-// Column definitions — WALLET has sortKey omitted (backend dep — static for now)
+// Column definitions — 10 columns matching the wider-pane spec.
+// WALLET and NAME: no sortKey → static spans.
+// FIRST SEEN: no sortKey → static span (first_seen sort not in backend safelist yet).
+// TG: no sortKey → static span (no backend data).
+// STITCH: no sortKey → static span (dot column, label intentionally empty).
 const HEADER_COLUMNS: SortableHeaderColumn[] = [
-  { key: 'wallet',    label: 'Wallet',    width: '148px', align: 'left' },
-  { key: 'name',      label: 'Name',      width: '96px',  align: 'left' },
-  { key: 'volume',    label: 'Volume',    width: '76px',  align: 'right',  sortKey: 'volume' },
-  { key: 'last_seen', label: 'Last Seen', width: '64px',  align: 'right',  sortKey: 'last_seen' },
-  { key: 'x',        label: 'X',         width: '24px',  align: 'center', sortKey: 'x' },
-  { key: 'discord',  label: '◆',         width: '24px',  align: 'center', sortKey: 'discord' },
-  { key: 'tg',       label: 'TG',        width: '24px',  align: 'center' },
-  { key: 'stitch',   label: '',          width: '28px',  align: 'center' },
+  { key: 'wallet',      label: 'Wallet',     width: '240px', align: 'left' },
+  { key: 'name',        label: 'Name',       width: '160px', align: 'left' },
+  { key: 'volume',      label: 'Volume',     width: '92px',  align: 'right',  sortKey: 'volume' },
+  { key: 'last_seen',   label: 'Last Seen',  width: '80px',  align: 'right',  sortKey: 'last_seen' },
+  { key: 'first_seen',  label: 'First Seen', width: '80px',  align: 'right' },
+  { key: 'holdings',    label: 'Hold',       width: '56px',  align: 'right',  sortKey: 'holdings' },
+  { key: 'x',          label: 'X',          width: '28px',  align: 'center', sortKey: 'x' },
+  { key: 'discord',    label: '◆',          width: '28px',  align: 'center', sortKey: 'discord' },
+  { key: 'tg',         label: 'TG',         width: '28px',  align: 'center' },
+  { key: 'stitch',     label: '',           width: '32px',  align: 'center' },
 ];
 
 export interface UserListPaneProps {
@@ -147,8 +152,7 @@ export interface UserListPaneProps {
   onSort?: (key: string) => void;
 }
 
-// react-window v2 rowProps type — cannot contain ariaAttributes, index, or style
-// These are the extra props passed through to rowComponent beyond the injected ones
+// react-window v2 rowProps type — extra props beyond index/style/ariaAttributes
 type RowExtraProps = {
   rows: ProfileSummary[];
   selectedId: string | null;
@@ -216,11 +220,13 @@ function SkeletonRows() {
     <div>
       <style>{`@keyframes users-skeleton-shimmer { 0% { opacity: 0.3 } 50% { opacity: 0.5 } 100% { opacity: 0.3 } }`}</style>
       {Array.from({ length: 8 }, (_, i) => (
-        <div key={i} style={{ height: ROW_HEIGHT, padding: '0 14px 0 12px', display: 'grid', gridTemplateColumns: GRID_TEMPLATE, columnGap: GRID_GAP, alignItems: 'center', borderBottom: `1px solid ${TOKENS.chartGrid}` }}>
+        <div key={i} style={{ height: ROW_HEIGHT, padding: '0 14px 0 12px', display: 'grid', gridTemplateColumns: GRID_COLUMNS, columnGap: GRID_GAP, alignItems: 'center', borderBottom: `1px solid ${TOKENS.chartGrid}` }}>
           <div style={{ height: 12, width: '80%', background: 'rgba(255,255,255,0.04)', borderRadius: 4, animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
           <div style={{ height: 10, width: '60%', background: 'rgba(255,255,255,0.04)', borderRadius: 4, animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
           <div style={{ height: 12, width: '70%', background: 'rgba(255,255,255,0.04)', borderRadius: 4, animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
           <div style={{ height: 10, width: '50%', background: 'rgba(255,255,255,0.04)', borderRadius: 4, animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
+          <div style={{ height: 10, width: '50%', background: 'rgba(255,255,255,0.04)', borderRadius: 4, animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
+          <div style={{ height: 10, width: '40%', background: 'rgba(255,255,255,0.04)', borderRadius: 4, animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
@@ -299,7 +305,7 @@ export function UserListPane({
       background: TOKENS.panel, border: `1px solid ${TOKENS.accentBorder}`,
       borderRadius: 16, backdropFilter: 'blur(12px)', overflow: 'hidden',
     }}>
-      {/* aria-live region for sort change announcements */}
+      {/* aria-live region for sort change announcements (includes Holdings) */}
       <span
         aria-live="polite"
         style={{

@@ -51,14 +51,20 @@ export interface ProfileWithLinks extends Profile {
     links: IdentityLink[];
     lifetimeStats?: LifetimeStats;
 }
+export type SortKey = 'last_seen' | 'volume' | 'holdings' | 'x' | 'discord' | 'referral_source';
+export type SortDir = 'asc' | 'desc';
 export interface ProfileSummary {
     profileId: string;
     primaryWallet: string;
     displayName: string | null;
+    firstSeenAt: string;
     lastSeenAt: string;
     firstUtmSource: string | null;
     stitchedPct: number;
     lifetimeVolumeUSD: number;
+    holdings: number;
+    hasX: boolean;
+    hasDiscord: boolean;
 }
 export interface ProfileFilters {
     page?: number;
@@ -68,6 +74,8 @@ export interface ProfileFilters {
     walletSizeMin?: number;
     activitySince?: string;
     q?: string;
+    sortBy?: SortKey;
+    sortDir?: SortDir;
 }
 export interface RecordEventInput {
     event_name: string;

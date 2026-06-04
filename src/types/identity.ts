@@ -75,6 +75,7 @@ export interface ProfileSummary {
   profileId: string;
   primaryWallet: string;
   displayName: string | null;
+  firstSeenAt: string;                // ISO timestamp from user_profiles.first_seen_at
   lastSeenAt: string;
   firstUtmSource: string | null;
   stitchedPct: number;                // 0-100 — derived from links count vs ideal-coverage
