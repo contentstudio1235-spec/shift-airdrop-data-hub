@@ -22,6 +22,7 @@ const makeRow = (overrides: Partial<ProfileSummary> = {}): ProfileSummary => ({
   profileId: `prof-${Math.random()}`,
   primaryWallet: 'Ab3fXYZ12345678901234567890123456789012345',
   displayName: null,
+  firstSeenAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(),
   lastSeenAt: new Date().toISOString(),
   firstUtmSource: null,
   stitchedPct: 0,

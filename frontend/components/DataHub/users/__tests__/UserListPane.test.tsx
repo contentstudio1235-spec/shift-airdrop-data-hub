@@ -16,6 +16,7 @@ const makeRow = (overrides: Partial<ProfileSummary> = {}): ProfileSummary => ({
   profileId: 'prof-001',
   primaryWallet: 'Ab3fXYZ12345678901234567890123456789012345',
   displayName: 'Alice',
+  firstSeenAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
   lastSeenAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
   firstUtmSource: 'twitter',
   stitchedPct: 80,

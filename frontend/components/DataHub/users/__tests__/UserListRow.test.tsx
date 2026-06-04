@@ -7,6 +7,7 @@ const BASE_ROW: ProfileSummary = {
   profileId: 'prof-001',
   primaryWallet: 'Ab3fXYZ12345678901234567890123456789012345',
   displayName: 'TestUser',
+  firstSeenAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), // 30d ago
   lastSeenAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2h ago
   firstUtmSource: 'twitter',
   stitchedPct: 75,

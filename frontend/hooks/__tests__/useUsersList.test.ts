@@ -8,8 +8,8 @@ vi.mock('@/lib/api');
 const sampleResponse = {
   rows: [{
     profileId: 'p-1', primaryWallet: 'AbCd1234', displayName: null,
-    lastSeenAt: '2026-06-03T00:00:00Z', firstUtmSource: 'twitter',
-    stitchedPct: 95, lifetimeVolumeUSD: 4200,
+    firstSeenAt: '2026-01-01T00:00:00Z', lastSeenAt: '2026-06-03T00:00:00Z',
+    firstUtmSource: 'twitter', stitchedPct: 95, lifetimeVolumeUSD: 4200,
     holdings: 2, hasX: true, hasDiscord: false,
   }],
   total: 1, page: 1, pageSize: 50,

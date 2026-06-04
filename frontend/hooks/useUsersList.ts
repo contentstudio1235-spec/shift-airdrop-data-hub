@@ -16,6 +16,7 @@ export interface ProfileSummary {
   profileId: string;
   primaryWallet: string;
   displayName: string | null;
+  firstSeenAt: string;
   lastSeenAt: string;
   firstUtmSource: string | null;
   stitchedPct: number;
