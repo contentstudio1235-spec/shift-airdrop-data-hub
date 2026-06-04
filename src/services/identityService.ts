@@ -380,6 +380,7 @@ export async function searchProfiles(
       p.profile_id,
       p.primary_wallet,
       p.display_name,
+      p.first_seen_at,
       p.last_seen_at,
       p.first_utm_source,
       (COUNT(DISTINCT il.identity_type) * 100.0 / 7.0) AS stitched_pct,
@@ -404,6 +405,7 @@ export async function searchProfiles(
     profile_id: string;
     primary_wallet: string;
     display_name: string | null;
+    first_seen_at: string;
     last_seen_at: string;
     first_utm_source: string | null;
     stitched_pct: string;
@@ -429,6 +431,7 @@ export async function searchProfiles(
       profileId: r.profile_id,
       primaryWallet: r.primary_wallet,
       displayName: r.display_name,
+      firstSeenAt: r.first_seen_at,
       lastSeenAt: r.last_seen_at,
       firstUtmSource: r.first_utm_source,
       stitchedPct: Math.round(Number(r.stitched_pct) * 10) / 10,

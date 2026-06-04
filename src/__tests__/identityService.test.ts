@@ -236,6 +236,15 @@ describe('searchProfiles', () => {
     const params = qSpy.mock.calls[0][1] as unknown[];
     expect(params).toContain('twitter');
   });
+
+  it('includes firstSeenAt in returned rows', async () => {
+    vi.spyOn(db, 'query').mockResolvedValueOnce([
+      { profile_id: 'p1', primary_wallet: 'WAL', display_name: null, last_seen_at: '2026-06-04', first_seen_at: '2026-01-01', first_utm_source: null, stitched_pct: '50', lifetime_volume_usd: '0', holdings: 0, has_x: false, has_discord: false },
+    ] as any).mockResolvedValueOnce([{ total: '1' }] as any);
+    vi.spyOn(db, 'queryOne').mockResolvedValueOnce({ total: '1' } as any);
+    const result = await searchProfiles({});
+    expect(result.rows[0].firstSeenAt).toBe('2026-01-01');
+  });
 });
 
 describe('searchProfiles sort', () => {
