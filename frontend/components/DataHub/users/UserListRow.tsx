@@ -8,7 +8,7 @@ import type { ProfileSummary } from '@/hooks/useUsersList';
 // ─── Grid template — single source of truth ──────────────────────────────────
 // Exported so UserListPane can import it — ensures header, row, and skeleton
 // always use identical column widths and never drift.
-export const GRID_COLUMNS = '240px 160px 92px 80px 80px 56px 28px 28px 28px 32px';
+export const GRID_COLUMNS = '224px 148px 92px 92px 80px 76px 56px 28px 28px 28px 28px';
 
 export interface UserListRowProps {
   row: ProfileSummary;
@@ -69,7 +69,7 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
         {row.displayName ?? '—'}
       </span>
 
-      {/* 3: VOLUME — 92px, right-aligned, accent if >0, textFaint if 0 */}
+      {/* 3: VOLUME — 92px, right-aligned, accent if >0, textFaint if 0 (cumulative lifetime trading) */}
       <span style={{
         textAlign: 'right',
         fontSize: 13,
@@ -81,7 +81,19 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
         {fmtUSD(row.lifetimeVolumeUSD)}
       </span>
 
-      {/* 4: LAST SEEN — 80px, right-aligned, 11px textFaint */}
+      {/* 4: VALUE — 92px, right-aligned, accent if >0, textFaint if 0 (current open positions sum) */}
+      <span style={{
+        textAlign: 'right',
+        fontSize: 13,
+        fontWeight: 800,
+        color: row.holdingsValueUSD > 0 ? TOKENS.accent : TOKENS.textFaint,
+        letterSpacing: '-0.01em',
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        {fmtUSD(row.holdingsValueUSD)}
+      </span>
+
+      {/* 5: LAST SEEN — 80px, right-aligned, 11px textFaint */}
       <span style={{
         textAlign: 'right',
         fontSize: 11,

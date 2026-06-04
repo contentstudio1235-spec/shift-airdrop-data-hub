@@ -312,6 +312,7 @@ const SORT_EXPR: Record<SortKey, string> = {
   last_seen: 'p.last_seen_at',
   volume: 'COALESCE(SUM(pos.position_size_usd), 0)',
   holdings: "COUNT(DISTINCT pos.id) FILTER (WHERE pos.status = 'open')",
+  holdings_value: "COALESCE(SUM(pos.position_size_usd) FILTER (WHERE pos.status = 'open'), 0)",
   x: 'COUNT(DISTINCT ilx.id)',
   discord: 'COUNT(DISTINCT ild.id)',
   referral_source: `CASE
@@ -320,7 +321,7 @@ const SORT_EXPR: Record<SortKey, string> = {
   END`,
 };
 
-const VALID_SORT_KEYS = new Set<SortKey>(['last_seen', 'volume', 'holdings', 'x', 'discord', 'referral_source']);
+const VALID_SORT_KEYS = new Set<SortKey>(['last_seen', 'volume', 'holdings', 'holdings_value', 'x', 'discord', 'referral_source']);
 
 export async function searchProfiles(
   filters: ProfileFilters,
@@ -385,6 +386,7 @@ export async function searchProfiles(
       p.first_utm_source,
       (COUNT(DISTINCT il.identity_type) * 100.0 / 7.0) AS stitched_pct,
       COALESCE(SUM(pos.position_size_usd), 0) AS lifetime_volume_usd,
+      COALESCE(SUM(pos.position_size_usd) FILTER (WHERE pos.status = 'open'), 0) AS holdings_value_usd,
       (COUNT(DISTINCT pos.id) FILTER (WHERE pos.status = 'open'))::int AS holdings,
       (COUNT(DISTINCT ilx.id) > 0) AS has_x,
       (COUNT(DISTINCT ild.id) > 0) AS has_discord
@@ -410,6 +412,7 @@ export async function searchProfiles(
     first_utm_source: string | null;
     stitched_pct: string;
     lifetime_volume_usd: string;
+    holdings_value_usd: string;
     holdings: string;
     has_x: boolean;
     has_discord: boolean;
@@ -436,6 +439,7 @@ export async function searchProfiles(
       firstUtmSource: r.first_utm_source,
       stitchedPct: Math.round(Number(r.stitched_pct) * 10) / 10,
       lifetimeVolumeUSD: Number(r.lifetime_volume_usd),
+      holdingsValueUSD: Number(r.holdings_value_usd),
       holdings: Number(r.holdings),
       hasX: r.has_x,
       hasDiscord: r.has_discord,

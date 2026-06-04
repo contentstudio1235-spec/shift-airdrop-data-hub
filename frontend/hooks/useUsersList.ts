@@ -8,7 +8,7 @@ export interface UsersListFilters {
   stitchPctMin?: number;
   walletSizeMin?: number;
   activitySince?: string;
-  sortBy?: 'last_seen' | 'volume' | 'holdings' | 'x' | 'discord' | 'referral_source';
+  sortBy?: 'last_seen' | 'volume' | 'holdings' | 'holdings_value' | 'x' | 'discord' | 'referral_source';
   sortDir?: 'asc' | 'desc';
 }
 
@@ -21,6 +21,7 @@ export interface ProfileSummary {
   firstUtmSource: string | null;
   stitchedPct: number;
   lifetimeVolumeUSD: number;
+  holdingsValueUSD: number;
   holdings: number;
   hasX: boolean;
   hasDiscord: boolean;

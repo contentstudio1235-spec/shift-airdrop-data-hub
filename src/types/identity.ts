@@ -68,7 +68,7 @@ export interface ProfileWithLinks extends Profile {
   lifetimeStats?: LifetimeStats;
 }
 
-export type SortKey = 'last_seen' | 'volume' | 'holdings' | 'x' | 'discord' | 'referral_source';
+export type SortKey = 'last_seen' | 'volume' | 'holdings' | 'holdings_value' | 'x' | 'discord' | 'referral_source';
 export type SortDir = 'asc' | 'desc';
 
 export interface ProfileSummary {
@@ -80,6 +80,7 @@ export interface ProfileSummary {
   firstUtmSource: string | null;
   stitchedPct: number;                // 0-100 — derived from links count vs ideal-coverage
   lifetimeVolumeUSD: number;          // pre-aggregated for list display
+  holdingsValueUSD: number;           // sum of position_size_usd where status='open' — current capital at risk
   holdings: number;                   // count of open positions
   hasX: boolean;                      // has linked x_handle identity
   hasDiscord: boolean;                // has linked discord_id identity

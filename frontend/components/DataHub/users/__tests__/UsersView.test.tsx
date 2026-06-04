@@ -27,6 +27,7 @@ const makeRow = (overrides: Partial<ProfileSummary> = {}): ProfileSummary => ({
   firstUtmSource: null,
   stitchedPct: 0,
   lifetimeVolumeUSD: 0,
+  holdingsValueUSD: 0,
   holdings: 0,
   hasX: false,
   hasDiscord: false,

@@ -10,7 +10,7 @@ const sampleResponse = {
     profileId: 'p-1', primaryWallet: 'AbCd1234', displayName: null,
     firstSeenAt: '2026-01-01T00:00:00Z', lastSeenAt: '2026-06-03T00:00:00Z',
     firstUtmSource: 'twitter', stitchedPct: 95, lifetimeVolumeUSD: 4200,
-    holdings: 2, hasX: true, hasDiscord: false,
+    holdingsValueUSD: 0, holdings: 2, hasX: true, hasDiscord: false,
   }],
   total: 1, page: 1, pageSize: 50,
 };
