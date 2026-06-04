@@ -221,7 +221,7 @@ export function UsersView() {
       {/* 2-pane grid */}
       <div style={{
         flex: 1, minHeight: 0,
-        display: 'grid', gridTemplateColumns: '40% 1px 1fr', gap: 16,
+        display: 'grid', gridTemplateColumns: '70% 1px 1fr', gap: 16,
       }}>
         {/* Left: list */}
         <UserListPane
