@@ -43,14 +43,15 @@ const DEFAULT_PROPS = {
 };
 
 describe('UserListPane — SortableHeader', () => {
-  it('renders 8 column labels in the pinned header', () => {
+  it('renders 10 column labels in the pinned header', () => {
     const { container } = render(<UserListPane {...DEFAULT_PROPS} />);
-    // Check for column label text
     const text = container.textContent ?? '';
     expect(text).toContain('Wallet');
     expect(text).toContain('Name');
     expect(text).toContain('Volume');
+    expect(text).toContain('First Seen');
     expect(text).toContain('Last Seen');
+    expect(text).toContain('Hold');
     expect(text).toContain('X');
     expect(text).toContain('TG');
   });
@@ -58,7 +59,6 @@ describe('UserListPane — SortableHeader', () => {
   it('VOLUME header button fires onSort("volume") when clicked', () => {
     const onSort = vi.fn();
     const { container } = render(<UserListPane {...DEFAULT_PROPS} onSort={onSort} />);
-    // Find a button with "Volume" text
     const buttons = Array.from(container.querySelectorAll('button'));
     const volumeBtn = buttons.find(b => b.textContent?.trim() === 'Volume');
     expect(volumeBtn).toBeTruthy();
@@ -70,7 +70,6 @@ describe('UserListPane — SortableHeader', () => {
     const { container } = render(
       <UserListPane {...DEFAULT_PROPS} sortBy="volume" sortDir="asc" />
     );
-    // The volume button should exist and show ascending aria-sort
     const buttons = Array.from(container.querySelectorAll('button'));
     const volumeBtn = buttons.find(b => b.textContent?.includes('Volume'));
     expect(volumeBtn).toBeTruthy();
@@ -99,21 +98,45 @@ describe('UserListPane — SortableHeader', () => {
   it('WALLET and NAME columns render as static spans (not buttons)', () => {
     const { container } = render(<UserListPane {...DEFAULT_PROPS} />);
     const buttons = Array.from(container.querySelectorAll('button'));
-    // Wallet and Name should not appear as buttons
     const walletBtn = buttons.find(b => b.textContent?.trim() === 'Wallet');
     const nameBtn = buttons.find(b => b.textContent?.trim() === 'Name');
     expect(walletBtn).toBeUndefined();
     expect(nameBtn).toBeUndefined();
   });
 
+  it('HOLDINGS header is a sortable button', () => {
+    const onSort = vi.fn();
+    const { container } = render(<UserListPane {...DEFAULT_PROPS} onSort={onSort} />);
+    const buttons = Array.from(container.querySelectorAll('button'));
+    const holdBtn = buttons.find(b => b.textContent?.includes('Hold'));
+    expect(holdBtn).toBeTruthy();
+    fireEvent.click(holdBtn!);
+    expect(onSort).toHaveBeenCalledWith('holdings');
+  });
+
+  it('FIRST SEEN header renders as a static span (not sortable)', () => {
+    const { container } = render(<UserListPane {...DEFAULT_PROPS} />);
+    const buttons = Array.from(container.querySelectorAll('button'));
+    const firstSeenBtn = buttons.find(b => b.textContent?.includes('First Seen'));
+    expect(firstSeenBtn).toBeUndefined();
+    // Should be a span
+    const text = container.textContent ?? '';
+    expect(text).toContain('First Seen');
+  });
+
+  it('TG header renders as a static span (not sortable)', () => {
+    const { container } = render(<UserListPane {...DEFAULT_PROPS} />);
+    const buttons = Array.from(container.querySelectorAll('button'));
+    const tgBtn = buttons.find(b => b.textContent?.trim() === 'TG');
+    expect(tgBtn).toBeUndefined();
+    const text = container.textContent ?? '';
+    expect(text).toContain('TG');
+  });
+
   it('renders loading skeleton when loading=true and rows=[]', () => {
     const { container } = render(
       <UserListPane {...DEFAULT_PROPS} rows={[]} loading={true} total={0} />
     );
-    // Skeleton rows use animation style
-    const animated = container.querySelectorAll('[style*="shimmer"]');
-    // At least some shimmer elements exist (checking via inline animation)
-    // Alternatively check for shimmer style string in container innerHTML
     expect(container.innerHTML).toContain('shimmer');
   });
 });
