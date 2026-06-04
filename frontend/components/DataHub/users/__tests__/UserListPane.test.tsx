@@ -21,6 +21,7 @@ const makeRow = (overrides: Partial<ProfileSummary> = {}): ProfileSummary => ({
   firstUtmSource: 'twitter',
   stitchedPct: 80,
   lifetimeVolumeUSD: 500,
+  holdingsValueUSD: 0,
   holdings: 2,
   hasX: true,
   hasDiscord: false,
@@ -43,12 +44,13 @@ const DEFAULT_PROPS = {
 };
 
 describe('UserListPane — SortableHeader', () => {
-  it('renders 10 column labels in the pinned header', () => {
+  it('renders 11 column labels in the pinned header (with VALUE)', () => {
     const { container } = render(<UserListPane {...DEFAULT_PROPS} />);
     const text = container.textContent ?? '';
     expect(text).toContain('Wallet');
     expect(text).toContain('Name');
     expect(text).toContain('Volume');
+    expect(text).toContain('Value');
     expect(text).toContain('First Seen');
     expect(text).toContain('Last Seen');
     expect(text).toContain('Hold');

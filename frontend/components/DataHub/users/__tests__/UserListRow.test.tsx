@@ -12,6 +12,7 @@ const BASE_ROW: ProfileSummary = {
   firstUtmSource: 'twitter',
   stitchedPct: 75,
   lifetimeVolumeUSD: 1250.5,
+  holdingsValueUSD: 450,
   holdings: 3,
   hasX: true,
   hasDiscord: false,

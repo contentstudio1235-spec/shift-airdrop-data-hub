@@ -22,7 +22,7 @@ interface SortableHeaderColumn {
   label: string;
   width: string;
   align?: 'left' | 'right' | 'center';
-  sortKey?: 'last_seen' | 'volume' | 'holdings' | 'x' | 'discord';
+  sortKey?: 'last_seen' | 'volume' | 'holdings' | 'holdings_value' | 'x' | 'discord';
 }
 
 interface SortableHeaderProps {
@@ -122,16 +122,17 @@ function SortableHeader({ columns, activeSortKey, activeSortDir, onSort }: Sorta
 // TG: no sortKey → static span (no backend data).
 // STITCH: no sortKey → static span (dot column, label intentionally empty).
 const HEADER_COLUMNS: SortableHeaderColumn[] = [
-  { key: 'wallet',      label: 'Wallet',     width: '240px', align: 'left' },
-  { key: 'name',        label: 'Name',       width: '160px', align: 'left' },
+  { key: 'wallet',      label: 'Wallet',     width: '224px', align: 'left' },
+  { key: 'name',        label: 'Name',       width: '148px', align: 'left' },
   { key: 'volume',      label: 'Volume',     width: '92px',  align: 'right',  sortKey: 'volume' },
+  { key: 'value',       label: 'Value',      width: '92px',  align: 'right',  sortKey: 'holdings_value' },
   { key: 'last_seen',   label: 'Last Seen',  width: '80px',  align: 'right',  sortKey: 'last_seen' },
-  { key: 'first_seen',  label: 'First Seen', width: '80px',  align: 'right' },
+  { key: 'first_seen',  label: 'First Seen', width: '76px',  align: 'right' },
   { key: 'holdings',    label: 'Hold',       width: '56px',  align: 'right',  sortKey: 'holdings' },
   { key: 'x',          label: 'X',          width: '28px',  align: 'center', sortKey: 'x' },
   { key: 'discord',    label: '◆',          width: '28px',  align: 'center', sortKey: 'discord' },
   { key: 'tg',         label: 'TG',         width: '28px',  align: 'center' },
-  { key: 'stitch',     label: '',           width: '32px',  align: 'center' },
+  { key: 'stitch',     label: '',           width: '28px',  align: 'center' },
 ];
 
 export interface UserListPaneProps {
