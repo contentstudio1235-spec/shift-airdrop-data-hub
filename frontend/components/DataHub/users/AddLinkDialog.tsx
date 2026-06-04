@@ -6,16 +6,17 @@ import { DialogShell } from './DialogShell';
 import { useIdentityActions } from '@/hooks/useIdentityActions';
 import { ApiError } from '@/lib/api';
 
-type IdentityType = 'wallet' | 'ga_client_id' | 'snag_user_id' | 'social_x' | 'social_discord' | 'social_telegram';
+type IdentityType = 'wallet' | 'ga_client_id' | 'snag_user_id' | 'x_handle' | 'discord_id' | 'telegram_id' | 'email';
 type Confidence = 'deterministic' | 'probabilistic' | 'manual';
 
 const TYPE_OPTIONS: { value: IdentityType; label: string; placeholder: string; hint: string }[] = [
-  { value: 'wallet',         label: 'Wallet',          placeholder: '5xCFv...',                  hint: 'Solana base58 address (32-44 chars, case-sensitive)' },
-  { value: 'ga_client_id',   label: 'GA Client ID',    placeholder: 'GA1.2.1234567890',         hint: 'Google Analytics 4 client ID' },
-  { value: 'snag_user_id',   label: 'Snag User ID',    placeholder: 'snag_abc_...',             hint: 'Snag platform user identifier' },
-  { value: 'social_x',       label: 'X (Twitter)',     placeholder: '@username',                 hint: 'X (Twitter) handle without @' },
-  { value: 'social_discord', label: 'Discord',         placeholder: 'user#1234 or 18-digit ID', hint: 'Discord username or snowflake ID' },
-  { value: 'social_telegram',label: 'Telegram',        placeholder: '@username or chat_id',     hint: 'Telegram handle or numeric chat ID' },
+  { value: 'wallet',       label: 'Wallet',          placeholder: '5xCFv...',                  hint: 'Solana base58 address (32-44 chars, case-sensitive)' },
+  { value: 'ga_client_id', label: 'GA Client ID',    placeholder: 'GA1.2.1234567890',         hint: 'Google Analytics 4 client ID' },
+  { value: 'snag_user_id', label: 'Snag User ID',    placeholder: 'snag_abc_...',             hint: 'Snag platform user identifier' },
+  { value: 'x_handle',     label: 'X (Twitter)',     placeholder: '@username',                 hint: 'X (Twitter) handle without @' },
+  { value: 'discord_id',   label: 'Discord',         placeholder: 'user#1234 or 18-digit ID', hint: 'Discord username or snowflake ID' },
+  { value: 'telegram_id',  label: 'Telegram',        placeholder: '@username or chat_id',     hint: 'Telegram handle or numeric chat ID' },
+  { value: 'email',        label: 'Email',           placeholder: 'user@example.com',         hint: 'Email address (lowercase)' },
 ];
 
 const inputStyle: React.CSSProperties = {

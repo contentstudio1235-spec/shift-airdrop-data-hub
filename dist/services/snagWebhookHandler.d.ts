@@ -9,6 +9,8 @@ export declare class SnagWebhookHandler {
     handleWebhook(req: Request, res: Response): Promise<void>;
     private processEvent;
     private handleRuleCompleted;
+    private static readonly SOCIAL_EXTRACTORS;
+    private handleUserMetadata;
     private handleReferralCreated;
 }
 export declare const snagWebhookHandler: SnagWebhookHandler;

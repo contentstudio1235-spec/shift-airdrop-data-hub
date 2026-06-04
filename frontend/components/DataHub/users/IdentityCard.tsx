@@ -14,9 +14,9 @@ const IDENTITY_ICONS: Record<string, Icon> = {
   wallet: Wallet,
   ga_client_id: ChartLineUp,
   snag_user_id: Trophy,
-  social_x: TwitterLogo,
-  social_discord: DiscordLogo,
-  social_telegram: TelegramLogo,
+  x_handle: TwitterLogo,
+  discord_id: DiscordLogo,
+  telegram_id: TelegramLogo,
 };
 
 const CONFIDENCE_STYLE: Record<string, { color: string; label: string }> = {

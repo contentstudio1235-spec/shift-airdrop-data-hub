@@ -87,6 +87,10 @@ class SnagWebhookHandler {
             await this.handleReferralCreated(data || event);
             return;
         }
+        if (effectiveType === 'user.metadata.updated' || effectiveType === 'UserMetadata') {
+            await this.handleUserMetadata(data || event);
+            return;
+        }
         // Log unhandled events for debugging
         console.log(`[SnagWebhook] Unhandled event type: ${effectiveType}`);
     }
@@ -157,6 +161,62 @@ class SnagWebhookHandler {
         catch (err) {
             console.error('[snag] identity wiring failed', err);
             // Non-fatal — Snag event processing continues
+        }
+    }
+    // ── Social handle extractors ─────────────────────────────────────────────────
+    // Snag's UserMetadata event carries social handles as flat string fields on the
+    // payload (confirmed from Snag Stratus docs + Get Users API schema, 2026-06-04).
+    // Field names: twitterUser, discordUser, telegramUsername (note: different suffix).
+    static SOCIAL_EXTRACTORS = [
+        { type: 'x_handle', pluck: (d) => d?.twitterUser ?? undefined },
+        { type: 'discord_id', pluck: (d) => d?.discordUser ?? undefined },
+        { type: 'telegram_id', pluck: (d) => d?.telegramUsername ?? undefined },
+    ];
+    async handleUserMetadata(data) {
+        // Resolve wallet from either flat field or nested user object (Snag sends both shapes)
+        const walletAddress = data?.walletAddress || data?.wallet_address || data?.user?.walletAddress;
+        const snagUserId = data?.userId || data?.user_id || data?.user?.id;
+        if (!walletAddress && !snagUserId) {
+            console.warn('[snag/handleUserMetadata] No walletAddress or userId in UserMetadata event — skipping');
+            return;
+        }
+        let profile;
+        try {
+            if (walletAddress) {
+                profile = await (0, identityService_1.findOrCreateProfile)({ type: 'wallet', value: walletAddress }, 'system');
+            }
+            else {
+                // Fall back to looking up by snag_user_id when wallet is absent
+                profile = await (0, identityService_1.findOrCreateProfile)({ type: 'snag_user_id', value: snagUserId }, 'system');
+            }
+        }
+        catch (err) {
+            console.error('[snag/handleUserMetadata] findOrCreateProfile failed', err);
+            return;
+        }
+        for (const extractor of SnagWebhookHandler.SOCIAL_EXTRACTORS) {
+            const handle = extractor.pluck(data);
+            // Guard: must be a non-empty string within sane length; reject null/undefined/object
+            if (typeof handle !== 'string' || handle.length === 0 || handle.length > 128) {
+                continue;
+            }
+            try {
+                await (0, identityService_1.linkIdentity)(profile.profileId, extractor.type, handle, 'deterministic', { byActor: 'snag_webhook' });
+                console.log(`[snag/handleUserMetadata] linked ${extractor.type}=${handle} → profile ${profile.profileId}`);
+            }
+            catch (err) {
+                if (err instanceof identity_1.IdentityConflictError) {
+                    console.warn('[snag/handleUserMetadata] social identity conflict', {
+                        type: extractor.type,
+                        handle,
+                        existingProfileId: err.existingProfileId,
+                    });
+                }
+                else {
+                    console.error('[snag/handleUserMetadata] linkIdentity failed', { type: extractor.type, handle }, err);
+                }
+                // Never rethrow — a conflict on one social type must not abort the others
+            }
         }
     }
     async handleReferralCreated(data) {
