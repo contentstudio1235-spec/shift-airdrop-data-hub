@@ -150,7 +150,7 @@ describe('UserListRow', () => {
     expect(holdingsSpan?.style.fontWeight).toBe('800');
   });
 
-  it('renders holdings cell with "0" in textSecondary when holdings is 0', () => {
+  it('renders holdings cell with "0" in textFaint when holdings is 0', () => {
     const { container } = render(
       <UserListRow
         row={{ ...BASE_ROW, holdings: 0 }}
@@ -160,10 +160,11 @@ describe('UserListRow', () => {
       />
     );
     expect(container.textContent).toContain('0');
-    // TOKENS.textSecondary = '#9fb5aa' → rgb(159, 181, 170) in JSDOM
+    // Per Code Reviewer N3 fix: design doc spec line 70 says textFaint for 0 holdings.
+    // TOKENS.textFaint = '#3a7060' → rgb(58, 112, 96) in JSDOM
     const spans = Array.from(container.querySelectorAll('span'));
     const holdingsSpan = spans.find(s => s.textContent?.trim() === '0' && s.style.textAlign === 'right' && s.style.fontVariantNumeric === 'tabular-nums');
     expect(holdingsSpan).toBeTruthy();
-    expect(holdingsSpan?.style.color).toMatch(/rgb\(159,\s*181,\s*170\)/);
+    expect(holdingsSpan?.style.color).toMatch(/rgb\(58,\s*112,\s*96\)/);
   });
 });

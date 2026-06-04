@@ -81,17 +81,7 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
         {fmtUSD(row.lifetimeVolumeUSD)}
       </span>
 
-      {/* 4: FIRST SEEN — 80px, right-aligned, 11px textFaint */}
-      <span style={{
-        textAlign: 'right',
-        fontSize: 11,
-        fontWeight: 600,
-        color: TOKENS.textFaint,
-      }}>
-        {fmtRelativeTime(row.firstSeenAt)}
-      </span>
-
-      {/* 5: LAST SEEN — 80px, right-aligned, 11px textFaint */}
+      {/* 4: LAST SEEN — 80px, right-aligned, 11px textFaint */}
       <span style={{
         textAlign: 'right',
         fontSize: 11,
@@ -101,12 +91,22 @@ export function UserListRow({ row, isSelected, onClick, style }: UserListRowProp
         {fmtRelativeTime(row.lastSeenAt)}
       </span>
 
-      {/* 6: HOLDINGS — 56px, right-aligned, accent+bold when >0, textSecondary when 0 */}
+      {/* 5: FIRST SEEN — 80px, right-aligned, 11px textFaint */}
+      <span style={{
+        textAlign: 'right',
+        fontSize: 11,
+        fontWeight: 600,
+        color: TOKENS.textFaint,
+      }}>
+        {fmtRelativeTime(row.firstSeenAt)}
+      </span>
+
+      {/* 6: HOLDINGS — 56px, right-aligned, accent+bold when >0, textFaint when 0 (per design doc line 70) */}
       <span style={{
         textAlign: 'right',
         fontSize: 13,
         fontWeight: row.holdings > 0 ? 800 : 600,
-        color: row.holdings > 0 ? TOKENS.accent : TOKENS.textSecondary,
+        color: row.holdings > 0 ? TOKENS.accent : TOKENS.textFaint,
         fontVariantNumeric: 'tabular-nums',
       }}>
         {row.holdings.toLocaleString()}
