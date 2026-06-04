@@ -16,6 +16,12 @@ import {
   type TopCampaignRow,
   type AttributionCoverage,
 } from '@/hooks/useAttributionOverview';
+import { useWhaleOrigins } from '@/hooks/useWhaleOrigins';
+import { useKOLLeaderboard } from '@/hooks/useKOLLeaderboard';
+import { useWhaleStream } from '@/hooks/useWhaleStream';
+import { WhaleSankey } from '@/components/DataHub/attribution/WhaleSankey';
+import { KOLLeaderboard } from '@/components/DataHub/attribution/KOLLeaderboard';
+import { WhaleWatch } from '@/components/DataHub/attribution/WhaleWatch';
 
 const cardStyle: React.CSSProperties = {
   background: TOKENS.panel,
@@ -59,6 +65,9 @@ function formatSource(source: string): string {
 
 export function AttributionView() {
   const { data, loading, error, refetch } = useAttributionOverview();
+  const whaleOrigins = useWhaleOrigins();
+  const kol = useKOLLeaderboard({ limit: 50 });
+  const whaleStream = useWhaleStream({ bufferSize: 30 });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -81,6 +90,33 @@ export function AttributionView() {
           <CoverageCard coverage={data.coverage} computedAt={data.computedAt} />
         </div>
       )}
+
+      {/* Sprint 3 Row 2: Sankey */}
+      <WhaleSankey
+        data={whaleOrigins.data}
+        loading={whaleOrigins.loading}
+        error={whaleOrigins.error}
+      />
+
+      {/* Sprint 3 Row 3: KOL + WhaleWatch */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)',
+          gap: 16,
+        }}
+      >
+        <KOLLeaderboard
+          data={kol.data}
+          loading={kol.loading}
+          error={kol.error}
+        />
+        <WhaleWatch
+          events={whaleStream.events}
+          connected={whaleStream.connected}
+          error={whaleStream.error}
+        />
+      </div>
     </div>
   );
 }
