@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useFilters } from '@/hooks/useFilters';
 import { useFunnelData } from '@/hooks/useFunnelData';
 import { FUNNEL_DISPLAY, getStepBenchmark, type FunnelId } from '@/lib/funnelTaxonomy';
@@ -14,6 +14,7 @@ import { AnimatedFunnel, type FunnelStep } from '@/components/DataHub/funnels/An
 import { PerStepDrillDown } from '@/components/DataHub/funnels/PerStepDrillDown';
 import { ChartFrame } from '@/components/DataHub/primitives/ChartFrame';
 import { EmptyState } from '@/components/DataHub/primitives/EmptyState';
+import { TabHeader } from '@/components/DataHub/shared/TabHeader';
 
 interface FunnelResponse {
   funnelId: FunnelId;
@@ -30,6 +31,16 @@ export function FunnelsView() {
     filters,
   );
 
+  // Track when the last fetch resolved so the header can show "updated HH:MM:SS".
+  // Depend on stable scalars (step count + last step id) instead of the full
+  // data object so callers that hand fresh references don't loop.
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const stepCount = data?.steps?.length ?? null;
+  const lastStepId = data?.steps?.[data.steps.length - 1]?.id ?? null;
+  useEffect(() => {
+    if (stepCount !== null) setLastUpdated(new Date());
+  }, [stepCount, lastStepId]);
+
   const activeStepIdx = data?.steps?.findIndex(s => s.id === drillStepId) ?? -1;
   const activeStep = activeStepIdx >= 0 ? data!.steps[activeStepIdx] : null;
   const prevStep = activeStepIdx > 0 ? data!.steps[activeStepIdx - 1] : undefined;
@@ -37,6 +48,15 @@ export function FunnelsView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Row 0: Single-question header strip — sets context before any chart loads */}
+      <TabHeader
+        title="Funnels"
+        subtitle="Where do users drop off between landing and holding an RWA token? Conversion stages and per-source comparison."
+        lastUpdated={lastUpdated}
+        onRefresh={refetch}
+        loading={loading}
+      />
+
       {/* Row 1: Insight strip (full width) */}
       <InsightStrip filters={filters} />
 

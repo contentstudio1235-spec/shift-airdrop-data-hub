@@ -4,7 +4,6 @@ import {
   ChartBar,
   Megaphone,
   Gauge,
-  ArrowClockwise,
   Warning,
   CircleNotch,
 } from '@phosphor-icons/react';
@@ -22,6 +21,7 @@ import { useWhaleStream } from '@/hooks/useWhaleStream';
 import { WhaleSankey } from '@/components/DataHub/attribution/WhaleSankey';
 import { KOLLeaderboard } from '@/components/DataHub/attribution/KOLLeaderboard';
 import { WhaleWatch } from '@/components/DataHub/attribution/WhaleWatch';
+import { TabHeader } from '@/components/DataHub/shared/TabHeader';
 
 const cardStyle: React.CSSProperties = {
   background: TOKENS.panel,
@@ -71,7 +71,13 @@ export function AttributionView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <Header data={data} loading={loading} onRefresh={refetch} />
+      <TabHeader
+        title="Source Attribution"
+        subtitle={data?.note ?? 'UTM-first attribution. Stitching activated Sprint 2.3.'}
+        lastUpdated={data ? new Date(data.computedAt) : null}
+        onRefresh={refetch}
+        loading={loading}
+      />
 
       {error ? (
         <ErrorPanel message={error} onRetry={refetch} />
@@ -122,70 +128,6 @@ export function AttributionView() {
 }
 
 // ─── Header strip ─────────────────────────────────────────────────────────────
-
-function Header({
-  data,
-  loading,
-  onRefresh,
-}: {
-  data: { computedAt: string; dataQuality: string; note?: string } | null;
-  loading: boolean;
-  onRefresh: () => void;
-}) {
-  return (
-    <div
-      style={{
-        background: TOKENS.panel,
-        backdropFilter: `blur(${TOKENS.glassBlur})`,
-        border: `1px solid ${TOKENS.accentBorder}`,
-        borderRadius: 12,
-        padding: '14px 20px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 16,
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
-      }}
-    >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: TOKENS.textPrimary, letterSpacing: '-0.02em' }}>
-          Source Attribution
-        </div>
-        <div style={{ fontSize: 11, color: TOKENS.textMuted, marginTop: 2 }}>
-          {data?.note ?? 'UTM-first attribution. Stitching activated Sprint 2.3.'}
-        </div>
-      </div>
-      {data && (
-        <div style={{ fontSize: 11, color: TOKENS.textFaint, fontVariantNumeric: 'tabular-nums' }}>
-          updated {new Date(data.computedAt).toLocaleTimeString()}
-        </div>
-      )}
-      <button
-        onClick={onRefresh}
-        disabled={loading}
-        aria-label="Refresh"
-        style={{
-          background: 'transparent',
-          border: `1px solid ${TOKENS.accentBorder}`,
-          borderRadius: 8,
-          color: TOKENS.accent,
-          padding: '6px 10px',
-          cursor: loading ? 'not-allowed' : 'pointer',
-          opacity: loading ? 0.5 : 1,
-          fontFamily: 'inherit',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          fontSize: 11,
-          fontWeight: 700,
-          transition: `all ${MOTION.fast}`,
-        }}
-      >
-        <ArrowClockwise size={12} weight="bold" />
-        Refresh
-      </button>
-    </div>
-  );
-}
 
 // ─── Channels card ────────────────────────────────────────────────────────────
 
