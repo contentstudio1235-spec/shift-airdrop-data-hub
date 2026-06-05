@@ -34,6 +34,9 @@ const stream_1 = __importDefault(require("./routes/stream"));
 const users_1 = __importDefault(require("./routes/users"));
 const track_1 = __importDefault(require("./routes/track"));
 const pulse_1 = __importDefault(require("./routes/pulse"));
+const utm_1 = __importDefault(require("./routes/utm"));
+// Middleware
+const utmCapture_1 = require("./middleware/utmCapture");
 const app = (0, express_1.default)();
 // ── Middleware ──
 // Security headers
@@ -64,6 +67,18 @@ app.use('/api/webhooks', express_1.default.json({
 }));
 // Standard JSON parsing for other routes
 app.use(express_1.default.json());
+// ── UTM Capture (Phase A) ──
+// Mounted BEFORE user-landing routes so utm_* params on incoming requests
+// are normalized + validated and stashed on req.utmNormalized. No-op when
+// no utm_* params present. Failures never break the user flow.
+//
+// IMPORTANT: only user-facing endpoints get this. /api/dashboard is an admin
+// endpoint and has no user-attribution semantics — mounting the capture there
+// would just waste cycles and pollute utm_violations with noise from internal
+// dashboard polls. /api/airdrop covers POST /register, /api/track covers the
+// landing + wallet_connect beacons.
+app.use('/api/airdrop', (0, utmCapture_1.utmCapture)());
+app.use('/api/track', (0, utmCapture_1.utmCapture)());
 // ── Routes ──
 app.use('/api/webhooks', webhook_1.default);
 app.use('/api/dashboard', dashboard_1.default);
@@ -83,6 +98,7 @@ app.use('/api/stream', stream_1.default);
 app.use('/api/users', users_1.default);
 app.use('/api/track', track_1.default);
 app.use('/api/pulse', pulse_1.default);
+app.use('/api/utm', utm_1.default);
 // ── Data Hub Static Dashboard ──
 // Serves the SHIFT RWA Cross-Channel Data Hub frontend at /hub
 app.use('/hub', express_1.default.static(path_1.default.join(__dirname, '../public'), {

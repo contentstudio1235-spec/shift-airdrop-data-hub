@@ -170,4 +170,4 @@ export interface HubData {
   errors: Record<string, string>;
 }
 
-export type HubPage = 'overview' | 'markets' | 'analytics' | 'stitched' | 'portfolios' | 'admin';
+export type HubPage = 'overview' | 'markets' | 'analytics' | 'stitched' | 'portfolios' | 'admin' | 'utm';
