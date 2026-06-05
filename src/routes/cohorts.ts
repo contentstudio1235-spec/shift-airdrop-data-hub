@@ -1,6 +1,9 @@
 // src/routes/cohorts.ts
 import { Router, type Request, type Response } from 'express';
-import { computeCohortMatrix } from '../services/cohortService';
+import {
+  computeCohortMatrix,
+  getCohortsSnapshot,
+} from '../services/cohortService';
 import { parseQueryParams } from '../lib/queryParams';
 import type { CohortDim } from '../types/funnel';
 import { config } from '../config';
@@ -15,6 +18,25 @@ router.use((req: Request, res: Response, next) => {
     return res.status(401).json({ error: 'unauthorized' });
   }
   next();
+});
+
+/**
+ * GET /api/cohorts/snapshot
+ * Weekly signup cohorts (up to 12, newest first) with activation,
+ * retention, AUM, whale count, and identity-stitch metrics +
+ * summary trend block. Cached server-side for 60 seconds.
+ *
+ * Must be mounted BEFORE the `/:dim` catch-all so "snapshot" isn't
+ * interpreted as a cohort-dim parameter.
+ */
+router.get('/snapshot', async (_req: Request, res: Response) => {
+  try {
+    const snapshot = await getCohortsSnapshot();
+    res.json(snapshot);
+  } catch (err) {
+    console.error('[cohorts/snapshot]', err);
+    res.status(500).json({ error: 'internal_error' });
+  }
 });
 
 router.get('/:dim', async (req: Request, res: Response) => {

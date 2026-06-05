@@ -6,17 +6,25 @@ import {
   Gauge,
   Warning,
   CircleNotch,
+  TrendUp,
+  Medal,
+  LinkSimple,
 } from '@phosphor-icons/react';
 import { TOKENS, MOTION } from '@/lib/chartTokens';
-import { fmtUSD } from '@/lib/format';
+import { fmtUSD, fmtWallet } from '@/lib/format';
 import {
   useAttributionOverview,
   type ChannelROIRow,
   type TopCampaignRow,
   type AttributionCoverage,
+  type AttributionOverview,
 } from '@/hooks/useAttributionOverview';
 import { useWhaleOrigins } from '@/hooks/useWhaleOrigins';
-import { useKOLLeaderboard } from '@/hooks/useKOLLeaderboard';
+import {
+  useKOLLeaderboard,
+  type KOLEntry,
+  type KOLPayload,
+} from '@/hooks/useKOLLeaderboard';
 import { useWhaleStream } from '@/hooks/useWhaleStream';
 import { WhaleSankey } from '@/components/DataHub/attribution/WhaleSankey';
 import { KOLLeaderboard } from '@/components/DataHub/attribution/KOLLeaderboard';
@@ -84,17 +92,22 @@ export function AttributionView() {
       ) : loading && !data ? (
         <LoadingPanel />
       ) : !data ? null : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr)',
-            gap: 16,
-          }}
-        >
-          <ChannelsCard rows={data.channels} />
-          <CampaignsCard rows={data.campaigns} />
-          <CoverageCard coverage={data.coverage} computedAt={data.computedAt} />
-        </div>
+        <>
+          {/* Phase 3.3: Level-1 KPI cards above Whale Sankey */}
+          <SourceKPIRow overview={data} kol={kol.data} />
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr)',
+              gap: 16,
+            }}
+          >
+            <ChannelsCard rows={data.channels} />
+            <CampaignsCard rows={data.campaigns} />
+            <CoverageCard coverage={data.coverage} computedAt={data.computedAt} />
+          </div>
+        </>
       )}
 
       {/* Sprint 3 Row 2: Sankey */}
@@ -128,6 +141,217 @@ export function AttributionView() {
 }
 
 // ─── Header strip ─────────────────────────────────────────────────────────────
+
+// ─── Phase 3.3: Source Level-1 KPI cards ──────────────────────────────────────
+// Three "what's the answer?" cards rendered above the Whale Sankey:
+//   1) Best ROI source — highest holder/user conversion rate from channels[]
+//   2) Top KOL this week — best referrer in the leaderboard, filtered to the
+//      last 7 days when lastSeenAt allows it (falls back to highest score)
+//   3) Stitch coverage — overall % of profiles with any attribution signal
+//
+// Computed entirely client-side from existing hook payloads. No backend change.
+
+interface BestSource {
+  source: string;
+  users: number;
+  holders: number;
+  holderRatePct: number;
+}
+
+/**
+ * Find the channel with the highest holder/user ratio.
+ * Tie-breaker: highest users count.
+ * Returns null when no channel has any users.
+ */
+function pickBestROISource(channels: ChannelROIRow[]): BestSource | null {
+  let best: BestSource | null = null;
+  for (const row of channels) {
+    if (row.users <= 0) continue;
+    const ratio = row.holders / row.users;
+    if (
+      best === null ||
+      ratio > best.holderRatePct / 100 ||
+      (ratio === best.holderRatePct / 100 && row.users > best.users)
+    ) {
+      best = {
+        source: row.source,
+        users: row.users,
+        holders: row.holders,
+        holderRatePct: Math.round(ratio * 1000) / 10,
+      };
+    }
+  }
+  return best;
+}
+
+/**
+ * Pick the top KOL — prefer entries seen in the last 7 days, then highest score.
+ * Falls back to the highest-score entry overall when nothing is recent.
+ */
+function pickTopKOL(rows: KOLEntry[]): KOLEntry | null {
+  if (rows.length === 0) return null;
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const recent = rows.filter(r => {
+    const t = new Date(r.lastSeenAt).getTime();
+    return Number.isFinite(t) && t >= cutoff;
+  });
+  const pool = recent.length > 0 ? recent : rows;
+  return pool.reduce((best, r) => (best === null || r.score > best.score ? r : best), null as KOLEntry | null);
+}
+
+/**
+ * Truncate a referrer label — looks like a wallet (Base58 ≥ 32 chars, no
+ * spaces) → middle-truncate; otherwise show as-is.
+ */
+function formatReferrer(referrer: string): string {
+  if (!referrer) return '—';
+  if (referrer.length >= 32 && /^[A-Za-z0-9]+$/.test(referrer)) {
+    return fmtWallet(referrer);
+  }
+  return referrer;
+}
+
+function SourceKPIRow({
+  overview,
+  kol,
+}: {
+  overview: AttributionOverview;
+  kol: KOLPayload | null;
+}) {
+  const best = pickBestROISource(overview.channels);
+  const topKOL = kol ? pickTopKOL(kol.rows) : null;
+  const coveragePct = overview.coverage.percentWithSignal;
+  const stitchedCount =
+    overview.coverage.withUtm + overview.coverage.withReferralOnly;
+
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr 1fr',
+        gap: 16,
+      }}
+    >
+      <SourceKPI
+        icon={<TrendUp size={12} weight="bold" />}
+        label="Best ROI Source · 30d"
+        value={best ? formatSource(best.source) : '—'}
+        subtitle={
+          best
+            ? `${best.holders.toLocaleString()} holders / ${best.users.toLocaleString()} users (${best.holderRatePct.toFixed(1)}% conv)`
+            : 'No channel data yet'
+        }
+      />
+      <SourceKPI
+        icon={<Medal size={12} weight="bold" />}
+        label="Top KOL · 7d"
+        value={topKOL ? formatReferrer(topKOL.referrer) : '—'}
+        subtitle={
+          topKOL
+            ? `${topKOL.users.toLocaleString()} users · ${
+                topKOL.totalVolumeUSD > 0 ? fmtUSD(topKOL.totalVolumeUSD) : '$0'
+              } volume`
+            : 'No referrers yet'
+        }
+      />
+      <SourceKPI
+        icon={<LinkSimple size={12} weight="bold" />}
+        label="Stitch Coverage"
+        value={`${coveragePct.toFixed(1)}%`}
+        subtitle={`${stitchedCount.toLocaleString()} stitched / ${overview.coverage.total.toLocaleString()} total`}
+      />
+    </div>
+  );
+}
+
+/**
+ * SourceKPI — local hero card variant for the Sources tab.
+ * Differs from Pulse's KPICard because the value can be a string (a source
+ * name, a wallet/referrer code, or a formatted percent) and the layout shows
+ * an explanatory subtitle below the value rather than a Δ-vs-24h chip.
+ */
+function SourceKPI({
+  icon,
+  label,
+  value,
+  subtitle,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  subtitle: string;
+}) {
+  const [hover, setHover] = React.useState(false);
+
+  const containerStyle: React.CSSProperties = {
+    height: 120,
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '14px 16px',
+    background: TOKENS.panel,
+    border: `1px solid ${hover ? TOKENS.accent : TOKENS.accentBorder}`,
+    borderRadius: 12,
+    backdropFilter: `blur(${TOKENS.glassBlur})`,
+    WebkitBackdropFilter: `blur(${TOKENS.glassBlur})`,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    transition: `border-color ${MOTION.fast}`,
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
+    overflow: 'hidden',
+  };
+
+  const labelRowStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    fontSize: 10,
+    fontWeight: 700,
+    color: TOKENS.textFaint,
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase',
+  };
+
+  const valueStyle: React.CSSProperties = {
+    fontSize: 24,
+    fontWeight: 800,
+    color: TOKENS.textPrimary,
+    lineHeight: 1.0,
+    letterSpacing: '-0.02em',
+    fontVariantNumeric: 'tabular-nums',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  };
+
+  const subtitleStyle: React.CSSProperties = {
+    fontSize: 11,
+    fontWeight: 600,
+    color: TOKENS.textMuted,
+    fontVariantNumeric: 'tabular-nums',
+    lineHeight: 1.3,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  };
+
+  return (
+    <div
+      style={containerStyle}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <div style={labelRowStyle}>
+        <span aria-hidden style={{ display: 'inline-flex' }}>{icon}</span>
+        <span>{label}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={valueStyle} title={value}>{value}</div>
+        <div style={subtitleStyle} title={subtitle}>{subtitle}</div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Channels card ────────────────────────────────────────────────────────────
 
