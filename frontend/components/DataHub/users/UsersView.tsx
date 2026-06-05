@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { TOKENS } from '@/lib/chartTokens';
 import { MagnifyingGlass } from '@phosphor-icons/react';
 import { useUsersList, type UsersListFilters } from '@/hooks/useUsersList';
+import { TabHeader } from '@/components/DataHub/shared/TabHeader';
 import { UserListPane } from './UserListPane';
 import { UserDetailPane } from './UserDetailPane';
 
@@ -65,6 +66,18 @@ export function UsersView() {
   const rows = list.data?.rows ?? [];
   const displayTotal = list.data?.total ?? 0;
 
+  // Track when the latest list response resolved so the header can show
+  // "updated HH:MM:SS" — the list refreshes on filter change, not on a poll.
+  // Use stable scalars in the dep array (not the full data object) so test
+  // mocks that return fresh references each render don't trigger a loop.
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const total = list.data?.total ?? null;
+  const pageNum = list.data?.page ?? null;
+  const rowCount = list.data?.rows.length ?? null;
+  useEffect(() => {
+    if (total !== null) setLastUpdated(new Date());
+  }, [total, pageNum, rowCount]);
+
   // Sync state -> URL (replace, no history pollution).
   // Preserve foreign params (e.g. ?view= owned by data-hub page shell) to avoid
   // fighting other URL writers.
@@ -124,6 +137,17 @@ export function UsersView() {
       display: 'flex', flexDirection: 'column', gap: 16,
       height: 'calc(100vh - 56px - 24px)',
     }}>
+      {/* Single-question header strip — sets context before the list loads */}
+      <div style={{ flexShrink: 0 }}>
+        <TabHeader
+          title="Users"
+          subtitle="Search and inspect any user — wallets, socials, attribution, positions, timeline. Use filters to narrow the list."
+          lastUpdated={lastUpdated}
+          onRefresh={() => list.refetch?.()}
+          loading={list.loading}
+        />
+      </div>
+
       {/* Filter row */}
       <div style={{
         height: 56, flexShrink: 0,
