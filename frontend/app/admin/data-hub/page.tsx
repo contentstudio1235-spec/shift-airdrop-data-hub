@@ -20,6 +20,7 @@ import { AttributionView } from './views/AttributionView';
 import { CohortsView } from './views/CohortsView';
 import { RawDataView } from './views/RawDataView';
 import { UsersView } from '@/components/DataHub/users/UsersView';
+import { PulseView } from '@/components/DataHub/pulse/PulseView';
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://shift-airdrop-backend.onrender.com";
 const KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || "ShiftRwa2026@@$$Key";
@@ -910,8 +911,8 @@ function DataHubPageInner() {
   const [page, setPage] = useState<HubPage>("overview");
   const initialView = ((): TopView => {
     const v = searchParams?.get('view');
-    if (v === 'funnels' || v === 'attribution' || v === 'cohorts' || v === 'users' || v === 'raw') return v;
-    return 'funnels';  // Platform default — Funnels view, not the legacy Raw Data 6-tab dashboard
+    if (v === 'pulse' || v === 'funnels' || v === 'attribution' || v === 'cohorts' || v === 'users' || v === 'raw') return v;
+    return 'pulse';  // Platform default — Pulse "what changed" overview (Phase 2 IA redesign)
   })();
   const [topView, setTopView] = useState<TopView>(initialView);
   const [lastSync, setLastSync] = useState<Date | null>(null);
@@ -1011,6 +1012,7 @@ function DataHubPageInner() {
       `}</style>
 
       <LayoutShell activeView={topView} onChangeView={setTopView}>
+        {topView === 'pulse' && <PulseView />}
         {topView === 'funnels' && <FunnelsView />}
         {topView === 'attribution' && <AttributionView />}
         {topView === 'cohorts' && <CohortsView />}

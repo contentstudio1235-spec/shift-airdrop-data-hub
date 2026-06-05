@@ -1,6 +1,6 @@
 "use client";
 import React from 'react';
-import { Target, MagnifyingGlass, Waves, UserCircle, Gear } from '@phosphor-icons/react';
+import { Pulse, Target, MagnifyingGlass, Waves, UserCircle, Gear } from '@phosphor-icons/react';
 import type { Icon as PhosphorIcon } from '@phosphor-icons/react';
 import { FilterBar } from '@/components/DataHub/shared/FilterBar';
 
@@ -9,12 +9,14 @@ const accentDim = "rgba(0,200,150,0.15)";
 const accentBorder = "rgba(0,200,150,0.2)";
 const bg = "#030d0a";
 
-export type TopView = 'funnels' | 'attribution' | 'cohorts' | 'users' | 'raw';
+export type TopView = 'pulse' | 'funnels' | 'attribution' | 'cohorts' | 'users' | 'raw';
 
 // Main outer-tab nav (Sprint 1+ views). Raw Data is intentionally NOT here —
 // it has been demoted to a quiet "Engineering" gear toggle in the top-right.
+// Pulse is the leftmost default tab — the "what changed since yesterday" overview.
 // See docs/design/2026-06-05-data-hub-ia-redesign.md.
 const TABS: Array<{ id: TopView; label: string; Icon: PhosphorIcon }> = [
+  { id: 'pulse',       label: 'Pulse',              Icon: Pulse },
   { id: 'funnels',     label: 'Funnels',            Icon: Target },
   { id: 'attribution', label: 'Source Attribution', Icon: MagnifyingGlass },
   { id: 'cohorts',     label: 'Trader Cohorts',     Icon: Waves },
