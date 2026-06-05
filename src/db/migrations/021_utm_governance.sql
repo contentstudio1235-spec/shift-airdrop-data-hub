@@ -9,8 +9,8 @@
 --
 -- Seeds initial approved sources + mediums from the A-Z doc section D.
 --
--- Idempotent — safe to re-run. Migration runner splits on `;` and executes
--- each statement individually (no wrapping transaction).
+-- Idempotent — safe to re-run. Migration runner splits statements on semicolons
+-- and executes each individually (no wrapping transaction).
 --
 -- Rollback (DOWN):
 --   DROP TABLE IF EXISTS campaigns;
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS utm_approved_sources (
 
 -- ── 2. Approved utm_medium values ────────────────────────────
 -- Locked list from A-Z doc section D table. Aligns with GA4 default
--- channel groupings, plus the SHIFT-specific `kol` medium that rolls up
+-- channel groupings, plus the SHIFT-specific "kol" medium that rolls up
 -- to Referral in GA4 custom channel groups.
 CREATE TABLE IF NOT EXISTS utm_approved_mediums (
   medium           TEXT PRIMARY KEY,
