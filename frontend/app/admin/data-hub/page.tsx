@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import type {
   HubData,
@@ -440,26 +440,48 @@ function AnalyticsPage({ data }: { data: HubData }) {
         </div>
       )}
 
-      {/* Summary KPIs */}
+      {/* Summary KPIs — bounce rate & avg session duration are weighted from channels[] (backend doesn't aggregate on totals) */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "14px" }}>
-        {[
-          { label: "Active Users (30d)", value: totalUsers.toLocaleString(), icon: "👤", c: accent },
-          { label: "Sessions", value: (showGA4?.totals?.sessions || "—").toLocaleString(), icon: "🖱️", c: "#3b82f6" },
-          { label: "Page Views", value: (showGA4?.totals?.pageViews || "—").toLocaleString(), icon: "📄", c: "#8b5cf6" },
-          { label: "New Users", value: (showGA4?.totals?.newUsers || "—").toLocaleString(), icon: "🆕", c: "#f59e0b" },
-          { label: "Bounce Rate", value: showGA4?.totals?.bounceRate ? `${(showGA4.totals.bounceRate * 100).toFixed(1)}%` : "—", icon: "↩️", c: "#f87171" },
-          { label: "Avg Session", value: showGA4?.totals?.avgSessionDuration ? `${Math.floor(showGA4.totals.avgSessionDuration / 60)}m ${Math.floor(showGA4.totals.avgSessionDuration % 60)}s` : "—", icon: "⏱️", c: "#10b981" },
-        ].map((k, i) => (
-          <div key={i} style={{ ...S.card, padding: "18px" }}>
-            <div style={{ fontSize: "20px", marginBottom: "8px" }}>{k.icon}</div>
-            <div style={S.label}>{k.label}</div>
-            <div style={{ ...S.value, color: k.c, fontSize: "22px" }}>
-              {typeof k.value === "string" && k.value.endsWith("%")
-                ? <><span style={{ fontWeight: 400 }}>{k.value.slice(0, -1)}</span>%</>
-                : k.value}
+        {(() => {
+          let totalSessions = 0;
+          let weightedBounceSum = 0;
+          let weightedDurationSum = 0;
+          for (const ch of showGA4?.channels ?? []) {
+            const s = parseInt(ch.sessions, 10);
+            if (!Number.isFinite(s) || s <= 0) continue;
+            totalSessions += s;
+            if (ch.bounceRate !== undefined) {
+              const br = parseFloat(ch.bounceRate);
+              if (Number.isFinite(br)) weightedBounceSum += br * s;
+            }
+            if (ch.avgSessionDuration !== undefined) {
+              const d = parseFloat(ch.avgSessionDuration);
+              if (Number.isFinite(d)) weightedDurationSum += d * s;
+            }
+          }
+          const weightedBounce = totalSessions > 0 ? weightedBounceSum / totalSessions : null;
+          const weightedDuration = totalSessions > 0 ? weightedDurationSum / totalSessions : null;
+
+          const cards = [
+            { label: "Active Users (30d)", value: totalUsers.toLocaleString(), icon: "👤", c: accent },
+            { label: "Sessions", value: (showGA4?.totals?.sessions || "—").toLocaleString(), icon: "🖱️", c: "#3b82f6" },
+            { label: "Page Views", value: (showGA4?.totals?.screenPageViews || "—").toLocaleString(), icon: "📄", c: "#8b5cf6" },
+            { label: "New Users", value: (showGA4?.totals?.newUsers || "—").toLocaleString(), icon: "🆕", c: "#f59e0b" },
+            { label: "Bounce Rate", value: weightedBounce !== null ? `${(weightedBounce * 100).toFixed(1)}%` : "—", icon: "↩️", c: "#f87171" },
+            { label: "Avg Session", value: weightedDuration !== null ? `${Math.floor(weightedDuration / 60)}m ${Math.floor(weightedDuration % 60)}s` : "—", icon: "⏱️", c: "#10b981" },
+          ];
+          return cards.map((k, i) => (
+            <div key={i} style={{ ...S.card, padding: "18px" }}>
+              <div style={{ fontSize: "20px", marginBottom: "8px" }}>{k.icon}</div>
+              <div style={S.label}>{k.label}</div>
+              <div style={{ ...S.value, color: k.c, fontSize: "22px" }}>
+                {typeof k.value === "string" && k.value.endsWith("%")
+                  ? <><span style={{ fontWeight: 400 }}>{k.value.slice(0, -1)}</span>%</>
+                  : k.value}
+              </div>
             </div>
-          </div>
-        ))}
+          ));
+        })()}
       </div>
 
       {/* GA4 Properties */}
@@ -503,26 +525,31 @@ function AnalyticsPage({ data }: { data: HubData }) {
         <Card title="Traffic Channels" subtitle="Session distribution by source">
           {showGA4?.channels ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {showGA4.channels.map((ch, i) => {
-                const c = CHANNEL_COLORS[ch.channel] || "#6b7280";
-                return (
-                  <div key={i}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <div style={{ width: "8px", height: "8px", borderRadius: "2px", background: c, flexShrink: 0 }} />
-                        <span style={{ fontSize: "12px", color: "#7ab09a" }}>{ch.channel}</span>
+              {(() => {
+                const channelTotal = showGA4.channels.reduce((sum, ch) => sum + (parseInt(ch.sessions, 10) || 0), 0);
+                return showGA4.channels.map((ch, i) => {
+                  const c = CHANNEL_COLORS[ch.channel] || "#6b7280";
+                  const sessions = parseInt(ch.sessions, 10) || 0;
+                  const pct = channelTotal > 0 ? Math.round((sessions * 100) / channelTotal) : 0;
+                  return (
+                    <div key={i}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <div style={{ width: "8px", height: "8px", borderRadius: "2px", background: c, flexShrink: 0 }} />
+                          <span style={{ fontSize: "12px", color: "#7ab09a" }}>{ch.channel}</span>
+                        </div>
+                        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                          <span style={{ fontSize: "11px", color: "#5a9070" }}>{sessions.toLocaleString()}</span>
+                          <span style={S.badge(c)}>{pct}%</span>
+                        </div>
                       </div>
-                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                        <span style={{ fontSize: "11px", color: "#5a9070" }}>{ch.sessions.toLocaleString()}</span>
-                        <span style={S.badge(c)}>{ch.pct}%</span>
+                      <div style={{ height: "4px", background: "rgba(255,255,255,0.05)", borderRadius: "2px" }}>
+                        <div style={{ height: "100%", width: `${pct}%`, background: c, borderRadius: "2px" }} />
                       </div>
                     </div>
-                    <div style={{ height: "4px", background: "rgba(255,255,255,0.05)", borderRadius: "2px" }}>
-                      <div style={{ height: "100%", width: `${ch.pct}%`, background: c, borderRadius: "2px" }} />
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -875,15 +902,31 @@ const NAV_ITEMS: { page: HubPage; label: string; icon: string; audience: string 
   { page: "admin", label: "Admin", icon: "⚙️", audience: "Engineering" },
 ];
 
-export default function DataHubPage() {
+function DataHubPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isAuthenticated } = useAdminAuth();
   const [authed, setAuthed] = useState(false);
   const [page, setPage] = useState<HubPage>("overview");
-  const [topView, setTopView] = useState<TopView>('raw');
+  const initialView = ((): TopView => {
+    const v = searchParams?.get('view');
+    if (v === 'funnels' || v === 'attribution' || v === 'cohorts' || v === 'users' || v === 'raw') return v;
+    return 'funnels';  // Platform default — Funnels view, not the legacy Raw Data 6-tab dashboard
+  })();
+  const [topView, setTopView] = useState<TopView>(initialView);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [syncing, setSyncing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Persist topView in URL so it survives AuthGate remounts (kills the tab-reset-on-auto-refresh bug)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('view') !== topView) {
+      url.searchParams.set('view', topView);
+      window.history.replaceState(null, '', url.toString());
+    }
+  }, [topView]);
 
   const [data, setData] = useState<HubData>({
     admin: null, onchain: null, analytics: null, leaderboard: null,
@@ -1042,5 +1085,15 @@ export default function DataHubPage() {
         )}
       </LayoutShell>
     </>
+  );
+}
+
+// Wrap in Suspense — Next.js 16 requires useSearchParams() to be inside a Suspense boundary
+// so the static shell can prerender while the search-params-dependent subtree streams in.
+export default function DataHubPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: '100vh', background: bg }} />}>
+      <DataHubPageInner />
+    </Suspense>
   );
 }

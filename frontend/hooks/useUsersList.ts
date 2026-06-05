@@ -8,6 +8,7 @@ export interface UsersListFilters {
   stitchPctMin?: number;
   walletSizeMin?: number;
   activitySince?: string;
+  hasSocial?: 'x' | 'discord' | 'both' | 'none';
   sortBy?: 'last_seen' | 'volume' | 'holdings' | 'holdings_value' | 'x' | 'discord' | 'referral_source';
   sortDir?: 'asc' | 'desc';
 }

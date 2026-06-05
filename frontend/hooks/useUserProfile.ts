@@ -2,11 +2,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiGet } from '@/lib/api';
 
+export type IdentityType =
+  | 'wallet'
+  | 'ga_client_id'
+  | 'snag_user_id'
+  | 'x_handle'
+  | 'discord_id'
+  | 'telegram_id'
+  | 'email';
+
+export type IdentityConfidence = 'deterministic' | 'probabilistic' | 'manual';
+
 export interface IdentityLink {
   linkId: string;
-  type: 'wallet' | 'ga_client_id' | 'snag_user_id' | 'x_handle' | 'discord_id' | 'telegram_id' | 'email';
+  type: IdentityType;
   value: string;
-  confidence: 'deterministic' | 'probabilistic' | 'manual';
+  confidence: IdentityConfidence;
   linkedAt: string;
   linkedBy: string;
   unlinkedAt: string | null;
@@ -29,6 +40,45 @@ export interface ProfileWithLinks {
   lifetimeStats?: { xp: number; volumeUSD: number; positions: number; badges: number };
 }
 
+// ─── Wire format returned by GET /api/users/:profileId ───────────────
+// The backend serializes link rows with DB-style field names (`id`,
+// `identityType`, `identityValue`). The rest of the frontend reads the
+// friendlier `linkId`/`type`/`value` shape, so we normalize on read.
+interface RawIdentityLink {
+  id: number;
+  profileId: string;
+  identityType: IdentityType;
+  identityValue: string;
+  confidence: IdentityConfidence;
+  evidenceEventId: number | null;
+  linkedAt: string;
+  linkedBy: string;
+  unlinkedAt: string | null;
+  unlinkedBy: string | null;
+  unlinkReason: string | null;
+}
+
+interface RawProfileWithLinks extends Omit<ProfileWithLinks, 'links'> {
+  links: RawIdentityLink[];
+}
+
+function normalizeLink(raw: RawIdentityLink): IdentityLink {
+  return {
+    linkId: String(raw.id),
+    type: raw.identityType,
+    value: raw.identityValue,
+    confidence: raw.confidence,
+    linkedAt: raw.linkedAt,
+    linkedBy: raw.linkedBy,
+    unlinkedAt: raw.unlinkedAt,
+  };
+}
+
+function normalizeProfile(raw: RawProfileWithLinks): ProfileWithLinks {
+  const { links, ...rest } = raw;
+  return { ...rest, links: links.map(normalizeLink) };
+}
+
 export function useUserProfile(profileId: string | null) {
   const [data, setData] = useState<ProfileWithLinks | null>(null);
   const [loading, setLoading] = useState(false);
@@ -43,8 +93,8 @@ export function useUserProfile(profileId: string | null) {
     setLoading(true);
     setError(null);
     try {
-      const result = await apiGet<ProfileWithLinks>(`/api/users/${profileId}`, { signal: ctl.signal });
-      if (!ctl.signal.aborted) setData(result);
+      const raw = await apiGet<RawProfileWithLinks>(`/api/users/${profileId}`, { signal: ctl.signal });
+      if (!ctl.signal.aborted) setData(normalizeProfile(raw));
     } catch (err) {
       if (!ctl.signal.aborted) setError(err instanceof Error ? err.message : String(err));
     } finally {

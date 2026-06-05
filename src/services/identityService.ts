@@ -363,6 +363,40 @@ export async function searchProfiles(
     )`);
   }
 
+  // hasSocial filter — gated by enum, SQL is static (no user input interpolation)
+  // Same clause applied to both rowsQuery and countQuery via shared whereSql so
+  // `total` stays consistent with the returned rows.
+  if (filters.hasSocial === 'x' || filters.hasSocial === 'both') {
+    where.push(`EXISTS (
+      SELECT 1 FROM identity_links ilx_f
+      WHERE ilx_f.profile_id = p.profile_id
+        AND ilx_f.identity_type = 'x_handle'
+        AND ilx_f.unlinked_at IS NULL
+    )`);
+  }
+  if (filters.hasSocial === 'discord' || filters.hasSocial === 'both') {
+    where.push(`EXISTS (
+      SELECT 1 FROM identity_links ild_f
+      WHERE ild_f.profile_id = p.profile_id
+        AND ild_f.identity_type = 'discord_id'
+        AND ild_f.unlinked_at IS NULL
+    )`);
+  }
+  if (filters.hasSocial === 'none') {
+    where.push(`NOT EXISTS (
+      SELECT 1 FROM identity_links ilx_n
+      WHERE ilx_n.profile_id = p.profile_id
+        AND ilx_n.identity_type = 'x_handle'
+        AND ilx_n.unlinked_at IS NULL
+    )`);
+    where.push(`NOT EXISTS (
+      SELECT 1 FROM identity_links ild_n
+      WHERE ild_n.profile_id = p.profile_id
+        AND ild_n.identity_type = 'discord_id'
+        AND ild_n.unlinked_at IS NULL
+    )`);
+  }
+
   const whereSql = `WHERE ${where.join(' AND ')}`;
   const walletSizeMinNum = filters.walletSizeMin !== undefined ? Number(filters.walletSizeMin) : null;
   const stitchPctMinNum = filters.stitchPctMin !== undefined ? Number(filters.stitchPctMin) : null;
