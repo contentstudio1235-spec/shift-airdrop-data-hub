@@ -65,7 +65,9 @@ export function UsersView() {
   const rows = list.data?.rows ?? [];
   const displayTotal = list.data?.total ?? 0;
 
-  // Sync state -> URL (replace, no history pollution)
+  // Sync state -> URL (replace, no history pollution).
+  // Preserve foreign params (e.g. ?view= owned by data-hub page shell) to avoid
+  // fighting other URL writers.
   useEffect(() => {
     const next = new URLSearchParams();
     next.set('tab', 'users');
@@ -74,9 +76,14 @@ export function UsersView() {
     if (filters.source) next.set('source', filters.source);
     if (filters.sortBy && filters.sortBy !== 'last_seen') next.set('sortBy', filters.sortBy);
     if (filters.sortDir && filters.sortDir !== 'desc') next.set('sortDir', filters.sortDir);
-    const target = `/admin/data-hub?${next.toString()}`;
-    if (typeof window !== 'undefined' && window.location.pathname + window.location.search !== target) {
-      router.replace(target, { scroll: false });
+    if (typeof window !== 'undefined') {
+      const existing = new URLSearchParams(window.location.search);
+      const view = existing.get('view');
+      if (view) next.set('view', view);
+      const target = `/admin/data-hub?${next.toString()}`;
+      if (window.location.pathname + window.location.search !== target) {
+        router.replace(target, { scroll: false });
+      }
     }
   }, [router, selectedProfileId, filters.q, filters.source, filters.sortBy, filters.sortDir]);
 

@@ -72,13 +72,18 @@ export function useFilters(): [Filters, (next: Partial<Filters>) => void, () => 
     setHydrated(true);
   }, []);  // intentionally empty — run once on mount
 
-  // Sync filter changes back to URL + localStorage, but only after hydration
+  // Sync filter changes back to URL + localStorage, but only after hydration.
+  // Preserve foreign params (e.g. ?view= owned by data-hub page shell) so we
+  // don't fight other URL writers and create a re-render loop.
   useEffect(() => {
     if (!hydrated) return;
     writeStorage(filters);
     const p = filtersToParams(filters);
+    const existing = new URLSearchParams(searchParams?.toString() ?? '');
+    const view = existing.get('view');
+    if (view) p.set('view', view);
     const next = p.toString();
-    const current = searchParams?.toString() ?? '';
+    const current = existing.toString();
     if (next !== current) {
       router.replace(`?${next}`, { scroll: false });
     }
