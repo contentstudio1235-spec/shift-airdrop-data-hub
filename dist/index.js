@@ -33,6 +33,7 @@ const cohorts_1 = __importDefault(require("./routes/cohorts"));
 const stream_1 = __importDefault(require("./routes/stream"));
 const users_1 = __importDefault(require("./routes/users"));
 const track_1 = __importDefault(require("./routes/track"));
+const pulse_1 = __importDefault(require("./routes/pulse"));
 const app = (0, express_1.default)();
 // ── Middleware ──
 // Security headers
@@ -81,6 +82,7 @@ app.use('/api/cohorts', cohorts_1.default);
 app.use('/api/stream', stream_1.default);
 app.use('/api/users', users_1.default);
 app.use('/api/track', track_1.default);
+app.use('/api/pulse', pulse_1.default);
 // ── Data Hub Static Dashboard ──
 // Serves the SHIFT RWA Cross-Channel Data Hub frontend at /hub
 app.use('/hub', express_1.default.static(path_1.default.join(__dirname, '../public'), {

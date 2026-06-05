@@ -30,6 +30,7 @@ import cohortsRoutes from './routes/cohorts';
 import streamRoutes from './routes/stream';
 import usersRoutes from './routes/users';
 import trackRoutes from './routes/track';
+import pulseRoutes from './routes/pulse';
 
 const app = express();
 
@@ -87,6 +88,7 @@ app.use('/api/cohorts', cohortsRoutes);
 app.use('/api/stream', streamRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/track', trackRoutes);
+app.use('/api/pulse', pulseRoutes);
 
 // ── Data Hub Static Dashboard ──
 // Serves the SHIFT RWA Cross-Channel Data Hub frontend at /hub
