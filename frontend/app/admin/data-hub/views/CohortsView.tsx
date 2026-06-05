@@ -28,6 +28,17 @@ const ACTIVATION_YELLOW = 20;
 const STITCH_GREEN = 30;
 const STITCH_YELLOW = 15;
 
+/**
+ * Minimum cohort size before retention/activation percentages can be trusted.
+ * Source: cohort-analysis skill recommends ≥100 users to avoid noisy rates that
+ * read as visually precise but are statistically meaningless (e.g. a 20-user
+ * cohort where one extra activation moves the rate by 5 pp). Cohorts below
+ * this size are gated visually (row opacity) and excluded from the confident
+ * trend label in the summary strip — their numbers still render, but are
+ * marked as advisory rather than authoritative.
+ */
+const SMALL_COHORT_THRESHOLD = 100;
+
 function activationColor(pct: number): string {
   if (pct >= ACTIVATION_GREEN) return TOKENS.threshold.green;
   if (pct >= ACTIVATION_YELLOW) return TOKENS.threshold.yellow;
@@ -127,7 +138,7 @@ export function CohortsView() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <TabHeader
         title="Trader Cohorts"
-        subtitle="Are recent signup cohorts performing better, worse, or the same as older ones?"
+        subtitle="Are recent signup cohorts performing better, worse, or the same as older ones? Activation = first position opened. Retention = ≥1 position opened in target week."
         lastUpdated={data ? new Date(data.computedAt) : null}
         onRefresh={refetch}
         loading={loading}
@@ -163,6 +174,12 @@ export function CohortsView() {
 // ────────────────────────────────────────────────────────────
 
 function SummaryStrip({ data }: { data: CohortsSnapshot }) {
+  // Confidence gate for the trend label: if ANY contributing cohort is below
+  // the small-cohort threshold, withhold the directional verdict and surface
+  // "Insufficient signal" instead. The other 2 summary cards still render
+  // their numbers — they become advisory rather than confident.
+  const cohortsAreSparse = data.cohorts.some(c => c.size < SMALL_COHORT_THRESHOLD);
+
   return (
     <div
       style={{
@@ -171,37 +188,64 @@ function SummaryStrip({ data }: { data: CohortsSnapshot }) {
         gap: 16,
       }}
     >
-      <TrendCard summary={data.summary} />
+      <TrendCard summary={data.summary} cohortsAreSparse={cohortsAreSparse} />
       <RecentVsHistoricalCard summary={data.summary} />
       <BestWorstCard summary={data.summary} />
     </div>
   );
 }
 
-function TrendCard({ summary }: { summary: CohortSummary }) {
+function TrendCard({
+  summary,
+  cohortsAreSparse,
+}: {
+  summary: CohortSummary;
+  cohortsAreSparse: boolean;
+}) {
   // `as const` tokens collapse to literal types — widen explicitly so the
   // ternary-style branches can re-assign across hex strings.
   let Icon: typeof ArrowsLeftRight = ArrowsLeftRight;
   let color: string = TOKENS.textMuted;
   let label = 'Stable';
-  if (summary.trend === 'improving') {
+  let subtitle = 'Recent cohort performance is in line with historical baseline.';
+
+  // The sparse-cohort gate wins over whatever the backend computed: the trend
+  // label fakes confidence on small samples (one extra activation in a 20-user
+  // cohort moves the rate by 5 pp), so we explicitly withhold the verdict.
+  const displayedTrend: 'improving' | 'stable' | 'declining' | 'insufficient' =
+    cohortsAreSparse ? 'insufficient' : summary.trend;
+
+  if (displayedTrend === 'insufficient') {
+    Icon = Warning;
+    color = TOKENS.textFaint;
+    label = 'Insufficient signal';
+    subtitle = 'Some cohorts have < 100 users; trend label withheld.';
+  } else if (displayedTrend === 'improving') {
     Icon = ArrowUp;
     color = TOKENS.threshold.green;
     label = 'Improving';
-  } else if (summary.trend === 'declining') {
+    subtitle = 'Recent cohorts are activating faster than older ones.';
+  } else if (displayedTrend === 'declining') {
     Icon = ArrowDown;
     color = TOKENS.threshold.red;
     label = 'Declining';
+    subtitle = 'Recent cohorts are activating slower than older ones.';
   }
+
+  const isInsufficient = displayedTrend === 'insufficient';
 
   return (
     <div style={{ ...panelStyle, padding: 20, display: 'flex', flexDirection: 'column' }}>
       <div style={cardTitleStyle}>Trend</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-        <Icon size={28} weight="bold" color={color} />
+        <Icon
+          size={isInsufficient ? 20 : 28}
+          weight={isInsufficient ? 'fill' : 'bold'}
+          color={color}
+        />
         <div
           style={{
-            fontSize: 22,
+            fontSize: isInsufficient ? 18 : 22,
             fontWeight: 800,
             color,
             letterSpacing: '-0.01em',
@@ -218,11 +262,7 @@ function TrendCard({ summary }: { summary: CohortSummary }) {
           lineHeight: 1.5,
         }}
       >
-        {summary.trend === 'improving'
-          ? 'Recent cohorts are activating faster than older ones.'
-          : summary.trend === 'declining'
-            ? 'Recent cohorts are activating slower than older ones.'
-            : 'Recent cohort performance is in line with historical baseline.'}
+        {subtitle}
       </div>
     </div>
   );
@@ -386,6 +426,12 @@ interface TableColumn {
   key: SortKey;
   label: string;
   align?: 'left' | 'right';
+  /**
+   * Optional formula tooltip. When provided, it's merged with the standard
+   * "Sort by …" hint on the header's `title` attribute so operators can
+   * inspect the exact computation behind a metric on hover.
+   */
+  tooltip?: string;
 }
 
 const COLUMNS: TableColumn[] = [
@@ -396,7 +442,12 @@ const COLUMNS: TableColumn[] = [
   { key: 'retentionWeek4', label: 'W4 Ret', align: 'right' },
   { key: 'avgVolumePerUser', label: 'LTV/User', align: 'right' },
   { key: 'whales', label: 'Whales', align: 'right' },
-  { key: 'stitchPct', label: 'Stitch %', align: 'right' },
+  {
+    key: 'stitchPct',
+    label: 'ID Coverage',
+    align: 'right',
+    tooltip: '% of cohort with 2+ distinct identity types',
+  },
 ];
 
 function CohortTable({
@@ -484,7 +535,11 @@ function HeaderCell({
         whiteSpace: 'nowrap',
         transition: `color ${MOTION.fast}`,
       }}
-      title={`Sort by ${column.label}`}
+      title={
+        column.tooltip
+          ? `${column.tooltip} · Sort by ${column.label}`
+          : `Sort by ${column.label}`
+      }
     >
       <span
         style={{
@@ -506,12 +561,23 @@ function CohortRow({ row }: { row: CohortEntry }) {
   const actColor = activationColor(row.activationPct);
   const stColor = stitchColor(row.stitchPct);
 
+  // Small-cohort gate: gray out the row visually and announce the caveat to
+  // screen readers. The numbers still render — operators can read them — but
+  // they're explicitly marked as advisory rather than authoritative.
+  const isSmallCohort = row.size < SMALL_COHORT_THRESHOLD;
+
   return (
     <tr
       style={{
         borderBottom: `1px solid ${TOKENS.chartGrid}`,
         transition: `background ${MOTION.fast}`,
+        opacity: isSmallCohort ? 0.55 : 1,
       }}
+      aria-label={
+        isSmallCohort
+          ? `Small cohort (${row.size} users) — retention rates may be noisy`
+          : undefined
+      }
       onMouseEnter={e => {
         e.currentTarget.style.background = TOKENS.tableRowHover;
       }}
@@ -520,7 +586,28 @@ function CohortRow({ row }: { row: CohortEntry }) {
       }}
     >
       <td style={cellStyle('left', TOKENS.textPrimary, 13, 800)} title={row.weekStart}>
-        {row.cohortKey}
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          {row.cohortKey}
+          {isSmallCohort ? (
+            <span
+              title="Cohort size below 100 — retention noisy"
+              style={{ display: 'inline-flex', alignItems: 'center' }}
+            >
+              <Warning
+                size={10}
+                weight="fill"
+                color={TOKENS.threshold.yellow}
+                aria-hidden
+              />
+            </span>
+          ) : null}
+        </span>
       </td>
       <td style={cellStyle('right', TOKENS.textSecondary)}>{row.size.toLocaleString()}</td>
       <td style={cellStyle('right', actColor, 13, 800)}>

@@ -256,9 +256,10 @@ function SourceKPIRow({
       />
       <SourceKPI
         icon={<LinkSimple size={12} weight="bold" />}
-        label="Stitch Coverage"
+        label="Attribution Signal"
         value={`${coveragePct.toFixed(1)}%`}
         subtitle={`${stitchedCount.toLocaleString()} stitched / ${overview.coverage.total.toLocaleString()} total`}
+        tooltip="% of profiles with any attribution signal (UTM tag or referral source)"
       />
     </div>
   );
@@ -269,17 +270,23 @@ function SourceKPIRow({
  * Differs from Pulse's KPICard because the value can be a string (a source
  * name, a wallet/referrer code, or a formatted percent) and the layout shows
  * an explanatory subtitle below the value rather than a Δ-vs-24h chip.
+ *
+ * `tooltip` is an optional native HTML `title` applied to the card root —
+ * used to surface the precise formula behind a metric on hover (e.g. the
+ * "Attribution Signal" card explains it counts UTM + referral profiles).
  */
 function SourceKPI({
   icon,
   label,
   value,
   subtitle,
+  tooltip,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   subtitle: string;
+  tooltip?: string;
 }) {
   const [hover, setHover] = React.useState(false);
 
@@ -340,14 +347,15 @@ function SourceKPI({
       style={containerStyle}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      title={tooltip}
     >
       <div style={labelRowStyle}>
         <span aria-hidden style={{ display: 'inline-flex' }}>{icon}</span>
         <span>{label}</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={valueStyle} title={value}>{value}</div>
-        <div style={subtitleStyle} title={subtitle}>{subtitle}</div>
+        <div style={valueStyle} title={tooltip ? undefined : value}>{value}</div>
+        <div style={subtitleStyle} title={tooltip ? undefined : subtitle}>{subtitle}</div>
       </div>
     </div>
   );

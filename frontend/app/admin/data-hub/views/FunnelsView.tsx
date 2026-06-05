@@ -4,6 +4,7 @@ import { useFilters } from '@/hooks/useFilters';
 import { useFunnelData } from '@/hooks/useFunnelData';
 import { FUNNEL_DISPLAY, getStepBenchmark, type FunnelId } from '@/lib/funnelTaxonomy';
 import { TOKENS } from '@/lib/chartTokens';
+import { fmtUSD } from '@/lib/format';
 import { InsightStrip } from '@/components/DataHub/insights/InsightStrip';
 import { HeroNewHolders } from '@/components/DataHub/heroes/HeroNewHolders';
 import { HeroVolume7d } from '@/components/DataHub/heroes/HeroVolume7d';
@@ -16,6 +17,37 @@ import { AnomalyCallout, type AnomalySeverity } from '@/components/DataHub/primi
 import { ChartFrame } from '@/components/DataHub/primitives/ChartFrame';
 import { EmptyState } from '@/components/DataHub/primitives/EmptyState';
 import { TabHeader } from '@/components/DataHub/shared/TabHeader';
+
+/**
+ * Platform average open position size in USD. Sourced from prod data
+ * (sum of position_size_usd / count of open positions across all wallets,
+ * snapshot as of 2026-06). Used as a v1 fallback for revenue-impact math on
+ * the biggest-leak callout — we don't have a per-funnel avg available in the
+ * useFunnel response yet, and the funnel-analysis skill calls for ranking
+ * leaks by absolute users × revenue impact. Revisit when the funnel API
+ * returns avgPositionUSD per source/cohort.
+ */
+const AVG_POSITION_USD = 56;
+
+/**
+ * Realistic ceiling on recovering lost funnel users (10%). The biggest-leak
+ * callout multiplies usersLost × AVG_POSITION_USD × ESTIMATED_CONVERSION to
+ * surface the actionable revenue opportunity — not the theoretical max if
+ * every lost user converted, which would massively overstate.
+ */
+const ESTIMATED_CONVERSION = 0.10;
+
+// Display-only labels for synthetic source values returned by the backend.
+// Mirrored from AttributionView so the leak callout reads with the same
+// channel naming the rest of the Sources tab uses.
+const SOURCE_LABEL: Record<string, string> = {
+  snag_referrals: 'Snag Referrals',
+  direct: 'Direct',
+};
+
+function formatSource(source: string): string {
+  return SOURCE_LABEL[source] ?? source;
+}
 
 interface LeakPair {
   fromId: string;
@@ -106,10 +138,40 @@ export function FunnelsView() {
   const prevStep = activeStepIdx > 0 ? data!.steps[activeStepIdx - 1] : undefined;
   const benchmark = activeStepIdx >= 0 ? getStepBenchmark(activeFunnel, activeStepIdx) : undefined;
 
-  // Biggest/smallest leak — recomputed only when the step set changes.
-  // Drives the AnomalyCallout strip above the funnel chart so operators see
-  // the worst conversion stage without scanning the bars.
-  const leakInsight = useMemo(() => computeLeaks(data?.steps), [data?.steps]);
+  // Biggest/smallest leak — recomputed only when the step set or the active
+  // source filter changes. Drives the AnomalyCallout strip above the funnel
+  // chart so operators see the worst conversion stage without scanning bars.
+  //
+  // The memo also pre-builds the biggest-leak `message` string (filter-aware
+  // copy + revenue impact) so it's stable when the inputs are — avoids
+  // re-renders churning AnomalyCallout's aria-live region.
+  const sourceFilter =
+    filters.source && filters.source !== 'all' ? filters.source : null;
+  const leakInsight = useMemo(() => {
+    const leaks = computeLeaks(data?.steps);
+    if (!leaks) return null;
+
+    const { biggest, smallest } = leaks;
+    const revenueOpportunity =
+      biggest.lost * AVG_POSITION_USD * ESTIMATED_CONVERSION;
+
+    const lede = sourceFilter
+      ? `Biggest leak for \`${formatSource(sourceFilter)}\``
+      : 'Biggest leak this period';
+
+    const biggestMessage =
+      `${lede}: ${biggest.fromName} → ${biggest.toName} ` +
+      `(−${biggest.dropPct.toFixed(0)}% drop, ${biggest.lost.toLocaleString()} users) ` +
+      `≈${fmtUSD(revenueOpportunity)} opportunity if recovered`;
+
+    return {
+      biggest,
+      smallest,
+      revenueOpportunity,
+      sourceFilter,
+      biggestMessage,
+    };
+  }, [data?.steps, sourceFilter]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -142,7 +204,7 @@ export function FunnelsView() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <AnomalyCallout
             severity={severityForDrop(leakInsight.biggest.dropPct)}
-            message={`Biggest leak this period: ${leakInsight.biggest.fromName} → ${leakInsight.biggest.toName} (−${leakInsight.biggest.dropPct.toFixed(0)}% drop, ${leakInsight.biggest.lost.toLocaleString()} users)`}
+            message={leakInsight.biggestMessage}
             actionLabel="Investigate"
             actionHref={`/admin/data-hub?view=users&q=${encodeURIComponent(leakInsight.biggest.fromName)}`}
           />
