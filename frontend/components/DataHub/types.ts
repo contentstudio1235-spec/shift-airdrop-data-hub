@@ -85,9 +85,14 @@ export interface Leaderboard {
 // ── GA4 Analytics ────────────────────────────────────────────
 export interface GA4ChannelRow {
   channel: string;
-  sessions: number;
-  activeUsers: number;
-  pct: number;
+  sessions: string;
+  activeUsers: string;
+  bounceRate?: string;
+  avgSessionDuration?: string;
+  screenPageViews?: string;
+  newUsers?: string;
+  eventCount?: string;
+  pct?: number;
 }
 export interface GA4TopPage {
   page: string;

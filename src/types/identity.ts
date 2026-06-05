@@ -94,6 +94,7 @@ export interface ProfileFilters {
   walletSizeMin?: number;             // USD
   activitySince?: string;             // ISO date — last_seen_at >= this
   q?: string;                         // free-text: wallet prefix, display_name, identity_value
+  hasSocial?: 'x' | 'discord' | 'both' | 'none'; // social connection filter
   sortBy?: SortKey;
   sortDir?: SortDir;
 }

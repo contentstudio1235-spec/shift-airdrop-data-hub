@@ -200,6 +200,7 @@ const SORT_EXPR = {
     last_seen: 'p.last_seen_at',
     volume: 'COALESCE(SUM(pos.position_size_usd), 0)',
     holdings: "COUNT(DISTINCT pos.id) FILTER (WHERE pos.status = 'open')",
+    holdings_value: "COALESCE(SUM(pos.position_size_usd) FILTER (WHERE pos.status = 'open'), 0)",
     x: 'COUNT(DISTINCT ilx.id)',
     discord: 'COUNT(DISTINCT ild.id)',
     referral_source: `CASE
@@ -207,7 +208,7 @@ const SORT_EXPR = {
     ELSE COALESCE(NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy'), 'zzz_direct')
   END`,
 };
-const VALID_SORT_KEYS = new Set(['last_seen', 'volume', 'holdings', 'x', 'discord', 'referral_source']);
+const VALID_SORT_KEYS = new Set(['last_seen', 'volume', 'holdings', 'holdings_value', 'x', 'discord', 'referral_source']);
 async function searchProfiles(filters) {
     const page = Math.max(1, filters.page ?? 1);
     const pageSize = Math.min(200, Math.max(1, filters.pageSize ?? 50));
@@ -242,6 +243,39 @@ async function searchProfiles(filters) {
       )
     )`);
     }
+    // hasSocial filter — gated by enum, SQL is static (no user input interpolation)
+    // Same clause applied to both rowsQuery and countQuery via shared whereSql so
+    // `total` stays consistent with the returned rows.
+    if (filters.hasSocial === 'x' || filters.hasSocial === 'both') {
+        where.push(`EXISTS (
+      SELECT 1 FROM identity_links ilx_f
+      WHERE ilx_f.profile_id = p.profile_id
+        AND ilx_f.identity_type = 'x_handle'
+        AND ilx_f.unlinked_at IS NULL
+    )`);
+    }
+    if (filters.hasSocial === 'discord' || filters.hasSocial === 'both') {
+        where.push(`EXISTS (
+      SELECT 1 FROM identity_links ild_f
+      WHERE ild_f.profile_id = p.profile_id
+        AND ild_f.identity_type = 'discord_id'
+        AND ild_f.unlinked_at IS NULL
+    )`);
+    }
+    if (filters.hasSocial === 'none') {
+        where.push(`NOT EXISTS (
+      SELECT 1 FROM identity_links ilx_n
+      WHERE ilx_n.profile_id = p.profile_id
+        AND ilx_n.identity_type = 'x_handle'
+        AND ilx_n.unlinked_at IS NULL
+    )`);
+        where.push(`NOT EXISTS (
+      SELECT 1 FROM identity_links ild_n
+      WHERE ild_n.profile_id = p.profile_id
+        AND ild_n.identity_type = 'discord_id'
+        AND ild_n.unlinked_at IS NULL
+    )`);
+    }
     const whereSql = `WHERE ${where.join(' AND ')}`;
     const walletSizeMinNum = filters.walletSizeMin !== undefined ? Number(filters.walletSizeMin) : null;
     const stitchPctMinNum = filters.stitchPctMin !== undefined ? Number(filters.stitchPctMin) : null;
@@ -263,6 +297,7 @@ async function searchProfiles(filters) {
       p.first_utm_source,
       (COUNT(DISTINCT il.identity_type) * 100.0 / 7.0) AS stitched_pct,
       COALESCE(SUM(pos.position_size_usd), 0) AS lifetime_volume_usd,
+      COALESCE(SUM(pos.position_size_usd) FILTER (WHERE pos.status = 'open'), 0) AS holdings_value_usd,
       (COUNT(DISTINCT pos.id) FILTER (WHERE pos.status = 'open'))::int AS holdings,
       (COUNT(DISTINCT ilx.id) > 0) AS has_x,
       (COUNT(DISTINCT ild.id) > 0) AS has_discord
@@ -299,6 +334,7 @@ async function searchProfiles(filters) {
             firstUtmSource: r.first_utm_source,
             stitchedPct: Math.round(Number(r.stitched_pct) * 10) / 10,
             lifetimeVolumeUSD: Number(r.lifetime_volume_usd),
+            holdingsValueUSD: Number(r.holdings_value_usd),
             holdings: Number(r.holdings),
             hasX: r.has_x,
             hasDiscord: r.has_discord,

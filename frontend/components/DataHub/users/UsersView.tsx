@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { TOKENS } from '@/lib/chartTokens';
 import { MagnifyingGlass } from '@phosphor-icons/react';
@@ -51,26 +51,19 @@ export function UsersView() {
 
   const [page, setPage] = useState(1);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(initialProfileId);
-  // Client-side social filter — transient, not URL-synced
+  // Social filter — transient (not URL-synced) but pushed to backend so `total` is correct
   const [socialFilter, setSocialFilter] = useState<SocialFilter>('any');
 
-  const list = useUsersList(filters, page, PAGE_SIZE);
+  // Push hasSocial into the API request so the server filters AND the total matches
+  const effectiveFilters: UsersListFilters = {
+    ...filters,
+    hasSocial: socialFilter === 'any' ? undefined : socialFilter,
+  };
 
-  // Client-side social filter applied after API response
-  const filteredRows = useMemo(() => {
-    const rows = list.data?.rows ?? [];
-    if (socialFilter === 'any') return rows;
-    return rows.filter(r => {
-      if (socialFilter === 'x') return r.hasX;
-      if (socialFilter === 'discord') return r.hasDiscord;
-      if (socialFilter === 'both') return r.hasX && r.hasDiscord;
-      if (socialFilter === 'none') return !r.hasX && !r.hasDiscord;
-      return true;
-    });
-  }, [list.data?.rows, socialFilter]);
+  const list = useUsersList(effectiveFilters, page, PAGE_SIZE);
 
-  // When social filter is active, show filtered count; else show API total
-  const displayTotal = socialFilter === 'any' ? (list.data?.total ?? 0) : filteredRows.length;
+  const rows = list.data?.rows ?? [];
+  const displayTotal = list.data?.total ?? 0;
 
   // Sync state -> URL (replace, no history pollution)
   useEffect(() => {
@@ -168,10 +161,13 @@ export function UsersView() {
           ))}
         </select>
 
-        {/* Has Social quick-filter — NEW, 160px, client-side only */}
+        {/* Has Social quick-filter — server-side, 160px */}
         <select
           value={socialFilter}
-          onChange={e => setSocialFilter(e.target.value as SocialFilter)}
+          onChange={e => {
+            setSocialFilter(e.target.value as SocialFilter);
+            setPage(1);
+          }}
           style={{ ...inputStyle, width: 160 }}
           aria-label="Filter by social connection"
         >
@@ -225,7 +221,7 @@ export function UsersView() {
       }}>
         {/* Left: list */}
         <UserListPane
-          rows={filteredRows}
+          rows={rows}
           total={displayTotal}
           page={page}
           pageSize={PAGE_SIZE}

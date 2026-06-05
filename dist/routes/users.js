@@ -19,6 +19,7 @@ const VALID_IDENTITY_TYPES = [
 ];
 const VALID_CONFIDENCE = ['deterministic', 'probabilistic', 'manual'];
 const VALID_SORT_KEYS = ['last_seen', 'volume', 'holdings', 'x', 'discord', 'referral_source'];
+const VALID_HAS_SOCIAL = ['x', 'discord', 'both', 'none'];
 // GET /api/users — paginated list
 router.get('/', async (req, res) => {
     try {
@@ -27,6 +28,11 @@ router.get('/', async (req, res) => {
         const sortBy = (sortByRaw && VALID_SORT_KEYS.includes(sortByRaw))
             ? sortByRaw : undefined;
         const sortDir = sortDirRaw === 'asc' || sortDirRaw === 'desc' ? sortDirRaw : undefined;
+        const hasSocialRaw = typeof req.query.hasSocial === 'string' ? req.query.hasSocial : undefined;
+        if (hasSocialRaw && !VALID_HAS_SOCIAL.includes(hasSocialRaw)) {
+            return res.status(400).json({ error: 'invalid hasSocial' });
+        }
+        const hasSocial = hasSocialRaw;
         const result = await (0, identityService_1.searchProfiles)({
             page: req.query.page ? Number(req.query.page) : undefined,
             pageSize: req.query.pageSize ? Number(req.query.pageSize) : undefined,
@@ -35,6 +41,7 @@ router.get('/', async (req, res) => {
             walletSizeMin: req.query.walletSizeMin ? Number(req.query.walletSizeMin) : undefined,
             activitySince: typeof req.query.activitySince === 'string' ? req.query.activitySince : undefined,
             q: typeof req.query.q === 'string' ? req.query.q : undefined,
+            hasSocial,
             sortBy,
             sortDir,
         });
