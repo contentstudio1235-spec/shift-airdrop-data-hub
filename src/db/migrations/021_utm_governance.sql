@@ -97,7 +97,7 @@ INSERT INTO utm_approved_mediums (medium, channel_grouping, notes) VALUES
   ('social',       'Organic Social','Unpaid social media posts'),
   ('referral',     'Referral',      'Partner referrals, guest posts, press'),
   ('email',        'Email',         'Email newsletters, drip campaigns'),
-  ('kol',          'Referral',      'KOL personal posts; SHIFT-specific; rolls up to Referral in GA4 custom channel'),
+  ('kol',          'Referral',      'KOL personal posts — SHIFT-specific — rolls up to Referral in GA4 custom channel'),
   ('affiliate',    'Affiliates',    'Affiliate partner links'),
   ('qr',           'Offline',       'QR codes on physical materials'),
   ('display',      'Display',       'Banner / programmatic display')
