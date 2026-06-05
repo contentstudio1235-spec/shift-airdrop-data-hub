@@ -21,6 +21,8 @@ import { CohortsView } from './views/CohortsView';
 import { RawDataView } from './views/RawDataView';
 import { UsersView } from '@/components/DataHub/users/UsersView';
 import { PulseView } from '@/components/DataHub/pulse/PulseView';
+import { UtmGovernancePanel } from '@/components/DataHub/engineering/UtmGovernancePanel';
+import { Tag } from '@phosphor-icons/react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://shift-airdrop-backend.onrender.com";
 const KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || "ShiftRwa2026@@$$Key";
@@ -894,13 +896,14 @@ function AdminSystemPage({ data }: { data: HubData }) {
 // MAIN HUB SHELL
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const NAV_ITEMS: { page: HubPage; label: string; icon: string; audience: string }[] = [
+const NAV_ITEMS: { page: HubPage; label: string; icon: React.ReactNode; audience: string }[] = [
   { page: "overview", label: "Dashboard", icon: "◈", audience: "All teams" },
   { page: "markets", label: "Markets", icon: "📈", audience: "Finance · BD" },
   { page: "analytics", label: "Analytics", icon: "📊", audience: "Marketing" },
   { page: "stitched", label: "Stitched GA4", icon: "🔗", audience: "Dev · Marketing" },
   { page: "portfolios", label: "Portfolios", icon: "💼", audience: "Finance" },
   { page: "admin", label: "Admin", icon: "⚙️", audience: "Engineering" },
+  { page: "utm", label: "UTM", icon: <Tag size={14} weight="bold" />, audience: "Marketing · Engineering" },
 ];
 
 function DataHubPageInner() {
@@ -993,6 +996,7 @@ function DataHubPageInner() {
     stitched: <StitchedPage data={data} />,
     portfolios: <PortfoliosPage data={data} />,
     admin: <AdminSystemPage data={data} />,
+    utm: <UtmGovernancePanel />,
   };
 
   const currentNav = NAV_ITEMS.find(n => n.page === page)!;
@@ -1067,15 +1071,20 @@ function DataHubPageInner() {
         {/* ── Page Header ───────────────────────────────────────────── */}
         <div style={{ maxWidth: "1440px", margin: "0 auto", padding: "28px 24px 0" }}>
           <div style={{ marginBottom: "24px" }}>
-            <h1 style={{ fontSize: "24px", fontWeight: 800, color: "#fff" }}>{currentNav.icon} {currentNav.label}</h1>
+            <h1 style={{ fontSize: "24px", fontWeight: 800, color: "#fff", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ display: "inline-flex", alignItems: "center" }}>{currentNav.icon}</span>
+              {currentNav.label}
+            </h1>
             <p style={{ color: "#3a7060", fontSize: "13px", marginTop: "4px" }}>
-              {currentNav.audience} · 4 live data feeds · Auto-refresh every 30s
+              {currentNav.audience}
+              {page === "utm" ? " · UTM governance · campaigns log + violations" : " · 4 live data feeds · Auto-refresh every 30s"}
             </p>
           </div>
 
           {/* ── Page Content ───────────────────────────────────────────── */}
           <div style={{ paddingBottom: "48px" }}>
-            {data.loading ? (
+            {/* UTM panel manages its own loading/error state (it doesn't depend on HubData feeds). */}
+            {data.loading && page !== "utm" ? (
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                 {[180, 300, 240].map((h, i) => <Skeleton key={i} h={h} />)}
               </div>
