@@ -69,7 +69,7 @@ describe('PulseView', () => {
     expect(getByText('Registered Users')).toBeTruthy();
     expect(getByText('Active Holders')).toBeTruthy();
     expect(getByText('AUM')).toBeTruthy();
-    expect(getByText('Stitch %')).toBeTruthy();
+    expect(getByText('Identity Links')).toBeTruthy();
     expect(getByText('Activations (24h)')).toBeTruthy();
     expect(getByText('Open Whales')).toBeTruthy();
   });

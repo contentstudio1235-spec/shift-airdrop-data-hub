@@ -135,12 +135,13 @@ export function PulseView() {
           icon={<ChartLineUp size={11} weight="fill" color={TOKENS.textFaint} />}
         />
         <KPICard
-          label="Stitch %"
+          label="Identity Links"
           value={kpis.stitchPct.value}
           delta={kpis.stitchPct.delta24h}
           deltaPct={kpis.stitchPct.delta24hPct}
           formatValue={fmtPct}
           icon={<LinkSimple size={11} weight="fill" color={TOKENS.textFaint} />}
+          tooltip="% of profiles with 2+ identity links (loose: counts duplicate types as separate links)"
         />
         <KPICard
           label="Activations (24h)"

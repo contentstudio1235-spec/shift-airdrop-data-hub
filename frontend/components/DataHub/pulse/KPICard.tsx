@@ -22,6 +22,13 @@ export interface KPICardProps {
   positiveIsGood?: boolean;
   /** Optional Phosphor icon rendered next to the label. */
   icon?: React.ReactNode;
+  /**
+   * Optional native HTML `title` tooltip applied to the card's outer wrapper.
+   * Used to surface the precise formula behind a metric on hover, e.g. the
+   * "Identity Links" card explains it counts profiles with ≥2 identity links.
+   * When undefined, no `title` attribute is rendered (default behavior).
+   */
+  tooltip?: string;
 }
 
 const defaultFormatValue = (n: number) => n.toLocaleString();
@@ -68,6 +75,7 @@ export function KPICard({
   deltaPct,
   positiveIsGood = true,
   icon,
+  tooltip,
 }: KPICardProps) {
   const [hover, setHover] = useState(false);
 
@@ -147,6 +155,7 @@ export function KPICard({
       style={containerStyle}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      title={tooltip}
     >
       <div style={labelRowStyle}>
         {icon && <span aria-hidden style={{ display: 'inline-flex' }}>{icon}</span>}
