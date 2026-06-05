@@ -56,11 +56,16 @@ export interface UseUtmViolationsReturn {
   refetch: () => void;
 }
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
 export function useUtmViolations(
   opts: UseUtmViolationsOptions = {},
 ): UseUtmViolationsReturn {
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const since = opts.since ?? sevenDaysAgo;
+  // IMPORTANT: do NOT compute defaults like `new Date()` at render time. Those
+  // values change on every render, force the useEffect deps to "change", and
+  // re-arm the poller in a tight loop. Use the explicit opts as the dep; the
+  // default cutoff is computed lazily inside run() at fetch time.
+  const sinceOpt = opts.since;
   const limit = opts.limit ?? 50;
   const reason = opts.reason;
 
@@ -75,6 +80,7 @@ export function useUtmViolations(
 
     const run = () => {
       setError(null);
+      const since = sinceOpt ?? new Date(Date.now() - SEVEN_DAYS_MS).toISOString();
       apiGet<UtmViolationsPayload>('/api/utm/violations', {
         signal: ctrl.signal,
         query: { since, limit, reason },
@@ -101,7 +107,7 @@ export function useUtmViolations(
       ctrl.abort();
     };
     // tick triggers manual refetch; option changes re-arm the poller.
-  }, [tick, since, limit, reason]);
+  }, [tick, sinceOpt, limit, reason]);
 
   return {
     data,
