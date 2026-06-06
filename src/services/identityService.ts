@@ -306,13 +306,49 @@ export async function getProfile(profileId: string): Promise<ProfileWithLinks | 
 
 // ─── searchProfiles ───────────────────────────────────────────────────────────
 
+// ── Correlated scalar subquery templates for position-derived metrics ────────
+// These MUST be scalar subqueries (not JOIN-based aggregates), because joining
+// positions through identity_links at the outer query level multiplies rows by
+// the number of identity_link rows per profile (one per identity_type), producing
+// N× inflation of SUM/COUNT. The detail endpoint (getProfile) already uses this
+// pattern correctly — listing must match.
+const VOLUME_SUBQUERY = `(
+  SELECT COALESCE(SUM(ps.position_size_usd), 0)
+  FROM positions ps
+  JOIN identity_links il2
+    ON il2.identity_value = ps.wallet
+   AND il2.identity_type = 'wallet'
+   AND il2.unlinked_at IS NULL
+  WHERE il2.profile_id = p.profile_id
+)`;
+const HOLDINGS_VALUE_SUBQUERY = `(
+  SELECT COALESCE(SUM(ps.position_size_usd), 0)
+  FROM positions ps
+  JOIN identity_links il2
+    ON il2.identity_value = ps.wallet
+   AND il2.identity_type = 'wallet'
+   AND il2.unlinked_at IS NULL
+  WHERE il2.profile_id = p.profile_id
+    AND ps.status = 'open'
+)`;
+const HOLDINGS_COUNT_SUBQUERY = `(
+  SELECT COUNT(*)
+  FROM positions ps
+  JOIN identity_links il2
+    ON il2.identity_value = ps.wallet
+   AND il2.identity_type = 'wallet'
+   AND il2.unlinked_at IS NULL
+  WHERE il2.profile_id = p.profile_id
+    AND ps.status = 'open'
+)`;
+
 // Safelist: maps SortKey values to their SQL expressions.
 // NEVER concatenate user-supplied sortBy directly — always index through this map.
 const SORT_EXPR: Record<SortKey, string> = {
   last_seen: 'p.last_seen_at',
-  volume: 'COALESCE(SUM(pos.position_size_usd), 0)',
-  holdings: "COUNT(DISTINCT pos.id) FILTER (WHERE pos.status = 'open')",
-  holdings_value: "COALESCE(SUM(pos.position_size_usd) FILTER (WHERE pos.status = 'open'), 0)",
+  volume: VOLUME_SUBQUERY,
+  holdings: HOLDINGS_COUNT_SUBQUERY,
+  holdings_value: HOLDINGS_VALUE_SUBQUERY,
   x: 'COUNT(DISTINCT ilx.id)',
   discord: 'COUNT(DISTINCT ild.id)',
   referral_source: `CASE
@@ -403,13 +439,20 @@ export async function searchProfiles(
 
   const havingClauses: string[] = [];
   if (walletSizeMinNum !== null && Number.isFinite(walletSizeMinNum) && walletSizeMinNum >= 0) {
-    havingClauses.push(`COALESCE(SUM(pos.position_size_usd), 0) >= ${walletSizeMinNum}`);
+    // Use scalar subquery — see VOLUME_SUBQUERY comment above. The HAVING clause
+    // is evaluated after GROUP BY, where p.profile_id is resolved per group, so
+    // the correlated subquery sees a stable per-group p.profile_id reference.
+    havingClauses.push(`${VOLUME_SUBQUERY} >= ${walletSizeMinNum}`);
   }
   if (stitchPctMinNum !== null && Number.isFinite(stitchPctMinNum) && stitchPctMinNum >= 0) {
     havingClauses.push(`(COUNT(DISTINCT il.identity_type) * 100.0 / 7.0) >= ${stitchPctMinNum}`);
   }
   const havingSql = havingClauses.length > 0 ? `HAVING ${havingClauses.join(' AND ')}` : '';
 
+  // NOTE: positions are NOT joined in this query. Position-derived metrics
+  // (lifetime_volume_usd, holdings_value_usd, holdings) are computed via
+  // correlated scalar subqueries against `positions` to avoid row multiplication
+  // when a profile has multiple identity_links rows. See VOLUME_SUBQUERY above.
   const rowsQuery = `
     SELECT
       p.profile_id,
@@ -419,15 +462,13 @@ export async function searchProfiles(
       p.last_seen_at,
       p.first_utm_source,
       (COUNT(DISTINCT il.identity_type) * 100.0 / 7.0) AS stitched_pct,
-      COALESCE(SUM(pos.position_size_usd), 0) AS lifetime_volume_usd,
-      COALESCE(SUM(pos.position_size_usd) FILTER (WHERE pos.status = 'open'), 0) AS holdings_value_usd,
-      (COUNT(DISTINCT pos.id) FILTER (WHERE pos.status = 'open'))::int AS holdings,
+      ${VOLUME_SUBQUERY} AS lifetime_volume_usd,
+      ${HOLDINGS_VALUE_SUBQUERY} AS holdings_value_usd,
+      ${HOLDINGS_COUNT_SUBQUERY}::int AS holdings,
       (COUNT(DISTINCT ilx.id) > 0) AS has_x,
       (COUNT(DISTINCT ild.id) > 0) AS has_discord
     FROM user_profiles p
     LEFT JOIN identity_links il ON il.profile_id = p.profile_id AND il.unlinked_at IS NULL
-    LEFT JOIN identity_links wl ON wl.profile_id = p.profile_id AND wl.identity_type = 'wallet' AND wl.unlinked_at IS NULL
-    LEFT JOIN positions pos ON pos.wallet = wl.identity_value
     LEFT JOIN identity_links ilx ON ilx.profile_id = p.profile_id AND ilx.identity_type = 'x_handle' AND ilx.unlinked_at IS NULL
     LEFT JOIN identity_links ild ON ild.profile_id = p.profile_id AND ild.identity_type = 'discord_id' AND ild.unlinked_at IS NULL
     ${whereSql}
