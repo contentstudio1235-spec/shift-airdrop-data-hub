@@ -264,6 +264,34 @@ async function searchProfiles(filters) {
         params.push(filters.activitySince);
         where.push(`p.last_seen_at >= $${params.length}::timestamptz`);
     }
+    // ── KOL drill-down referrer filter ──────────────────────────────────────────
+    // Driven by ?referrer=<value>&referrerType=snag|utm. Both must be present;
+    // missing either → no referrer filter applied. Bound as separate parameters
+    // (no string interpolation of `referrer` into SQL bodies).
+    //
+    // referrerType='snag' uses an EXISTS subquery against `users` joined to the
+    // profile via `users.user_profile_id` (see migration 017). This is a semi-join
+    // — it cannot multiply outer rows even if a profile has multiple `users`
+    // rows, so the recent row-multiplication fix (MR !21, which moved positions
+    // to scalar subqueries) is NOT reintroduced here.
+    //
+    // referrerType='utm' uses the same column as the free-form `source` filter,
+    // but bound to its own parameter so the two can coexist if both supplied.
+    if (filters.referrer && filters.referrerType) {
+        params.push(filters.referrer);
+        const refIdx = params.length;
+        if (filters.referrerType === 'snag') {
+            where.push(`EXISTS (
+        SELECT 1 FROM users u_ref
+        WHERE u_ref.user_profile_id = p.profile_id
+          AND u_ref.referred_by_code = $${refIdx}
+      )`);
+        }
+        else {
+            // referrerType === 'utm'
+            where.push(`p.first_utm_source = $${refIdx}`);
+        }
+    }
     if (filters.q) {
         params.push(`${filters.q.toLowerCase()}%`);
         const qIdx = params.length;

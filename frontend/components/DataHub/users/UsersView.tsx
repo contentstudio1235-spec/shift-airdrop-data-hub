@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { TOKENS } from '@/lib/chartTokens';
-import { MagnifyingGlass } from '@phosphor-icons/react';
+import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import { useUsersList, type UsersListFilters } from '@/hooks/useUsersList';
 import { TabHeader } from '@/components/DataHub/shared/TabHeader';
 import { UserListPane } from './UserListPane';
@@ -43,11 +43,25 @@ export function UsersView() {
   const initialSortBy = (params?.get('sortBy') ?? 'last_seen') as NonNullable<UsersListFilters['sortBy']>;
   const initialSortDir = (params?.get('sortDir') === 'asc' ? 'asc' : 'desc') as NonNullable<UsersListFilters['sortDir']>;
 
+  // ── KOL drill-down deep-link params (Phase 2.1B contract) ────────────────
+  // ?referrer=<string>&referrerType=snag|utm — both must be present for the
+  // filter to apply. referrerType is locked to the two literals to keep
+  // backend SQL routing deterministic.
+  const initialReferrer = params?.get('referrer') ?? undefined;
+  const initialReferrerTypeRaw = params?.get('referrerType');
+  const initialReferrerType: 'snag' | 'utm' | undefined =
+    initialReferrerTypeRaw === 'snag' ? 'snag'
+    : initialReferrerTypeRaw === 'utm' ? 'utm'
+    : undefined;
+
   const [filters, setFilters] = useState<UsersListFilters>({
     q: initialQuery || undefined,
     source: initialSource === 'all' ? undefined : initialSource,
     sortBy: initialSortBy,
     sortDir: initialSortDir,
+    // Only include the pair when BOTH are valid — never one without the other.
+    referrer: initialReferrer && initialReferrerType ? initialReferrer : undefined,
+    referrerType: initialReferrer && initialReferrerType ? initialReferrerType : undefined,
   });
 
   const [page, setPage] = useState(1);
@@ -79,8 +93,9 @@ export function UsersView() {
   }, [total, pageNum, rowCount]);
 
   // Sync state -> URL (replace, no history pollution).
-  // Preserve foreign params (e.g. ?view= owned by data-hub page shell) to avoid
-  // fighting other URL writers.
+  // Preserve foreign params (e.g. ?view= owned by data-hub page shell) AND the
+  // KOL drill-down pair (referrer/referrerType) to avoid fighting other URL
+  // writers and stripping deep-link params on first render.
   useEffect(() => {
     const next = new URLSearchParams();
     next.set('tab', 'users');
@@ -89,16 +104,32 @@ export function UsersView() {
     if (filters.source) next.set('source', filters.source);
     if (filters.sortBy && filters.sortBy !== 'last_seen') next.set('sortBy', filters.sortBy);
     if (filters.sortDir && filters.sortDir !== 'desc') next.set('sortDir', filters.sortDir);
+    // Emit referrer/referrerType from current filter state when both present.
+    if (filters.referrer && filters.referrerType) {
+      next.set('referrer', filters.referrer);
+      next.set('referrerType', filters.referrerType);
+    }
     if (typeof window !== 'undefined') {
       const existing = new URLSearchParams(window.location.search);
       const view = existing.get('view');
       if (view) next.set('view', view);
+      // Preserve drill-down pair from URL only if filter state hasn't already
+      // emitted them (filter state is the source of truth once set). This
+      // catches the very first render before state initialization races.
+      if (!next.has('referrer')) {
+        const referrer = existing.get('referrer');
+        const referrerType = existing.get('referrerType');
+        if (referrer && (referrerType === 'snag' || referrerType === 'utm')) {
+          next.set('referrer', referrer);
+          next.set('referrerType', referrerType);
+        }
+      }
       const target = `/admin/data-hub?${next.toString()}`;
       if (window.location.pathname + window.location.search !== target) {
         router.replace(target, { scroll: false });
       }
     }
-  }, [router, selectedProfileId, filters.q, filters.source, filters.sortBy, filters.sortDir]);
+  }, [router, selectedProfileId, filters.q, filters.source, filters.sortBy, filters.sortDir, filters.referrer, filters.referrerType]);
 
   const handleSelect = useCallback((profileId: string) => {
     setSelectedProfileId(profileId);
@@ -108,6 +139,14 @@ export function UsersView() {
     setFilters({});
     setPage(1);
     setSocialFilter('any');
+  }, []);
+
+  // Clear ONLY the referrer drill-down pair (KOL filter pill X button).
+  // Leaves other filters intact — the URL-sync useEffect drops referrer+
+  // referrerType automatically once filter state no longer has them.
+  const handleClearReferrer = useCallback(() => {
+    setFilters(f => ({ ...f, referrer: undefined, referrerType: undefined }));
+    setPage(1);
   }, []);
 
   // Reset page when filters change
@@ -125,11 +164,13 @@ export function UsersView() {
     }));
   }, [handleFiltersChange]);
 
-  // Count of active filters for Reset button label
+  // Count of active filters for Reset button label.
+  // referrer/referrerType counts as ONE filter (the KOL drill-down pair).
   const activeFilterCount = [
     !!filters.q,
     !!filters.source,
     socialFilter !== 'any',
+    !!(filters.referrer && filters.referrerType),
   ].filter(Boolean).length;
 
   return (
@@ -244,6 +285,70 @@ export function UsersView() {
           ) : '—'}
         </div>
       </div>
+
+      {/* Referrer drill-down pill — only renders when KOL deep-link is active.
+          Shows the active referrer + type, with an X to clear just this filter.
+          Backend filter applied is determined by referrerType:
+            - 'snag' → users.referred_by_code = referrer (joined via user_profile_id)
+            - 'utm'  → user_profiles.first_utm_source = referrer */}
+      {filters.referrer && filters.referrerType && (
+        <div
+          data-testid="referrer-filter-pill"
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}
+        >
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '6px 10px 6px 12px',
+              background: 'rgba(0,200,150,0.10)',
+              border: `1px solid ${TOKENS.accentBorder}`,
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 700,
+              color: TOKENS.textPrimary,
+              letterSpacing: '0.02em',
+            }}
+          >
+            <span style={{ color: TOKENS.textMuted, fontWeight: 600 }}>Referrer:</span>
+            <span style={{ color: TOKENS.accent, fontVariantNumeric: 'tabular-nums' }}>
+              {filters.referrer}
+            </span>
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 800,
+                letterSpacing: '0.10em',
+                textTransform: 'uppercase',
+                padding: '1px 6px',
+                borderRadius: 4,
+                background: 'rgba(0,200,150,0.15)',
+                color: TOKENS.accent,
+              }}
+            >
+              {filters.referrerType === 'snag' ? 'Snag' : 'UTM'}
+            </span>
+            <button
+              type="button"
+              onClick={handleClearReferrer}
+              aria-label="Clear referrer filter"
+              style={{
+                marginLeft: 4,
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                color: TOKENS.textMuted,
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: 2,
+              }}
+            >
+              <X size={12} weight="bold" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 2-pane grid */}
       <div style={{

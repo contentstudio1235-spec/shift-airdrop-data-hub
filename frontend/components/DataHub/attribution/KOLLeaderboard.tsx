@@ -1,13 +1,23 @@
 "use client";
-import React, { useState, useMemo } from 'react';
-import { Medal, CircleNotch, Warning, Trophy, ArrowDown, ArrowUp } from '@phosphor-icons/react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  Medal,
+  CircleNotch,
+  Warning,
+  Trophy,
+  ArrowDown,
+  ArrowUp,
+  CaretRight,
+  CaretDown,
+} from '@phosphor-icons/react';
 import { TOKENS, MOTION } from '@/lib/chartTokens';
 import { fmtUSD } from '@/lib/format';
 import type { KOLPayload, KOLEntry } from '@/hooks/useKOLLeaderboard';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type SortKey = 'users' | 'holders' | 'holderRate' | 'totalVolumeUSD' | 'avgVolumePerUserUSD' | 'score';
+type SortKey = 'users' | 'holderRate';
 type SortDir = 'asc' | 'desc';
 
 export interface KOLLeaderboardProps {
@@ -18,9 +28,12 @@ export interface KOLLeaderboardProps {
 
 // ─── Source label mapping ──────────────────────────────────────────────────────
 
+// Backend emits two source bucket labels: `snag_referrals` (matched via
+// users.referred_by_code) and `other` (matched via user_profiles.first_utm_source).
+// The previous `utm` key is dead — it's never emitted by computeKOLLeaderboard
+// in src/services/attributionService.ts — so dropping it (Code Reviewer IMP-2).
 const SOURCE_MAP: Record<string, string> = {
   snag_referrals: 'Snag',
-  utm: 'UTM',
 };
 function fmtSource(src: string): string {
   return SOURCE_MAP[src] ?? 'other';
@@ -101,21 +114,26 @@ interface ColDef {
   sortable: boolean;
 }
 
+// USERS column header label: backend `users` is LIFETIME — see
+// computeKOLLeaderboard() in src/services/attributionService.ts. Date filter
+// only narrows when ?from/?to are passed; the Source Attribution tab loads
+// the default (unbounded) window. Labeling honestly so the operator isn't
+// misled into thinking it's a recent-7d cohort. Backend-side 7d window is
+// deferred to Phase 2.1C.
 const COLUMNS: ColDef[] = [
-  { key: 'referrer',           label: 'REFERRER',  width: undefined, align: 'left',  sortable: false },
-  { key: 'users',              label: 'USERS',     width: 56,        align: 'right', sortable: true  },
-  { key: 'holders',            label: 'HOLDERS',   width: 64,        align: 'right', sortable: true  },
-  { key: 'holderRate',         label: 'RATE',      width: 72,        align: 'right', sortable: true  },
-  { key: 'totalVolumeUSD',     label: 'VOLUME',    width: 88,        align: 'right', sortable: true  },
-  { key: 'avgVolumePerUserUSD',label: 'AVG/USER',  width: 80,        align: 'right', sortable: true  },
-  { key: 'score',              label: 'SCORE',     width: 56,        align: 'right', sortable: true  },
+  { key: 'referrer',   label: 'REFERRER',         width: undefined, align: 'left',  sortable: false },
+  { key: 'users',      label: 'USERS (LIFETIME)', width: 96,        align: 'right', sortable: true  },
+  { key: 'holderRate', label: 'RATE',             width: 80,        align: 'right', sortable: true  },
 ];
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export function KOLLeaderboard({ data, loading, error }: KOLLeaderboardProps) {
-  const [sortKey, setSortKey] = useState<SortKey>('score');
+  const router = useRouter();
+  const [sortKey, setSortKey] = useState<SortKey>('users');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  // Only one row expanded at a time → stable key = `${source}|${referrer}`.
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -138,6 +156,34 @@ export function KOLLeaderboard({ data, loading, error }: KOLLeaderboardProps) {
   }, [data, sortKey, sortDir]);
 
   const isEmpty = !loading && !error && data !== null && data.rows.length === 0;
+
+  // Row drill-down → Users tab pre-filtered by the row's referrer string.
+  //
+  // Contract (Phase 2.1B fix):
+  //   ?referrer=<string>&referrerType=snag|utm
+  //
+  // The previous `?source=snag_referrals` was a backend bucket label — NOT a
+  // value present in any row's first_utm_source — so the old filter landed on
+  // an empty Users tab. And `?utmSource=` was never read by UsersView.
+  //
+  // referrerType maps to which column the backend filters against:
+  //   - 'snag' → users.referred_by_code via EXISTS subquery (joined by user_profile_id)
+  //   - 'utm'  → user_profiles.first_utm_source = $referrer
+  const handleRowNavigate = useCallback(
+    (row: KOLEntry) => {
+      const referrerType = row.source === 'snag_referrals' ? 'snag' : 'utm';
+      const params = new URLSearchParams();
+      params.set('view', 'users');
+      params.set('referrer', row.referrer);
+      params.set('referrerType', referrerType);
+      router.push(`/admin/data-hub?${params.toString()}`);
+    },
+    [router],
+  );
+
+  const handleToggleExpand = useCallback((key: string) => {
+    setExpandedKey((current) => (current === key ? null : key));
+  }, []);
 
   return (
     <div style={cardStyle}>
@@ -169,7 +215,7 @@ export function KOLLeaderboard({ data, loading, error }: KOLLeaderboardProps) {
           flexShrink: 0,
         }}
       >
-        Referrers with 5+ referred users
+        Referrers with 5+ referred users · click row to drill into filtered Users
       </div>
 
       {/* Body */}
@@ -199,13 +245,28 @@ export function KOLLeaderboard({ data, loading, error }: KOLLeaderboardProps) {
             }}
           >
             <colgroup>
+              {/* Expand-chevron column (fixed narrow) */}
+              <col style={{ width: 28 }} />
+              {/* REFERRER (flex) */}
               <col />
-              {[56, 64, 72, 88, 80, 56].map((w, i) => (
-                <col key={i} style={{ width: w }} />
-              ))}
+              {/* USERS */}
+              <col style={{ width: 96 }} />
+              {/* RATE */}
+              <col style={{ width: 80 }} />
+              {/* Drill-down chevron column (fixed narrow) */}
+              <col style={{ width: 20 }} />
             </colgroup>
             <thead>
               <tr style={{ padding: '10px 0', borderBottom: `1px solid ${TOKENS.chartGrid}` }}>
+                {/* Empty header above expand-chevron column */}
+                <th
+                  scope="col"
+                  aria-label="Expand row"
+                  style={{
+                    padding: '10px 0',
+                    borderBottom: `1px solid ${TOKENS.chartGrid}`,
+                  }}
+                />
                 {COLUMNS.map((col) => {
                   const isActive = col.key === sortKey;
                   return (
@@ -263,12 +324,30 @@ export function KOLLeaderboard({ data, loading, error }: KOLLeaderboardProps) {
                     </th>
                   );
                 })}
+                {/* Empty header above drill-down chevron column */}
+                <th
+                  scope="col"
+                  aria-label="Drill down"
+                  style={{
+                    padding: '10px 0',
+                    borderBottom: `1px solid ${TOKENS.chartGrid}`,
+                  }}
+                />
               </tr>
             </thead>
             <tbody>
-              {sortedRows.map((row, i) => (
-                <TableRow key={`${row.referrer}-${i}`} row={row} />
-              ))}
+              {sortedRows.map((row, i) => {
+                const rowKey = `${row.source}|${row.referrer}`;
+                return (
+                  <TableRow
+                    key={`${rowKey}-${i}`}
+                    row={row}
+                    expanded={expandedKey === rowKey}
+                    onToggleExpand={() => handleToggleExpand(rowKey)}
+                    onNavigate={() => handleRowNavigate(row)}
+                  />
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -279,129 +358,229 @@ export function KOLLeaderboard({ data, loading, error }: KOLLeaderboardProps) {
 
 // ─── Table row ─────────────────────────────────────────────────────────────────
 
-function TableRow({ row }: { row: KOLEntry }) {
+interface TableRowProps {
+  row: KOLEntry;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onNavigate: () => void;
+}
+
+function TableRow({ row, expanded, onToggleExpand, onNavigate }: TableRowProps) {
   const [hovered, setHovered] = useState(false);
   const display = fmtReferrer(row.referrer);
-  const isWallet = display !== row.referrer;
+
+  // Chevron click expands inline; everything else navigates. stopPropagation
+  // on the chevron keeps the two click targets cleanly separated.
+  const handleChevronClick = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      onToggleExpand();
+    },
+    [onToggleExpand],
+  );
+
+  const handleRowKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTableRowElement>) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onNavigate();
+      }
+    },
+    [onNavigate],
+  );
+
+  const rowBg = expanded
+    ? TOKENS.tableRowHover
+    : hovered
+      ? TOKENS.tableRowHover
+      : 'transparent';
 
   return (
-    <tr
-      style={{
-        padding: '10px 0',
-        borderBottom: `1px solid ${TOKENS.chartGrid}`,
-        background: hovered ? TOKENS.tableRowHover : 'transparent',
-        transition: `background ${MOTION.fast}`,
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {/* REFERRER */}
-      <td
-        style={{ padding: '10px 0', maxWidth: 0, overflow: 'hidden' }}
-        title={row.referrer}
+    <>
+      <tr
+        role="button"
+        tabIndex={0}
+        aria-label={`Drill into ${display} (${row.source})`}
+        aria-expanded={expanded}
+        style={{
+          padding: '10px 0',
+          borderBottom: `1px solid ${TOKENS.chartGrid}`,
+          background: rowBg,
+          transition: `background ${MOTION.fast}`,
+          cursor: 'pointer',
+          outline: 'none',
+        }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={onNavigate}
+        onKeyDown={handleRowKeyDown}
       >
-        <div
+        {/* EXPAND CHEVRON */}
+        <td
           style={{
+            padding: '10px 0',
+            verticalAlign: 'middle',
+            textAlign: 'center',
+          }}
+        >
+          <button
+            type="button"
+            aria-label={expanded ? `Collapse ${row.referrer} details` : `Expand ${row.referrer} details`}
+            aria-expanded={expanded}
+            onClick={handleChevronClick}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 2,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: TOKENS.textFaint,
+            }}
+          >
+            {expanded
+              ? <CaretDown size={12} weight="regular" aria-hidden="true" />
+              : <CaretRight size={12} weight="regular" aria-hidden="true" />}
+          </button>
+        </td>
+
+        {/* REFERRER */}
+        <td
+          style={{ padding: '10px 0', maxWidth: 0, overflow: 'hidden' }}
+          title={row.referrer}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: TOKENS.textPrimary,
+              fontFamily: 'inherit',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {display}
+          </div>
+          <div
+            style={{
+              fontSize: 10,
+              color: TOKENS.textFaint,
+              marginTop: 2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {fmtSource(row.source)}
+          </div>
+        </td>
+
+        {/* USERS */}
+        <td
+          style={{
+            padding: '10px 0',
+            textAlign: 'right',
             fontSize: 12,
             fontWeight: 700,
-            color: TOKENS.textPrimary,
-            fontFamily: 'inherit',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            color: TOKENS.textSecondary,
+            fontVariantNumeric: 'tabular-nums',
           }}
         >
-          {display}
-        </div>
-        <div
+          {row.users.toLocaleString()}
+        </td>
+
+        {/* RATE */}
+        <td style={{ padding: '10px 0', textAlign: 'right' }}>
+          <RatePill holderRate={row.holderRate} />
+        </td>
+
+        {/* DRILL-DOWN HINT */}
+        <td
           style={{
-            fontSize: 10,
-            color: TOKENS.textFaint,
-            marginTop: 2,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            padding: '10px 0',
+            textAlign: 'right',
+            verticalAlign: 'middle',
           }}
         >
-          {fmtSource(row.source)}
+          <CaretRight
+            size={12}
+            weight="regular"
+            color={TOKENS.textFaint}
+            aria-hidden="true"
+          />
+        </td>
+      </tr>
+
+      {expanded && (
+        <tr
+          aria-hidden={false}
+          style={{
+            background: TOKENS.tableRowHover,
+            borderBottom: `1px solid ${TOKENS.chartGrid}`,
+          }}
+        >
+          <td />
+          <td colSpan={4} style={{ padding: '8px 0 14px 0' }}>
+            <DetailGrid row={row} />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+// ─── Detail grid (5 collapsed columns) ────────────────────────────────────────
+
+function DetailGrid({ row }: { row: KOLEntry }) {
+  // Definition-list pairs for the 5 detail columns moved out of the primary
+  // table per Analytics Reporter Phase 2.1 spec (D1: cut to 3 cols).
+  const items: Array<{ label: string; value: string }> = [
+    { label: 'HOLDERS',  value: row.holders.toLocaleString() },
+    { label: 'WHALES',   value: row.whales.toLocaleString() },
+    { label: 'VOLUME',   value: fmtUSD(row.totalVolumeUSD) },
+    { label: 'AVG/USER', value: fmtUSD(row.avgVolumePerUserUSD) },
+    { label: 'SCORE',    value: row.score.toFixed(2) },
+  ];
+
+  return (
+    <dl
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(5, 1fr)',
+        gap: 12,
+        margin: 0,
+        padding: '4px 12px',
+      }}
+    >
+      {items.map((item) => (
+        <div key={item.label} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <dt
+            style={{
+              fontSize: 9,
+              fontWeight: 800,
+              color: TOKENS.textFaint,
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+            }}
+          >
+            {item.label}
+          </dt>
+          <dd
+            style={{
+              margin: 0,
+              fontSize: 12,
+              fontWeight: 700,
+              color: item.label === 'SCORE' ? TOKENS.accent : TOKENS.textSecondary,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {item.value}
+          </dd>
         </div>
-      </td>
-
-      {/* USERS */}
-      <td
-        style={{
-          padding: '10px 0',
-          textAlign: 'right',
-          fontSize: 12,
-          fontWeight: 700,
-          color: TOKENS.textSecondary,
-          fontVariantNumeric: 'tabular-nums',
-        }}
-      >
-        {row.users.toLocaleString()}
-      </td>
-
-      {/* HOLDERS */}
-      <td
-        style={{
-          padding: '10px 0',
-          textAlign: 'right',
-          fontSize: 12,
-          fontWeight: 700,
-          color: TOKENS.textSecondary,
-          fontVariantNumeric: 'tabular-nums',
-        }}
-      >
-        {row.holders.toLocaleString()}
-      </td>
-
-      {/* RATE */}
-      <td style={{ padding: '10px 0', textAlign: 'right' }}>
-        <RatePill holderRate={row.holderRate} />
-      </td>
-
-      {/* VOLUME */}
-      <td
-        style={{
-          padding: '10px 0',
-          textAlign: 'right',
-          fontSize: 12,
-          fontWeight: 700,
-          color: TOKENS.textSecondary,
-          fontVariantNumeric: 'tabular-nums',
-        }}
-      >
-        {fmtUSD(row.totalVolumeUSD)}
-      </td>
-
-      {/* AVG/USER */}
-      <td
-        style={{
-          padding: '10px 0',
-          textAlign: 'right',
-          fontSize: 12,
-          fontWeight: 700,
-          color: TOKENS.textSecondary,
-          fontVariantNumeric: 'tabular-nums',
-        }}
-      >
-        {fmtUSD(row.avgVolumePerUserUSD)}
-      </td>
-
-      {/* SCORE */}
-      <td
-        style={{
-          padding: '10px 0',
-          textAlign: 'right',
-          fontSize: 13,
-          fontWeight: 800,
-          color: TOKENS.accent,
-          fontVariantNumeric: 'tabular-nums',
-        }}
-      >
-        {row.score.toFixed(2)}
-      </td>
-    </tr>
+      ))}
+    </dl>
   );
 }
 

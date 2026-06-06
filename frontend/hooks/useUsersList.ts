@@ -11,6 +11,11 @@ export interface UsersListFilters {
   hasSocial?: 'x' | 'discord' | 'both' | 'none';
   sortBy?: 'last_seen' | 'volume' | 'holdings' | 'holdings_value' | 'x' | 'discord' | 'referral_source';
   sortDir?: 'asc' | 'desc';
+  // KOL drill-down: an unambiguous param pair sent together. `referrerType`
+  // tells the backend which column the `referrer` string filters against —
+  // `snag` matches users.referred_by_code, `utm` matches user_profiles.first_utm_source.
+  referrer?: string;
+  referrerType?: 'snag' | 'utm';
 }
 
 export interface ProfileSummary {

@@ -78,6 +78,8 @@ export interface ProfileFilters {
     hasSocial?: 'x' | 'discord' | 'both' | 'none';
     sortBy?: SortKey;
     sortDir?: SortDir;
+    referrer?: string;
+    referrerType?: 'snag' | 'utm';
 }
 export interface RecordEventInput {
     event_name: string;
