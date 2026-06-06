@@ -1,12 +1,21 @@
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/react';
 import type { ProfileSummary } from '@/hooks/useUsersList';
 
-// Mock router + search params (Next.js App Router)
+// Mock router + search params (Next.js App Router).
+// `searchParamsStore` is mutated per-test to simulate different URL states on
+// mount — `useSearchParams()` reads from it via a stable function ref.
+const searchParamsStore: { params: URLSearchParams } = { params: new URLSearchParams() };
+const replaceSpy = vi.fn();
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: vi.fn() }),
-  useSearchParams: () => ({ get: () => null }),
+  useRouter: () => ({ replace: replaceSpy }),
+  useSearchParams: () => searchParamsStore.params,
 }));
+
+beforeEach(() => {
+  searchParamsStore.params = new URLSearchParams();
+  replaceSpy.mockReset();
+});
 
 // JSDOM does not implement ResizeObserver
 beforeAll(() => {
@@ -110,6 +119,105 @@ describe('UsersView — Has Social filter', () => {
 
     await waitFor(() => {
       // Reset button should appear with count of 1 (socialFilter active)
+      expect(container.textContent).toContain('Reset (1)');
+    });
+  });
+});
+
+// ─── KOL drill-down deep-link tests (Phase 2.1B contract) ──────────────────────
+
+describe('UsersView — KOL referrer drill-down', () => {
+  it('reads ?referrer=cobie&referrerType=utm from URL on mount and renders filter pill', async () => {
+    searchParamsStore.params = new URLSearchParams({
+      referrer: 'cobie',
+      referrerType: 'utm',
+    });
+    const { getByTestId, getByText } = render(<UsersView />);
+
+    // Pill renders with the referrer name + the UTM badge
+    const pill = getByTestId('referrer-filter-pill');
+    expect(pill.textContent).toContain('cobie');
+    expect(pill.textContent).toContain('UTM');
+    expect(getByText('Referrer:')).toBeTruthy();
+  });
+
+  it('reads ?referrerType=snag and labels the pill as Snag', async () => {
+    searchParamsStore.params = new URLSearchParams({
+      referrer: 'DYENZ3',
+      referrerType: 'snag',
+    });
+    const { getByTestId } = render(<UsersView />);
+
+    const pill = getByTestId('referrer-filter-pill');
+    expect(pill.textContent).toContain('DYENZ3');
+    expect(pill.textContent).toContain('Snag');
+  });
+
+  it('does NOT render the pill when only one of (referrer, referrerType) is present', () => {
+    searchParamsStore.params = new URLSearchParams({ referrer: 'orphan' });
+    const { queryByTestId } = render(<UsersView />);
+    expect(queryByTestId('referrer-filter-pill')).toBeNull();
+  });
+
+  it('ignores invalid referrerType values from the URL', () => {
+    searchParamsStore.params = new URLSearchParams({
+      referrer: 'something',
+      referrerType: 'BAD',
+    });
+    const { queryByTestId } = render(<UsersView />);
+    expect(queryByTestId('referrer-filter-pill')).toBeNull();
+  });
+
+  it('URL-sync preserves referrer+referrerType on subsequent renders (does NOT strip them)', async () => {
+    searchParamsStore.params = new URLSearchParams({
+      referrer: 'cobie',
+      referrerType: 'utm',
+    });
+    render(<UsersView />);
+
+    // The useEffect runs at least once after mount → replaceSpy receives a URL
+    // that still contains both params.
+    await waitFor(() => {
+      expect(replaceSpy).toHaveBeenCalled();
+    });
+    const lastCall = replaceSpy.mock.calls[replaceSpy.mock.calls.length - 1];
+    const target: string = lastCall[0];
+    expect(target).toContain('referrer=cobie');
+    expect(target).toContain('referrerType=utm');
+  });
+
+  it('clicking the clear-X strips referrer+referrerType from state (pill disappears)', async () => {
+    searchParamsStore.params = new URLSearchParams({
+      referrer: 'cobie',
+      referrerType: 'utm',
+    });
+    const { getByTestId, getByLabelText, queryByTestId } = render(<UsersView />);
+
+    expect(getByTestId('referrer-filter-pill')).toBeTruthy();
+
+    const clearBtn = getByLabelText('Clear referrer filter');
+    fireEvent.click(clearBtn);
+
+    await waitFor(() => {
+      expect(queryByTestId('referrer-filter-pill')).toBeNull();
+    });
+
+    // And the URL-sync useEffect emits a URL without those params after clear.
+    await waitFor(() => {
+      const lastCall = replaceSpy.mock.calls[replaceSpy.mock.calls.length - 1];
+      const target: string = lastCall[0];
+      expect(target).not.toContain('referrer=cobie');
+      expect(target).not.toContain('referrerType=');
+    });
+  });
+
+  it('Reset (N) counts the referrer drill-down as one active filter', async () => {
+    searchParamsStore.params = new URLSearchParams({
+      referrer: 'cobie',
+      referrerType: 'snag',
+    });
+    const { container } = render(<UsersView />);
+    await waitFor(() => {
       expect(container.textContent).toContain('Reset (1)');
     });
   });

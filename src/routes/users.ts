@@ -32,6 +32,9 @@ type SortKeyRoute = typeof VALID_SORT_KEYS[number];
 const VALID_HAS_SOCIAL = ['x', 'discord', 'both', 'none'] as const;
 type HasSocialRoute = typeof VALID_HAS_SOCIAL[number];
 
+const VALID_REFERRER_TYPES = ['snag', 'utm'] as const;
+type ReferrerTypeRoute = typeof VALID_REFERRER_TYPES[number];
+
 // GET /api/users — paginated list
 router.get('/', async (req: Request, res: Response) => {
   try {
@@ -47,6 +50,21 @@ router.get('/', async (req: Request, res: Response) => {
     }
     const hasSocial = hasSocialRaw as HasSocialRoute | undefined;
 
+    // ── KOL drill-down contract ────────────────────────────────────────────
+    // ?referrer=<string>&referrerType=snag|utm. Both must be present and
+    // referrerType must be one of the two literals — otherwise either reject
+    // (invalid referrerType) or silently drop the filter (missing pair).
+    const referrerRaw = typeof req.query.referrer === 'string' ? req.query.referrer : undefined;
+    const referrerTypeRaw = typeof req.query.referrerType === 'string' ? req.query.referrerType : undefined;
+    if (referrerTypeRaw && !(VALID_REFERRER_TYPES as readonly string[]).includes(referrerTypeRaw)) {
+      return res.status(400).json({ error: 'invalid referrerType' });
+    }
+    const referrerType = referrerTypeRaw as ReferrerTypeRoute | undefined;
+    // Only forward the pair when BOTH are supplied — service treats single
+    // param as missing-filter no-op.
+    const referrer = (referrerRaw && referrerType) ? referrerRaw : undefined;
+    const referrerTypeOut = (referrerRaw && referrerType) ? referrerType : undefined;
+
     const result = await searchProfiles({
       page: req.query.page ? Number(req.query.page) : undefined,
       pageSize: req.query.pageSize ? Number(req.query.pageSize) : undefined,
@@ -58,6 +76,8 @@ router.get('/', async (req: Request, res: Response) => {
       hasSocial,
       sortBy,
       sortDir,
+      referrer,
+      referrerType: referrerTypeOut,
     });
     res.json(result);
   } catch (err) {

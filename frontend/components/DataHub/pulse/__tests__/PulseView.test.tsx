@@ -74,20 +74,24 @@ describe('PulseView', () => {
     usePulseSnapshotMock.mockReset();
   });
 
-  it('renders all 6 KPI labels when the hook resolves with a snapshot', () => {
+  it('renders exactly 3 KPI labels when the hook resolves with a snapshot (Phase 2.1A: decoration KPIs retired)', () => {
     usePulseSnapshotMock.mockReturnValue({
       data: SAMPLE_PAYLOAD,
       loading: false,
       error: null,
       refetch: () => {},
     });
-    const { getByText } = render(<PulseView />);
+    const { getByText, queryByText } = render(<PulseView />);
+    // Retained: the 3 hero KPIs that operators act on.
     expect(getByText('Registered Users')).toBeTruthy();
     expect(getByText('Active Holders')).toBeTruthy();
     expect(getByText('AUM')).toBeTruthy();
-    expect(getByText('Identity Links')).toBeTruthy();
-    expect(getByText('Activations (24h)')).toBeTruthy();
-    expect(getByText('Open Whales')).toBeTruthy();
+    // Retired per v2 audit plan Part III — decoration metrics that
+    // create scan-cost without driving action. Anomaly checks (D4)
+    // still fire on these fields; only the hero KPI cards are gone.
+    expect(queryByText('Identity Links')).toBeNull();
+    expect(queryByText('Activations (24h)')).toBeNull();
+    expect(queryByText('Open Whales')).toBeNull();
   });
 
   it('renders the Pulse tab header with the subtitle question', () => {

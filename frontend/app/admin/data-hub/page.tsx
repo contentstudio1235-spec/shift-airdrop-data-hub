@@ -22,6 +22,7 @@ import { RawDataView } from './views/RawDataView';
 import { UsersView } from '@/components/DataHub/users/UsersView';
 import { PulseView } from '@/components/DataHub/pulse/PulseView';
 import { UtmGovernancePanel } from '@/components/DataHub/engineering/UtmGovernancePanel';
+import { AnalyticsRedirectCard } from '@/components/DataHub/engineering/AnalyticsRedirectCard';
 import { Tag } from '@phosphor-icons/react';
 import { HubSessionProvider, useHubSession } from '@/hooks/useHubSession';
 import { FlagAffordanceStyles } from '@/components/DataHub/primitives/FlagButton';
@@ -401,7 +402,14 @@ function MarketsPage({ data }: { data: HubData }) {
   );
 }
 
-// ─── ANALYTICS PAGE ───────────────────────────────────────────────────────────
+// ─── ANALYTICS PAGE (RETIRED — soft retirement in Phase 2.1A) ────────────────
+// This was the GA4 mirror — a 1-hour-stale cached copy of what GA4 native
+// already shows authoritatively. UX Researcher flagged it as a trust
+// collision (when the mirror disagrees with GA4, which one is right?).
+// The function is intentionally kept here so the diff is easy to review
+// and we can purge after Phase 2 stabilizes. It is no longer mounted —
+// AnalyticsRedirectCard (below) renders instead.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function AnalyticsPage({ data }: { data: HubData }) {
   const { ga4, analytics } = data;
 
@@ -1053,7 +1061,10 @@ function DataHubAuthedShell({
   const pageComponent: Record<HubPage, React.ReactNode> = {
     overview: <OverviewPage data={data} />,
     markets: <MarketsPage data={data} />,
-    analytics: <AnalyticsPage data={data} />,
+    // Phase 2.1A — AnalyticsPage (above) is the legacy GA4 mirror. It's
+    // intentionally not deleted (soft retirement). AnalyticsRedirectCard
+    // replaces it in the UI and points operators to GA4 native.
+    analytics: <AnalyticsRedirectCard />,
     stitched: <StitchedPage data={data} />,
     portfolios: <PortfoliosPage data={data} />,
     admin: <AdminSystemPage data={data} />,

@@ -97,6 +97,12 @@ export interface ProfileFilters {
   hasSocial?: 'x' | 'discord' | 'both' | 'none'; // social connection filter
   sortBy?: SortKey;
   sortDir?: SortDir;
+  // KOL drill-down contract: an unambiguous pair that selects which column the
+  // referrer string matches against. `referrerType='snag'` filters on
+  // users.referred_by_code via EXISTS; `referrerType='utm'` filters on
+  // user_profiles.first_utm_source. Both must be supplied together.
+  referrer?: string;
+  referrerType?: 'snag' | 'utm';
 }
 
 export interface RecordEventInput {

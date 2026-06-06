@@ -20,6 +20,7 @@ const VALID_IDENTITY_TYPES = [
 const VALID_CONFIDENCE = ['deterministic', 'probabilistic', 'manual'];
 const VALID_SORT_KEYS = ['last_seen', 'volume', 'holdings', 'x', 'discord', 'referral_source'];
 const VALID_HAS_SOCIAL = ['x', 'discord', 'both', 'none'];
+const VALID_REFERRER_TYPES = ['snag', 'utm'];
 // GET /api/users — paginated list
 router.get('/', async (req, res) => {
     try {
@@ -33,6 +34,20 @@ router.get('/', async (req, res) => {
             return res.status(400).json({ error: 'invalid hasSocial' });
         }
         const hasSocial = hasSocialRaw;
+        // ── KOL drill-down contract ────────────────────────────────────────────
+        // ?referrer=<string>&referrerType=snag|utm. Both must be present and
+        // referrerType must be one of the two literals — otherwise either reject
+        // (invalid referrerType) or silently drop the filter (missing pair).
+        const referrerRaw = typeof req.query.referrer === 'string' ? req.query.referrer : undefined;
+        const referrerTypeRaw = typeof req.query.referrerType === 'string' ? req.query.referrerType : undefined;
+        if (referrerTypeRaw && !VALID_REFERRER_TYPES.includes(referrerTypeRaw)) {
+            return res.status(400).json({ error: 'invalid referrerType' });
+        }
+        const referrerType = referrerTypeRaw;
+        // Only forward the pair when BOTH are supplied — service treats single
+        // param as missing-filter no-op.
+        const referrer = (referrerRaw && referrerType) ? referrerRaw : undefined;
+        const referrerTypeOut = (referrerRaw && referrerType) ? referrerType : undefined;
         const result = await (0, identityService_1.searchProfiles)({
             page: req.query.page ? Number(req.query.page) : undefined,
             pageSize: req.query.pageSize ? Number(req.query.pageSize) : undefined,
@@ -44,6 +59,8 @@ router.get('/', async (req, res) => {
             hasSocial,
             sortBy,
             sortDir,
+            referrer,
+            referrerType: referrerTypeOut,
         });
         res.json(result);
     }

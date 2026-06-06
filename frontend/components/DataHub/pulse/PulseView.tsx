@@ -5,9 +5,6 @@ import {
   Users,
   Wallet,
   ChartLineUp,
-  LinkSimple,
-  Lightning,
-  Fish,
 } from '@phosphor-icons/react';
 import { TOKENS } from '@/lib/chartTokens';
 import { fmtUSD } from '@/lib/format';
@@ -26,7 +23,6 @@ import { useHubSession } from '@/hooks/useHubSession';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
-const fmtPct = (n: number) => `${n.toFixed(1)}%`;
 const fmtCount = (n: number) => n.toLocaleString();
 
 // ─── Anomaly routing ─────────────────────────────────────────────────────────
@@ -47,9 +43,14 @@ function anomalyActionLabel(severity: AnomalySeverity): string {
 
 /**
  * PulseView — Tab 1 of the redesigned Data Hub. Answers the question
- * "Has anything material changed in the last 24h?" with six hero KPIs,
- * 30-day AUM context, today's signups by source, recent whale activity,
- * and conditional anomaly callouts.
+ * "Has anything material changed in the last 24h?" with three hero KPIs
+ * (Registered Users, Active Holders, AUM USD), 30-day AUM context,
+ * today's signups by source, recent whale activity, and conditional
+ * anomaly callouts.
+ *
+ * Phase 2.1A retired three decoration KPIs from the hero (Identity Links,
+ * Activations 24h, Open Whales) per the v2 audit plan Part III — they
+ * remain on the API but don't render here. Anomaly checks (D4) still fire.
  *
  * Wiring: this component is intentionally NOT mounted in the layout shell here.
  * Phase 2.3 mounts it inside the Data Hub navigation as the default view.
@@ -106,7 +107,7 @@ export function PulseView() {
       <div style={containerStyle}>
         {header}
         <div style={kpiGridStyle}>
-          {Array.from({ length: 6 }).map((_, i) => (
+          {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} style={kpiSkeletonStyle} />
           ))}
         </div>
@@ -120,7 +121,8 @@ export function PulseView() {
     <div style={containerStyle}>
       {header}
 
-      {/* KPI grid — six hero metrics */}
+      {/* KPI grid — three hero metrics (Phase 2.1A: retired stitchPct,
+          activations24h, openWhalesCount per v2 audit plan Part III) */}
       <div style={kpiGridStyle}>
         <KPICard
           label="Registered Users"
@@ -153,41 +155,6 @@ export function PulseView() {
           icon={<ChartLineUp size={11} weight="fill" color={TOKENS.textFaint} />}
           tab={HUB_TABS.PULSE}
           metricId={HUB_METRIC_IDS.PULSE_AUM_USD}
-          asOf={asOf}
-        />
-        <KPICard
-          label="Identity Links"
-          value={kpis.stitchPct.value}
-          delta={kpis.stitchPct.delta24h}
-          deltaPct={kpis.stitchPct.delta24hPct}
-          formatValue={fmtPct}
-          icon={<LinkSimple size={11} weight="fill" color={TOKENS.textFaint} />}
-          tooltip="% of profiles with 2+ identity links (loose: counts duplicate types as separate links)"
-          tab={HUB_TABS.PULSE}
-          metricId={HUB_METRIC_IDS.PULSE_IDENTITY_LINKS_PCT}
-          asOf={asOf}
-        />
-        <KPICard
-          label="Activations (24h)"
-          value={kpis.activations24h.value}
-          delta={kpis.activations24h.delta24h}
-          deltaPct={kpis.activations24h.delta24hPct}
-          formatValue={fmtCount}
-          icon={<Lightning size={11} weight="fill" color={TOKENS.textFaint} />}
-          tab={HUB_TABS.PULSE}
-          metricId={HUB_METRIC_IDS.PULSE_ACTIVATIONS_24H}
-          asOf={asOf}
-        />
-        <KPICard
-          label="Open Whales"
-          value={kpis.openWhalesCount.value}
-          delta={kpis.openWhalesCount.delta24h}
-          deltaPct={kpis.openWhalesCount.delta24hPct}
-          formatValue={fmtCount}
-          positiveIsGood={false}
-          icon={<Fish size={11} weight="fill" color={TOKENS.textFaint} />}
-          tab={HUB_TABS.PULSE}
-          metricId={HUB_METRIC_IDS.PULSE_OPEN_WHALES}
           asOf={asOf}
         />
       </div>
@@ -243,8 +210,8 @@ const containerStyle: React.CSSProperties = {
 
 const kpiGridStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(6, minmax(0, 1fr))',
-  gap: 12,
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: 16,
 };
 
 const twoColStyle: React.CSSProperties = {
