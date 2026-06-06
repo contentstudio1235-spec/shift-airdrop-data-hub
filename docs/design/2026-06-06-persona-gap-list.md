@@ -80,7 +80,7 @@ Sorted: `score DESC` → bucket priority `D2, C2, D1, D3, B1, A2, E, C1, A1, A3`
 6. **HARVEST-021 (27)** — Reconciliation pass/fail badges next to metrics. Trust floor exists; operators can't see it.
 7. **HARVEST-025 + HARVEST-011 (D8 always-handoff)** — Snapshot/export primitive. v2 Phase 2.5 item, AR-8.
 
-**Verify-not-decoration cluster (also handoff, low-cost):** HARVEST-006, 010, 012, 014, 015, 016, 020, 022 — every C1 row that *just shipped* this week needs verification it's actually answering the question, not decoration.
+**Verify-not-decoration cluster (also handoff, low-cost):** HARVEST-006, 010, 012, 014, 015, 016, 020, 022 — every C1 row that *just shipped* this week needs verification it's actually answering the question, not decoration. **→ Executed 2026-06-06 via 8 parallel Playwright MCP verifiers; see verification addendum below + full report at `docs/qa/2026-06-06-phase1-verification/SUMMARY.md`.**
 
 **Backlog (6 ≤ score < 24):** HARVEST-009, 013, 017 (bumped to 24), 019.
 
@@ -117,3 +117,36 @@ No hard halt fired.
 4. **Source E (hub logs) blind.** The behavioral validation layer isn't available until week+1.
 
 These are not failures of the methodology. They're calibration notes for re-harvesting at week+2 and week+6 (per v2 plan Phase 3 governance cadence).
+
+---
+
+## Verification addendum (2026-06-06, 8 Playwright MCP verifiers in parallel)
+
+Final tally on the 8-row verify-not-decoration cluster: **3 FAIL, 3 SUBTLE, 2 PASS.** Full per-row reports in `docs/qa/2026-06-06-phase1-verification/`. Synthesis in `docs/qa/2026-06-06-phase1-verification/SUMMARY.md`.
+
+### Row outcomes (overrides bucket / next_action above)
+
+| Row | Verdict | Updated next_action | Why |
+|---|---|---|---|
+| HARVEST-020 (FlagButton) | **PASS** | KILL (verified ✓; backlog concern: 18×18 icon contrast) | Mounts on Pulse/Cohorts/Users with correct aria. ESC closes dialog. Write path not exercised. |
+| HARVEST-010+012 (Cohorts W4 + confidence gate) | **PASS** | KILL (verified ✓) | W4 column wired with scoped FlagButton. N=10 W21 cohort correctly withholds trend with "Insufficient signal" caption. |
+| HARVEST-006+008 (KOL drill) | **SUBTLE** | **PHASE-1.6-FIX (MR !27)** — promoted out of kill | MR !24 hotfix verified: URL params + back-nav preserve. But row click writes URL without switching active view — operator must manually click Users tab. URL→view-sync class. |
+| HARVEST-014+022 (Whale Watch + IdentityCard) | **SUBTLE** | **PHASE-1.6-FIX (MR !25 immediate + !27 root)** | SSE live + IdentityCard renders. But whale row hrefs use `tab=users` (should be `view=`), and `wallet` param stripped by useFilters (same class as referrer, never added to FOREIGN_PARAMS). |
+| HARVEST-015 (Sankey + stitch%) | **SUBTLE** | **PHASE-1.6-FIX (MR !27 hero recal)** | Sankey 12 real paths. Stitch% 66.0% real. But stitch% absent from Pulse hero — lives only on Source Attribution ("Attribution Signal") and Cohorts ("ID Coverage" column). |
+| HARVEST-016 (Pulse 3-KPI) | **FAIL** | **PHASE-1.6-FIX (MR !27, design first)** | Pulse hero shows Registered (16,921), Active Holders (484), AUM ($23.0K) — all X1/founder stats, 0 of 3 answer M1's CAC / UTM-coverage / funnel-leak questions. |
+| HARVEST-021 (IncidentBanner + recon) | **FAIL** | **PHASE-1.6-FIX (MR !26)** — single biggest finding | Backend infra shipped (hub_incidents + 40 recon tests), zero frontend surface. No banner mounts anywhere. No metric-level badges. `/api/admin/incidents` 404. **Phase 1 trust loop is half-shipped.** |
+| HARVEST-005 ("Direct = unknown") | **FAIL** | **PHASE-1.6-FIX (MR !25 caveat)** | "Best ROI Source · 30d" shows "Direct" = "412 holders / 5,848 users (7.0% conv)" with NO caveat, NO tooltip, NO drill. Operator actively misled. |
+
+### Three root-cause classes surfaced
+
+1. **Phase 1 backend-without-frontend** (HARVEST-021): trust-floor surfaces missing. **One commit fixes most of it.**
+2. **Phase 2.1 Pulse hero calibration** (HARVEST-016 + 005 + 015): X1 stats shown instead of M1 trio, "Direct" actively misleading, stitch% buried. **One coordinated PR fixes the trio.**
+3. **useFilters foreign-params + URL→view sync** (HARVEST-006+008 + 014+022): three params confirmed broken (`view`, `wallet`, view-sync). **Root-cause fix removes the entire class.**
+
+### Recommended Phase 1.6 fix sequence (3 PRs)
+
+1. **MR !25 (~30 min, no design):** Add caveat to "Best ROI Source = Direct" + fix Whale row href `tab=`→`view=` + add `wallet` to FOREIGN_PARAMS. Three small targeted fixes.
+2. **MR !26 (~2-3 hrs, light brainstorm):** Wire IncidentBanner mount in LayoutShell + `GET /api/admin/hub-incidents` endpoint + static-catalog reconciliation ✓ badges on known-reconciled KPICards.
+3. **MR !27 (~2-3 hrs, design decision):** Recalibrate Pulse hero to M1 trio (CAC / UTM coverage / funnel leak — final 3 picks via design call) + make `view=` URL change drive LayoutShell view switch.
+
+After all 3 ship: re-run verification cluster (expect 8/8 PASS), promote C1 rows to `verified ✓`, then move to **HARVEST-001** IA brainstorm (multi-channel marketing tracking — score 81 — the biggest Phase 2 piece).
