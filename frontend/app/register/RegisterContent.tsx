@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import ShiftIdCard from '@/components/ShiftIdCard';
@@ -160,16 +160,16 @@ export default function RegisterContent() {
     };
 
     fetchUserData();
-  }, [wallet, refCode, toast]);
+  }, [wallet, refCode]);
 
-  // ── Handlers ──
-  const handleCopy = () => {
+  // ── Handlers (memoized to prevent re-renders) ──
+  const handleCopy = useCallback(() => {
     if (!userData) return;
     navigator.clipboard.writeText(userData.referralLink);
     toast('Referral link copied!');
-  };
+  }, [userData, toast]);
 
-  const handleShareX = () => {
+  const handleShareX = useCallback(() => {
     if (!userData) return;
     const text = encodeURIComponent(
       `I just joined the @ShiftRWA airdrop — queue position #${userData.queuePosition}! 🚀\n\nTrade RWA tokens on Solana and earn XP. Join via my link:`
@@ -178,7 +178,7 @@ export default function RegisterContent() {
       `https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(userData.referralLink)}`,
       '_blank'
     );
-  };
+  }, [userData]);
 
   // ── Render ──
   if (!wallet) {
