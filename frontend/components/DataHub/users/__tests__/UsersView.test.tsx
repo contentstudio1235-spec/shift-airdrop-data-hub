@@ -222,3 +222,44 @@ describe('UsersView — KOL referrer drill-down', () => {
     });
   });
 });
+
+// ─── MR !25b: Layer C — wallet URL param + view=users writeback ─────────────
+
+describe('UsersView — wallet URL param + view= writeback (MR !25b)', () => {
+  it('URL ?wallet=ABC pre-populates the search query on mount', () => {
+    searchParamsStore.params = new URLSearchParams({ wallet: 'ABC' });
+    const { container } = render(<UsersView />);
+
+    // The search input value should be pre-populated with the wallet param
+    const searchInput = container.querySelector(
+      'input[placeholder^="Search wallet"]'
+    ) as HTMLInputElement | null;
+    expect(searchInput).toBeTruthy();
+    expect(searchInput!.value).toBe('ABC');
+  });
+
+  it('URL writeback emits view=users not tab=users', async () => {
+    render(<UsersView />);
+
+    await waitFor(() => {
+      expect(replaceSpy).toHaveBeenCalled();
+    });
+    const lastCall = replaceSpy.mock.calls[replaceSpy.mock.calls.length - 1];
+    const target: string = lastCall[0];
+    expect(target).toContain('view=users');
+    expect(target).not.toContain('tab=users');
+  });
+
+  it('URL writeback preserves wallet when search query equals wallet', async () => {
+    searchParamsStore.params = new URLSearchParams({ wallet: 'ABC' });
+    render(<UsersView />);
+
+    await waitFor(() => {
+      expect(replaceSpy).toHaveBeenCalled();
+    });
+    const lastCall = replaceSpy.mock.calls[replaceSpy.mock.calls.length - 1];
+    const target: string = lastCall[0];
+    expect(target).toContain('view=users');
+    expect(target).toContain('wallet=ABC');
+  });
+});

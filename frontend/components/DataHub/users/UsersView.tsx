@@ -39,6 +39,7 @@ export function UsersView() {
 
   const initialProfileId = params?.get('profileId') ?? null;
   const initialQuery = params?.get('q') ?? '';
+  const initialWallet = params?.get('wallet') ?? null;
   const initialSource = params?.get('source') ?? 'all';
   const initialSortBy = (params?.get('sortBy') ?? 'last_seen') as NonNullable<UsersListFilters['sortBy']>;
   const initialSortDir = (params?.get('sortDir') === 'asc' ? 'asc' : 'desc') as NonNullable<UsersListFilters['sortDir']>;
@@ -55,7 +56,7 @@ export function UsersView() {
     : undefined;
 
   const [filters, setFilters] = useState<UsersListFilters>({
-    q: initialQuery || undefined,
+    q: initialQuery || initialWallet || undefined,
     source: initialSource === 'all' ? undefined : initialSource,
     sortBy: initialSortBy,
     sortDir: initialSortDir,
@@ -98,7 +99,7 @@ export function UsersView() {
   // writers and stripping deep-link params on first render.
   useEffect(() => {
     const next = new URLSearchParams();
-    next.set('tab', 'users');
+    next.set('view', 'users');
     if (selectedProfileId) next.set('profileId', selectedProfileId);
     if (filters.q) next.set('q', filters.q);
     if (filters.source) next.set('source', filters.source);
@@ -123,6 +124,17 @@ export function UsersView() {
           next.set('referrer', referrer);
           next.set('referrerType', referrerType);
         }
+      }
+      // Preserve ?wallet= from URL so deep-link round-trips keep working.
+      // Source of truth is `initialWallet` (captured once at mount from the
+      // useSearchParams hook) with `window.location.search` as a fallback for
+      // the same-render case. Keep wallet while the current search query
+      // equals it (or is empty — catches the first render before state syncs);
+      // drop it the moment the user types a different search, since a stale
+      // wallet would mislead.
+      const existingWallet = initialWallet ?? existing.get('wallet');
+      if (existingWallet && (!filters.q || filters.q === existingWallet)) {
+        next.set('wallet', existingWallet);
       }
       const target = `/admin/data-hub?${next.toString()}`;
       if (window.location.pathname + window.location.search !== target) {
