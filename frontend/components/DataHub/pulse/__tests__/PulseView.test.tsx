@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import type { PulseSnapshot } from '@/types/pulse';
 
 // Mock the hook BEFORE importing PulseView
@@ -173,5 +173,19 @@ describe('PulseView', () => {
     // No KPI labels yet because the skeleton renders empty cells
     expect(container.textContent).not.toContain('Registered Users');
     expect(container.textContent).toContain('Pulse');
+  });
+
+  it('passes tab+metricId to the 3 hero KPICards (Registered Users / Active Holders / AUM)', () => {
+    usePulseSnapshotMock.mockReturnValue({
+      data: SAMPLE_PAYLOAD,
+      loading: false,
+      error: null,
+      refetch: () => {},
+    });
+    render(<PulseView />);
+    // Each hero KPICard with a reconciled metricId mounts a ReconciliationBadge.
+    // Registered Users, Active Holders, AUM are all in the reconciliation catalog.
+    const badges = screen.queryAllByLabelText(/reconciled against second source/i);
+    expect(badges.length).toBeGreaterThanOrEqual(3);
   });
 });

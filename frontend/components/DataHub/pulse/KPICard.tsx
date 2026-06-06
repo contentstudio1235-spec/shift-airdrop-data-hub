@@ -4,6 +4,7 @@ import { ArrowUp, ArrowDown } from '@phosphor-icons/react';
 import { TOKENS, MOTION } from '@/lib/chartTokens';
 import { FlagButton, FLAG_AFFORDANCE_HOST_CLASS } from '../primitives/FlagButton';
 import { IncidentBannerWrapper } from '../primitives/IncidentBanner';
+import { ReconciliationBadge } from '../primitives/ReconciliationBadge';
 
 export interface KPICardProps {
   /** UPPERCASE label rendered at the top, e.g. "Registered Users". */
@@ -206,6 +207,9 @@ export function KPICard({
       <div style={labelRowStyle}>
         {icon && <span aria-hidden style={{ display: 'inline-flex' }}>{icon}</span>}
         <span>{label}</span>
+        {flagEnabled && tab && metricId && (
+          <ReconciliationBadge metricId={metricId} />
+        )}
       </div>
 
       {flagEnabled && tab && metricId ? (

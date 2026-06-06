@@ -1,6 +1,19 @@
-import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
 import { KPICard } from '../KPICard';
+import { HUB_METRIC_IDS, HUB_TABS } from '@/lib/hubMetricIds';
+
+// KPICard wraps its value in IncidentBannerWrapper when tab+metricId are set;
+// the wrapper polls /api/hub-trust/incidents/active via useActiveIncidents.
+// Stub the hook so jsdom tests don't need a backend.
+vi.mock('@/hooks/useActiveIncidents', () => ({
+  useActiveIncidents: () => [],
+}));
+
+// FlagButton uses useHubSession for telemetry — stub it too.
+vi.mock('@/hooks/useHubSession', () => ({
+  useHubSession: () => ({ sessionId: null, recordEvent: () => {} }),
+}));
 
 describe('KPICard', () => {
   it('renders the label and the formatted value', () => {
@@ -87,5 +100,29 @@ describe('KPICard', () => {
     );
     expect(container.textContent).toContain('+42');
     expect(container.textContent).not.toContain('%');
+  });
+
+  it('mounts ReconciliationBadge when tab+metricId are passed and metricId is reconciled', () => {
+    render(
+      <KPICard
+        label="Active Holders"
+        value={484}
+        tab={HUB_TABS.PULSE}
+        metricId={HUB_METRIC_IDS.PULSE_ACTIVE_HOLDERS}
+      />,
+    );
+    expect(screen.getByLabelText(/reconciled against second source/i)).toBeInTheDocument();
+  });
+
+  it('does NOT mount ReconciliationBadge when metricId is not reconciled', () => {
+    render(
+      <KPICard
+        label="Identity Links"
+        value={66}
+        tab={HUB_TABS.PULSE}
+        metricId={HUB_METRIC_IDS.PULSE_IDENTITY_LINKS_PCT}
+      />,
+    );
+    expect(screen.queryByLabelText(/reconciled against second source/i)).toBeNull();
   });
 });
