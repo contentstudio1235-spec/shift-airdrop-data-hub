@@ -82,7 +82,7 @@ export function useFilters(): [Filters, (next: Partial<Filters>) => void, () => 
     const existing = new URLSearchParams(searchParams?.toString() ?? '');
     // Preserve foreign params owned by other URL writers (data-hub shell + per-tab
     // drill-down filters). Add new names here when wiring new owners.
-    const FOREIGN_PARAMS = ['view', 'referrer', 'referrerType'] as const;
+    const FOREIGN_PARAMS = ['view', 'referrer', 'referrerType', 'wallet', 'profileId', 'q'] as const;
     for (const name of FOREIGN_PARAMS) {
       const value = existing.get(name);
       if (value) p.set(name, value);

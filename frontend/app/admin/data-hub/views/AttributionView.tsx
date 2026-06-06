@@ -71,6 +71,23 @@ function formatSource(source: string): string {
   return SOURCE_LABEL[source] ?? source;
 }
 
+// The backend's residual "no attribution signal" bucket can surface under a
+// handful of labels depending on the data path. When this bucket wins the
+// Best ROI race we must warn operators it's NOT a real channel — otherwise
+// the card actively misleads M1 (HARVEST-005).
+const UNATTRIBUTED_SOURCE_LABELS = new Set([
+  'Direct',
+  'direct',
+  'DIRECT',
+  '',
+  '(direct)',
+  '(none)',
+]);
+
+function isUnattributedSource(source: string): boolean {
+  return UNATTRIBUTED_SOURCE_LABELS.has(source);
+}
+
 export function AttributionView() {
   const { data, loading, error, refetch } = useAttributionOverview();
   const whaleOrigins = useWhaleOrigins();
@@ -211,7 +228,7 @@ function formatReferrer(referrer: string): string {
   return referrer;
 }
 
-function SourceKPIRow({
+export function SourceKPIRow({
   overview,
   kol,
 }: {
@@ -238,7 +255,7 @@ function SourceKPIRow({
         value={best ? formatSource(best.source) : '—'}
         subtitle={
           best
-            ? `${best.holders.toLocaleString()} holders / ${best.users.toLocaleString()} users (${best.holderRatePct.toFixed(1)}% conv)`
+            ? `${best.holders.toLocaleString()} holders / ${best.users.toLocaleString()} users (${best.holderRatePct.toFixed(1)}% conv)${isUnattributedSource(best.source) ? ' — unattributed' : ''}`
             : 'No channel data yet'
         }
       />
