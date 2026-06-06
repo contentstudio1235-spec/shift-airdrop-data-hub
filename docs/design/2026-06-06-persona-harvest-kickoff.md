@@ -121,58 +121,60 @@ Six sources, per-source caps. Open the capture Sheet (Part III) before starting.
 
 **Serves:** M1 (heaviest current user — paid metrics), some X1
 
-**Critical context:** Phase 1 MR !22 just shipped `hub_sessions` + `hub_events`. Instrumentation IS live. Just run the queries.
+**Critical context:** Phase 1 (MR !22) just shipped `hub_sessions` + `hub_events`. Instrumentation IS live but the data window is hours-to-days — re-run these after ≥7 days of telemetry. Use the executable script at `scripts/persona-harvest-source-e.ts` (reuses `src/db/pool.ts`).
 
-**Q1 — Bounced tabs (the v2 Part VII "didn't answer their question" signal):**
+**Actual `hub_events` schema (from migration 022):** `session_id, occurred_at, event_type, tab, metadata`. `event_type` is one of `tab_open, tab_close, card_click, filter_change, drill_down, answer_reached, flag_filed`. `tab` is top-level; everything else lives in `metadata` JSONB.
+
+**Q1 — Tabs visited without `answer_reached` (better than bounce — we instrument the positive case):**
 
 ```sql
-WITH tab_visits AS (
-  SELECT
-    session_id,
-    properties->>'tab' AS tab,
-    occurred_at,
-    LEAD(occurred_at) OVER (PARTITION BY session_id ORDER BY occurred_at) AS next_event_at,
-    LEAD(event_type) OVER (PARTITION BY session_id ORDER BY occurred_at) AS next_event
+WITH session_tabs AS (
+  SELECT DISTINCT session_id, tab
   FROM hub_events
-  WHERE event_type = 'tab_open'
+  WHERE event_type = 'tab_open' AND tab IS NOT NULL
+    AND occurred_at > NOW() - INTERVAL '14 days'
+),
+session_answers AS (
+  SELECT DISTINCT session_id, tab
+  FROM hub_events
+  WHERE event_type = 'answer_reached' AND tab IS NOT NULL
     AND occurred_at > NOW() - INTERVAL '14 days'
 )
-SELECT
-  tab,
-  COUNT(*) AS bounce_count,
-  COUNT(DISTINCT session_id) AS distinct_sessions
-FROM tab_visits
-WHERE next_event_at IS NOT NULL
-  AND EXTRACT(EPOCH FROM (next_event_at - occurred_at)) < 5
-  AND next_event = 'tab_open'
-GROUP BY tab
-ORDER BY bounce_count DESC;
+SELECT st.tab,
+       COUNT(*) AS visits_without_answer,
+       (SELECT COUNT(*) FROM session_tabs st2 WHERE st2.tab = st.tab) AS total_visits,
+       ROUND(100.0 * COUNT(*) / NULLIF((SELECT COUNT(*) FROM session_tabs st2 WHERE st2.tab = st.tab),0), 1) AS unresolved_pct
+FROM session_tabs st
+LEFT JOIN session_answers sa ON sa.session_id = st.session_id AND sa.tab = st.tab
+WHERE sa.session_id IS NULL
+GROUP BY st.tab
+ORDER BY visits_without_answer DESC;
 ```
 
-**Q2 — Most-clicked KPI cards:**
+**Q2 — Most-clicked metric cards (with flag rate side-by-side):**
 
 ```sql
-SELECT
-  properties->>'metric_id' AS metric_id,
-  COUNT(*) AS clicks,
-  COUNT(DISTINCT session_id) AS distinct_sessions
+SELECT metadata->>'metric_id' AS metric_id,
+       COUNT(*) FILTER (WHERE event_type = 'card_click') AS clicks,
+       COUNT(*) FILTER (WHERE event_type = 'drill_down') AS drills,
+       COUNT(*) FILTER (WHERE event_type = 'flag_filed') AS flags,
+       COUNT(DISTINCT session_id) AS distinct_sessions
 FROM hub_events
-WHERE event_type IN ('card_click', 'drill_down')
+WHERE event_type IN ('card_click','drill_down','flag_filed')
+  AND metadata->>'metric_id' IS NOT NULL
   AND occurred_at > NOW() - INTERVAL '14 days'
 GROUP BY 1
 ORDER BY clicks DESC
 LIMIT 20;
 ```
 
-**Q3 — Most common navigation paths:**
+**Q3 — Most common navigation paths (a multi-tab path looks like a question hunt):**
 
 ```sql
 WITH paths AS (
-  SELECT
-    session_id,
-    STRING_AGG(properties->>'tab', ' -> ' ORDER BY occurred_at) AS path
+  SELECT session_id, STRING_AGG(tab, ' -> ' ORDER BY occurred_at) AS path
   FROM hub_events
-  WHERE event_type = 'tab_open'
+  WHERE event_type = 'tab_open' AND tab IS NOT NULL
     AND occurred_at > NOW() - INTERVAL '14 days'
   GROUP BY session_id
   HAVING COUNT(*) BETWEEN 2 AND 6
