@@ -1,5 +1,6 @@
 "use client";
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Users,
   Wallet,
@@ -20,6 +21,8 @@ import { SignupsBar } from './SignupsBar';
 import { WhaleFeed } from './WhaleFeed';
 import { usePulseSnapshot } from '@/hooks/usePulseSnapshot';
 import type { PulseAnomaly } from '@/types/pulse';
+import { HUB_METRIC_IDS, HUB_TABS } from '@/lib/hubMetricIds';
+import { useHubSession } from '@/hooks/useHubSession';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
@@ -59,9 +62,18 @@ function anomalyActionLabel(severity: AnomalySeverity): string {
  *   - data → full layout below
  */
 export function PulseView() {
+  const router = useRouter();
   const { data, loading, error, refetch } = usePulseSnapshot();
+  const { recordEvent } = useHubSession();
 
   const lastUpdated = data ? new Date(data.computedAt) : null;
+  const asOf = data?.computedAt ?? null;
+
+  // Telemetry: refresh = card_click target=refresh on the active tab.
+  const handleRefresh = React.useCallback(() => {
+    recordEvent('card_click', { tab: HUB_TABS.PULSE, metadata: { target: 'refresh' } });
+    refetch();
+  }, [recordEvent, refetch]);
 
   // Header is always rendered so operators have a refresh action available
   // even when the backend is misbehaving.
@@ -71,7 +83,7 @@ export function PulseView() {
       subtitle="Has anything material changed in the last 24h? 24h compare."
       lastUpdated={lastUpdated}
       liveIndicator={!error && !!data}
-      onRefresh={refetch}
+      onRefresh={handleRefresh}
       loading={loading}
     />
   );
@@ -117,6 +129,9 @@ export function PulseView() {
           deltaPct={kpis.registeredUsers.delta24hPct}
           formatValue={fmtCount}
           icon={<Users size={11} weight="fill" color={TOKENS.textFaint} />}
+          tab={HUB_TABS.PULSE}
+          metricId={HUB_METRIC_IDS.PULSE_REGISTERED_USERS}
+          asOf={asOf}
         />
         <KPICard
           label="Active Holders"
@@ -125,6 +140,9 @@ export function PulseView() {
           deltaPct={kpis.activeHolders.delta24hPct}
           formatValue={fmtCount}
           icon={<Wallet size={11} weight="fill" color={TOKENS.textFaint} />}
+          tab={HUB_TABS.PULSE}
+          metricId={HUB_METRIC_IDS.PULSE_ACTIVE_HOLDERS}
+          asOf={asOf}
         />
         <KPICard
           label="AUM"
@@ -133,6 +151,9 @@ export function PulseView() {
           deltaPct={kpis.aumUSD.delta24hPct}
           formatValue={fmtUSD}
           icon={<ChartLineUp size={11} weight="fill" color={TOKENS.textFaint} />}
+          tab={HUB_TABS.PULSE}
+          metricId={HUB_METRIC_IDS.PULSE_AUM_USD}
+          asOf={asOf}
         />
         <KPICard
           label="Identity Links"
@@ -142,6 +163,9 @@ export function PulseView() {
           formatValue={fmtPct}
           icon={<LinkSimple size={11} weight="fill" color={TOKENS.textFaint} />}
           tooltip="% of profiles with 2+ identity links (loose: counts duplicate types as separate links)"
+          tab={HUB_TABS.PULSE}
+          metricId={HUB_METRIC_IDS.PULSE_IDENTITY_LINKS_PCT}
+          asOf={asOf}
         />
         <KPICard
           label="Activations (24h)"
@@ -150,6 +174,9 @@ export function PulseView() {
           deltaPct={kpis.activations24h.delta24hPct}
           formatValue={fmtCount}
           icon={<Lightning size={11} weight="fill" color={TOKENS.textFaint} />}
+          tab={HUB_TABS.PULSE}
+          metricId={HUB_METRIC_IDS.PULSE_ACTIVATIONS_24H}
+          asOf={asOf}
         />
         <KPICard
           label="Open Whales"
@@ -159,6 +186,9 @@ export function PulseView() {
           formatValue={fmtCount}
           positiveIsGood={false}
           icon={<Fish size={11} weight="fill" color={TOKENS.textFaint} />}
+          tab={HUB_TABS.PULSE}
+          metricId={HUB_METRIC_IDS.PULSE_OPEN_WHALES}
+          asOf={asOf}
         />
       </div>
 
@@ -184,7 +214,16 @@ export function PulseView() {
               severity={a.severity}
               message={a.message}
               actionLabel={anomalyActionLabel(a.severity)}
-              actionHref={anomalyHref(a.actionView)}
+              onAction={() => {
+                // Telemetry: anomaly CTA = drill_down event (Workflow 1 NODE 1
+                // adjacent — captures the "noticed something" → "investigating"
+                // transition). Fire-and-forget; navigate immediately.
+                recordEvent('drill_down', {
+                  tab: HUB_TABS.PULSE,
+                  metadata: { from: a.actionView, severity: a.severity },
+                });
+                router.push(anomalyHref(a.actionView));
+              }}
             />
           ))}
         </div>

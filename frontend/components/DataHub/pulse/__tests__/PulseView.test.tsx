@@ -16,6 +16,22 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+// PulseView (Phase 1 hub-trust wiring) consumes useRouter for anomaly
+// drill-down and useHubSession for telemetry. Stub both so jsdom tests
+// don't need an app-router or session-provider host.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+vi.mock('@/hooks/useHubSession', () => ({
+  useHubSession: () => ({ sessionId: null, recordEvent: () => {} }),
+}));
+// IncidentBannerWrapper (mounted under every flag-enabled KPICard) polls the
+// active-incidents endpoint at render time. Stub to an empty list.
+vi.mock('@/hooks/useActiveIncidents', () => ({
+  useActiveIncidents: () => [],
+}));
+
 import { PulseView } from '../PulseView';
 
 const SAMPLE_PAYLOAD: PulseSnapshot = {
@@ -100,7 +116,7 @@ describe('PulseView', () => {
     expect(container.querySelector('[role="status"]')).toBeNull();
   });
 
-  it('renders an anomaly callout with the routed href when anomalies are present', () => {
+  it('renders an anomaly callout with the Investigate CTA when anomalies are present', () => {
     const withAnomaly: PulseSnapshot = {
       ...SAMPLE_PAYLOAD,
       anomalies: [
@@ -123,10 +139,9 @@ describe('PulseView', () => {
     ).toBeTruthy();
     // Anomaly wrapper has role=status
     expect(container.querySelector('[role="status"]')).toBeTruthy();
-    // CTA link routes to ?view=attribution
-    expect(
-      container.querySelector('a[href="/admin/data-hub?view=attribution"]'),
-    ).toBeTruthy();
+    // Phase-1 trust wiring: AnomalyCallout uses onAction (button), not href,
+    // so PulseView can interpose telemetry before router.push().
+    expect(getByText('Investigate')).toBeTruthy();
   });
 
   it('renders the error placeholder when the hook errors with no data', () => {
