@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import ShiftIdCard from '@/components/ShiftIdCard';
@@ -10,18 +10,6 @@ import { useToast } from '@/components/ToastContext';
 
 // ── API Configuration ──
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://shift-airdrop-backend.onrender.com';
-
-// ── UTM persistence (Phase A: landing-URL → register POST body) ──
-const UTM_STORAGE_KEY = 'shift_landing_utm';
-const UTM_MAX_AGE_DAYS = 7;
-
-type UtmFields = {
-  utm_source?: string;
-  utm_medium?: string;
-  utm_campaign?: string;
-  utm_content?: string;
-  utm_term?: string;
-};
 
 interface AirdropUser {
   wallet: string;
@@ -63,62 +51,6 @@ export default function RegisterContent() {
   const [refCode, setRefCode] = useState<string | null>(null);
   const [refBonus, setRefBonus] = useState<ReferralBonusInfo | null>(null);
   const [refLoading, setRefLoading] = useState(false);
-
-  // ── UTMs from current landing URL (Phase A safety-net BLOCKER 4 fix) ──
-  // The backend middleware reads UTMs from req.query, but the register POST has
-  // no query string. We capture them client-side here and forward them in the
-  // POST body so first_utm_* / last_utm_* attribution actually gets populated.
-  const utmFromUrl: UtmFields = {
-    utm_source:   searchParams?.get('utm_source')   ?? undefined,
-    utm_medium:   searchParams?.get('utm_medium')   ?? undefined,
-    utm_campaign: searchParams?.get('utm_campaign') ?? undefined,
-    utm_content:  searchParams?.get('utm_content')  ?? undefined,
-    utm_term:     searchParams?.get('utm_term')     ?? undefined,
-  };
-
-  // Persist landing UTMs to localStorage on mount so they survive any
-  // intra-app navigation (wallet connect modal, route changes) between
-  // landing and the actual POST to /api/airdrop/register.
-  useEffect(() => {
-    const hasAny = Object.values(utmFromUrl).some((v) => v);
-    if (!hasAny) return;
-    try {
-      localStorage.setItem(
-        UTM_STORAGE_KEY,
-        JSON.stringify({ ...utmFromUrl, capturedAt: new Date().toISOString() })
-      );
-    } catch {
-      // localStorage may be unavailable (private browsing, quota) — silent fallback
-    }
-    // Run once on mount; URL is read synchronously above.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Resolve UTMs from URL first, falling back to localStorage. Drops stale
-  // entries older than UTM_MAX_AGE_DAYS so a months-old visit doesn't pollute
-  // a fresh registration.
-  const resolveUtms = useCallback((): UtmFields => {
-    const fromUrl = Object.values(utmFromUrl).some((v) => v) ? utmFromUrl : null;
-    if (fromUrl) return fromUrl;
-    try {
-      const raw = typeof window !== 'undefined' ? localStorage.getItem(UTM_STORAGE_KEY) : null;
-      if (!raw) return {};
-      const parsed = JSON.parse(raw) as UtmFields & { capturedAt?: string };
-      if (parsed.capturedAt) {
-        const ageDays = (Date.now() - new Date(parsed.capturedAt).getTime()) / (1000 * 60 * 60 * 24);
-        if (Number.isFinite(ageDays) && ageDays > UTM_MAX_AGE_DAYS) return {};
-      }
-      return {
-        utm_source: parsed.utm_source,
-        utm_medium: parsed.utm_medium,
-        utm_campaign: parsed.utm_campaign,
-        utm_content: parsed.utm_content,
-        utm_term: parsed.utm_term,
-      };
-    } catch {
-      return {};
-    }
-  }, [utmFromUrl]);
 
   // ── Calculate launch bonus on mount ──
   useEffect(() => {
@@ -190,26 +122,15 @@ export default function RegisterContent() {
 
         // If user doesn't exist, register them first
         if (res.status === 404) {
-          const utms = resolveUtms();
-          const registerBody: Record<string, string> = { wallet };
-          if (refCode) registerBody.refCode = refCode;
-          if (utms.utm_source)   registerBody.utm_source   = utms.utm_source;
-          if (utms.utm_medium)   registerBody.utm_medium   = utms.utm_medium;
-          if (utms.utm_campaign) registerBody.utm_campaign = utms.utm_campaign;
-          if (utms.utm_content)  registerBody.utm_content  = utms.utm_content;
-          if (utms.utm_term)     registerBody.utm_term     = utms.utm_term;
-
           const registerRes = await fetch(`${API_URL}/api/airdrop/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(registerBody),
+            body: JSON.stringify({
+              wallet,
+              refCode: refCode || undefined,
+            }),
           });
           if (!registerRes.ok) throw new Error('Failed to register');
-
-          // Clear stored UTMs so a future re-registration on this browser
-          // doesn't re-apply the same (now-attributed) campaign.
-          try { localStorage.removeItem(UTM_STORAGE_KEY); } catch { /* ignore */ }
-
           res = await fetch(`${API_URL}/api/airdrop/user/${wallet}`);
         }
 
@@ -239,16 +160,16 @@ export default function RegisterContent() {
     };
 
     fetchUserData();
-  }, [wallet, refCode, toast, resolveUtms]);
+  }, [wallet, refCode]);
 
-  // ── Handlers ──
-  const handleCopy = () => {
+  // ── Handlers (memoized to prevent re-renders) ──
+  const handleCopy = useCallback(() => {
     if (!userData) return;
     navigator.clipboard.writeText(userData.referralLink);
     toast('Referral link copied!');
-  };
+  }, [userData, toast]);
 
-  const handleShareX = () => {
+  const handleShareX = useCallback(() => {
     if (!userData) return;
     const text = encodeURIComponent(
       `I just joined the @ShiftRWA airdrop — queue position #${userData.queuePosition}! 🚀\n\nTrade RWA tokens on Solana and earn XP. Join via my link:`
@@ -257,7 +178,7 @@ export default function RegisterContent() {
       `https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(userData.referralLink)}`,
       '_blank'
     );
-  };
+  }, [userData]);
 
   // ── Render ──
   if (!wallet) {
