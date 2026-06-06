@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import { ArrowUp, ArrowDown } from '@phosphor-icons/react';
 import { TOKENS, MOTION } from '@/lib/chartTokens';
+import { FlagButton, FLAG_AFFORDANCE_HOST_CLASS } from '../primitives/FlagButton';
+import { IncidentBannerWrapper } from '../primitives/IncidentBanner';
 
 export interface KPICardProps {
   /** UPPERCASE label rendered at the top, e.g. "Registered Users". */
@@ -29,6 +31,17 @@ export interface KPICardProps {
    * When undefined, no `title` attribute is rendered (default behavior).
    */
   tooltip?: string;
+  /**
+   * Hub-trust telemetry — when provided, enables the in-card FlagButton
+   * affordance AND wraps the value in an IncidentBannerWrapper that swaps
+   * to a banner when an open incident matches (tab, metricId).
+   *
+   * Pass both `tab` and `metricId` together; passing only one is a no-op.
+   */
+  tab?: string;
+  metricId?: string;
+  /** Freshness timestamp shown in the flag dialog. */
+  asOf?: string | null;
 }
 
 const defaultFormatValue = (n: number) => n.toLocaleString();
@@ -76,6 +89,9 @@ export function KPICard({
   positiveIsGood = true,
   icon,
   tooltip,
+  tab,
+  metricId,
+  asOf,
 }: KPICardProps) {
   const [hover, setHover] = useState(false);
 
@@ -98,6 +114,8 @@ export function KPICard({
     }
   }
 
+  const flagEnabled = !!(tab && metricId);
+
   const containerStyle: React.CSSProperties = {
     height: 120,
     width: '100%',
@@ -113,7 +131,9 @@ export function KPICard({
     justifyContent: 'space-between',
     transition: `border-color ${MOTION.fast}`,
     boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
-    overflow: 'hidden',
+    // FlagButton dialog escapes the card; let it overflow so it isn't clipped.
+    overflow: flagEnabled ? 'visible' : 'hidden',
+    position: 'relative',
   };
 
   const labelRowStyle: React.CSSProperties = {
@@ -150,9 +170,35 @@ export function KPICard({
     lineHeight: 1.2,
   };
 
+  const formattedValue = formatValue(value);
+
+  const innerBody = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={valueStyle}>{formattedValue}</div>
+
+      {hasDelta && (
+        <div
+          style={deltaChipStyle}
+          aria-label={
+            delta === 0
+              ? `unchanged vs 24h ago`
+              : `${formatDelta(delta)} ${deltaPct !== undefined && deltaPct !== null ? `(${formatDeltaPct(deltaPct)}) ` : ''}${directionLabel} vs 24h ago`
+          }
+        >
+          {DeltaIcon && <DeltaIcon size={10} weight="fill" color={deltaColor} aria-hidden />}
+          <span>{formatDelta(delta)}</span>
+          {deltaPct !== undefined && deltaPct !== null && (
+            <span style={{ color: TOKENS.textFaint }}>({formatDeltaPct(deltaPct)})</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       style={containerStyle}
+      className={flagEnabled ? FLAG_AFFORDANCE_HOST_CLASS : undefined}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       title={tooltip}
@@ -162,26 +208,22 @@ export function KPICard({
         <span>{label}</span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={valueStyle}>{formatValue(value)}</div>
+      {flagEnabled && tab && metricId ? (
+        <IncidentBannerWrapper tab={tab} metricId={metricId}>
+          {innerBody}
+        </IncidentBannerWrapper>
+      ) : (
+        innerBody
+      )}
 
-        {hasDelta && (
-          <div
-            style={deltaChipStyle}
-            aria-label={
-              delta === 0
-                ? `unchanged vs 24h ago`
-                : `${formatDelta(delta)} ${deltaPct !== undefined && deltaPct !== null ? `(${formatDeltaPct(deltaPct)}) ` : ''}${directionLabel} vs 24h ago`
-            }
-          >
-            {DeltaIcon && <DeltaIcon size={10} weight="fill" color={deltaColor} aria-hidden />}
-            <span>{formatDelta(delta)}</span>
-            {deltaPct !== undefined && deltaPct !== null && (
-              <span style={{ color: TOKENS.textFaint }}>({formatDeltaPct(deltaPct)})</span>
-            )}
-          </div>
-        )}
-      </div>
+      {flagEnabled && tab && metricId && (
+        <FlagButton
+          tab={tab}
+          metricId={metricId}
+          displayedValue={formattedValue}
+          asOf={asOf}
+        />
+      )}
     </div>
   );
 }

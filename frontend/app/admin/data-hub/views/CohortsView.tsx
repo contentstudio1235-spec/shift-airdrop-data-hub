@@ -18,6 +18,8 @@ import { TOKENS, MOTION } from '@/lib/chartTokens';
 import { fmtUSD } from '@/lib/format';
 import { useCohortsSnapshot } from '@/hooks/useCohortsSnapshot';
 import type { CohortEntry, CohortSummary, CohortsSnapshot } from '@/types/cohort';
+import { FlagButton, FLAG_AFFORDANCE_HOST_CLASS } from '@/components/DataHub/primitives/FlagButton';
+import { HUB_METRIC_IDS, HUB_TABS } from '@/lib/hubMetricIds';
 
 // ────────────────────────────────────────────────────────────
 // Thresholds — single source of truth for the view's color rules.
@@ -432,6 +434,8 @@ interface TableColumn {
    * inspect the exact computation behind a metric on hover.
    */
   tooltip?: string;
+  /** When set, renders a FlagButton in this column header's negative space. */
+  flagMetricId?: string;
 }
 
 const COLUMNS: TableColumn[] = [
@@ -439,7 +443,7 @@ const COLUMNS: TableColumn[] = [
   { key: 'size', label: 'Size', align: 'right' },
   { key: 'activationPct', label: 'Act %', align: 'right' },
   { key: 'retentionWeek1', label: 'W1 Ret', align: 'right' },
-  { key: 'retentionWeek4', label: 'W4 Ret', align: 'right' },
+  { key: 'retentionWeek4', label: 'W4 Ret', align: 'right', flagMetricId: HUB_METRIC_IDS.COHORTS_RETENTION_W4 },
   { key: 'avgVolumePerUser', label: 'LTV/User', align: 'right' },
   { key: 'whales', label: 'Whales', align: 'right' },
   {
@@ -542,16 +546,25 @@ function HeaderCell({
       }
     >
       <span
+        className={column.flagMetricId ? FLAG_AFFORDANCE_HOST_CLASS : undefined}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
           gap: 4,
           justifyContent: column.align === 'right' ? 'flex-end' : 'flex-start',
           width: '100%',
+          position: 'relative',
         }}
       >
         {column.label}
         {active ? <Caret size={9} weight="bold" /> : null}
+        {column.flagMetricId && (
+          <FlagButton
+            tab={HUB_TABS.COHORTS}
+            metricId={column.flagMetricId}
+            displayedValue={`column:${column.key}`}
+          />
+        )}
       </span>
     </th>
   );

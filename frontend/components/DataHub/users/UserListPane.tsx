@@ -7,6 +7,8 @@ import { UserListRow, GRID_COLUMNS } from './UserListRow';
 import { EmptyState } from '../primitives/EmptyState';
 import { CaretLeft, CaretRight, MagnifyingGlass } from '@phosphor-icons/react';
 import type { ProfileSummary } from '@/hooks/useUsersList';
+import { FlagButton, FLAG_AFFORDANCE_HOST_CLASS } from '../primitives/FlagButton';
+import { HUB_METRIC_IDS, HUB_TABS } from '@/lib/hubMetricIds';
 
 const ROW_HEIGHT = 56;
 
@@ -23,6 +25,8 @@ interface SortableHeaderColumn {
   width: string;
   align?: 'left' | 'right' | 'center';
   sortKey?: 'last_seen' | 'volume' | 'holdings' | 'holdings_value' | 'x' | 'discord';
+  /** When set, renders a FlagButton in this column header's negative space. */
+  flagMetricId?: string;
 }
 
 interface SortableHeaderProps {
@@ -78,9 +82,8 @@ function SortableHeader({ columns, activeSortKey, activeSortDir, onSort }: Sorta
             );
           }
 
-          return (
+          const sortButton = (
             <button
-              key={col.key}
               className="sh-header-btn"
               onClick={() => onSort(col.sortKey!)}
               aria-sort={isActive ? (activeSortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
@@ -110,6 +113,27 @@ function SortableHeader({ columns, activeSortKey, activeSortDir, onSort }: Sorta
               )}
             </button>
           );
+
+          // Wrap with a flag-affordance host when the column declares a flag
+          // metric id. The button is a sibling of the FlagButton, never nested.
+          if (col.flagMetricId) {
+            return (
+              <span
+                key={col.key}
+                className={FLAG_AFFORDANCE_HOST_CLASS}
+                style={{ position: 'relative', display: 'flex', width: '100%' }}
+              >
+                {sortButton}
+                <FlagButton
+                  tab={HUB_TABS.USERS}
+                  metricId={col.flagMetricId}
+                  displayedValue={`column:${col.key}`}
+                />
+              </span>
+            );
+          }
+
+          return <React.Fragment key={col.key}>{sortButton}</React.Fragment>;
         })}
       </div>
     </>
@@ -124,8 +148,8 @@ function SortableHeader({ columns, activeSortKey, activeSortDir, onSort }: Sorta
 const HEADER_COLUMNS: SortableHeaderColumn[] = [
   { key: 'wallet',      label: 'Wallet',     width: '224px', align: 'left' },
   { key: 'name',        label: 'Name',       width: '148px', align: 'left' },
-  { key: 'volume',      label: 'Volume',     width: '92px',  align: 'right',  sortKey: 'volume' },
-  { key: 'value',       label: 'Value',      width: '92px',  align: 'right',  sortKey: 'holdings_value' },
+  { key: 'volume',      label: 'Volume',     width: '92px',  align: 'right',  sortKey: 'volume',          flagMetricId: HUB_METRIC_IDS.USERS_LIST_VOLUME },
+  { key: 'value',       label: 'Value',      width: '92px',  align: 'right',  sortKey: 'holdings_value',  flagMetricId: HUB_METRIC_IDS.USERS_LIST_VALUE },
   { key: 'last_seen',   label: 'Last Seen',  width: '80px',  align: 'right',  sortKey: 'last_seen' },
   { key: 'first_seen',  label: 'First Seen', width: '76px',  align: 'right' },
   { key: 'holdings',    label: 'Hold',       width: '56px',  align: 'right',  sortKey: 'holdings' },

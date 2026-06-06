@@ -35,6 +35,7 @@ const users_1 = __importDefault(require("./routes/users"));
 const track_1 = __importDefault(require("./routes/track"));
 const pulse_1 = __importDefault(require("./routes/pulse"));
 const utm_1 = __importDefault(require("./routes/utm"));
+const hubTrust_1 = __importDefault(require("./routes/hubTrust"));
 // Middleware
 const utmCapture_1 = require("./middleware/utmCapture");
 const app = (0, express_1.default)();
@@ -99,6 +100,7 @@ app.use('/api/users', users_1.default);
 app.use('/api/track', track_1.default);
 app.use('/api/pulse', pulse_1.default);
 app.use('/api/utm', utm_1.default);
+app.use('/api/hub-trust', hubTrust_1.default);
 // ── Data Hub Static Dashboard ──
 // Serves the SHIFT RWA Cross-Channel Data Hub frontend at /hub
 app.use('/hub', express_1.default.static(path_1.default.join(__dirname, '../public'), {

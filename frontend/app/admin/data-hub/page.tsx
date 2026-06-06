@@ -23,6 +23,8 @@ import { UsersView } from '@/components/DataHub/users/UsersView';
 import { PulseView } from '@/components/DataHub/pulse/PulseView';
 import { UtmGovernancePanel } from '@/components/DataHub/engineering/UtmGovernancePanel';
 import { Tag } from '@phosphor-icons/react';
+import { HubSessionProvider, useHubSession } from '@/hooks/useHubSession';
+import { FlagAffordanceStyles } from '@/components/DataHub/primitives/FlagButton';
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://shift-airdrop-backend.onrender.com";
 const KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || "ShiftRwa2026@@$$Key";
@@ -989,6 +991,65 @@ function DataHubPageInner() {
 
   if (!authed) return <AuthGate onAuth={() => setAuthed(true)} />;
 
+  return (
+    <HubSessionProvider initialView={topView}>
+      <FlagAffordanceStyles />
+      <DataHubAuthedShell
+        topView={topView}
+        setTopView={setTopView}
+        page={page}
+        setPage={setPage}
+        data={data}
+        lastSync={lastSync}
+        syncing={syncing}
+        fetchAll={fetchAll}
+      />
+    </HubSessionProvider>
+  );
+}
+
+interface DataHubAuthedShellProps {
+  topView: TopView;
+  setTopView: (v: TopView) => void;
+  page: HubPage;
+  setPage: (p: HubPage) => void;
+  data: HubData;
+  lastSync: Date | null;
+  syncing: boolean;
+  fetchAll: () => Promise<void>;
+}
+
+function DataHubAuthedShell({
+  topView,
+  setTopView,
+  page,
+  setPage,
+  data,
+  lastSync,
+  syncing,
+  fetchAll,
+}: DataHubAuthedShellProps) {
+  const { recordEvent } = useHubSession();
+
+  // tab_open / tab_close telemetry — wire to the topView changeHandler.
+  // Fire-and-forget; setTopView is synchronous so the URL persistence still
+  // runs from the parent's useEffect.
+  const handleChangeView = useCallback(
+    (next: TopView) => {
+      if (next === topView) return;
+      recordEvent('tab_close', { tab: topView, metadata: { to: next } });
+      recordEvent('tab_open', { tab: next, metadata: { from: topView } });
+      setTopView(next);
+    },
+    [topView, setTopView, recordEvent],
+  );
+
+  // card_click telemetry on the legacy Raw Data force-sync action.
+  const handleRawRefresh = useCallback(() => {
+    recordEvent('card_click', { tab: 'raw', metadata: { target: 'refresh' } });
+    fetchAll();
+  }, [recordEvent, fetchAll]);
+
   const pageComponent: Record<HubPage, React.ReactNode> = {
     overview: <OverviewPage data={data} />,
     markets: <MarketsPage data={data} />,
@@ -1015,7 +1076,7 @@ function DataHubPageInner() {
         a { text-decoration: none; }
       `}</style>
 
-      <LayoutShell activeView={topView} onChangeView={setTopView}>
+      <LayoutShell activeView={topView} onChangeView={handleChangeView}>
         {topView === 'pulse' && <PulseView />}
         {topView === 'funnels' && <FunnelsView />}
         {topView === 'attribution' && <AttributionView />}
@@ -1055,7 +1116,7 @@ function DataHubPageInner() {
             {/* Right side */}
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginLeft: "16px", flexShrink: 0 }}>
               {lastSync && <div style={{ fontSize: "10px", color: "#3a7060" }}>{lastSync.toLocaleTimeString()}</div>}
-              <button onClick={fetchAll} disabled={syncing} style={{
+              <button onClick={handleRawRefresh} disabled={syncing} style={{
                 display: "flex", alignItems: "center", gap: "6px", padding: "6px 14px",
                 background: accentDim, color: accent, border: `1px solid ${accentBorder}`,
                 borderRadius: "8px", fontSize: "11px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
