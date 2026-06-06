@@ -74,18 +74,24 @@ describe('PulseView', () => {
     usePulseSnapshotMock.mockReset();
   });
 
-  it('renders exactly 3 KPI labels when the hook resolves with a snapshot (Phase 2.1A: decoration KPIs retired)', () => {
+  it('renders exactly 3 KPI labels when the hook resolves with a snapshot (MR !27: Active Holders → Stitch Coverage)', () => {
     usePulseSnapshotMock.mockReturnValue({
       data: SAMPLE_PAYLOAD,
       loading: false,
       error: null,
       refetch: () => {},
     });
-    const { getByText, queryByText } = render(<PulseView />);
-    // Retained: the 3 hero KPIs that operators act on.
+    const { getByText, queryByText, queryAllByText } = render(<PulseView />);
+    // Retained from X1 baseline: the 2 universally-readable hero KPIs.
     expect(getByText('Registered Users')).toBeTruthy();
-    expect(getByText('Active Holders')).toBeTruthy();
     expect(getByText('AUM')).toBeTruthy();
+    // MR !27 (HARVEST-016 + HARVEST-015): Stitch Coverage replaces Active
+    // Holders as the load-bearing trust signal — every per-channel
+    // attribution figure becomes suspect when stitch% is low.
+    expect(getByText('Stitch Coverage')).toBeTruthy();
+    // Active Holders no longer in the Pulse hero (still surfaces on Cohorts
+    // where M2 drills it).
+    expect(queryAllByText('Active Holders').length).toBe(0);
     // Retired per v2 audit plan Part III — decoration metrics that
     // create scan-cost without driving action. Anomaly checks (D4)
     // still fire on these fields; only the hero KPI cards are gone.
@@ -175,7 +181,7 @@ describe('PulseView', () => {
     expect(container.textContent).toContain('Pulse');
   });
 
-  it('passes tab+metricId to the 3 hero KPICards (Registered Users / Active Holders / AUM)', () => {
+  it('passes tab+metricId to the 3 hero KPICards (Registered Users / Stitch Coverage / AUM)', () => {
     usePulseSnapshotMock.mockReturnValue({
       data: SAMPLE_PAYLOAD,
       loading: false,
@@ -184,8 +190,11 @@ describe('PulseView', () => {
     });
     render(<PulseView />);
     // Each hero KPICard with a reconciled metricId mounts a ReconciliationBadge.
-    // Registered Users, Active Holders, AUM are all in the reconciliation catalog.
+    // After the MR !27 swap (Active Holders → Stitch Coverage), the reconciled
+    // hero cards are Registered Users + AUM. PULSE_IDENTITY_LINKS_PCT is NOT in
+    // the catalog because no identityLinksPct.test.ts exists yet — see TODO in
+    // lib/reconciliationCatalog.ts. Assert ≥2 to honestly reflect catalog state.
     const badges = screen.queryAllByLabelText(/reconciled against second source/i);
-    expect(badges.length).toBeGreaterThanOrEqual(3);
+    expect(badges.length).toBeGreaterThanOrEqual(2);
   });
 });

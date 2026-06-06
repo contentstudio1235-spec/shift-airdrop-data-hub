@@ -3,7 +3,7 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Users,
-  Wallet,
+  LinkSimple,
   ChartLineUp,
 } from '@phosphor-icons/react';
 import { TOKENS } from '@/lib/chartTokens';
@@ -44,13 +44,19 @@ function anomalyActionLabel(severity: AnomalySeverity): string {
 /**
  * PulseView — Tab 1 of the redesigned Data Hub. Answers the question
  * "Has anything material changed in the last 24h?" with three hero KPIs
- * (Registered Users, Active Holders, AUM USD), 30-day AUM context,
+ * (Registered Users, Stitch Coverage, AUM USD), 30-day AUM context,
  * today's signups by source, recent whale activity, and conditional
  * anomaly callouts.
  *
  * Phase 2.1A retired three decoration KPIs from the hero (Identity Links,
  * Activations 24h, Open Whales) per the v2 audit plan Part III — they
  * remain on the API but don't render here. Anomaly checks (D4) still fire.
+ *
+ * MR !27 (HARVEST-016 + HARVEST-015): swapped Active Holders → Stitch
+ * Coverage. Stitch% is the load-bearing trust signal — every per-channel
+ * attribution figure becomes suspect when stitch% is low (this is the root
+ * of HARVEST-005's "Direct = unattributed" caveat). Active Holders is still
+ * available on the Cohorts tab where M2 drills it.
  *
  * Wiring: this component is intentionally NOT mounted in the layout shell here.
  * Phase 2.3 mounts it inside the Data Hub navigation as the default view.
@@ -121,8 +127,10 @@ export function PulseView() {
     <div style={containerStyle}>
       {header}
 
-      {/* KPI grid — three hero metrics (Phase 2.1A: retired stitchPct,
-          activations24h, openWhalesCount per v2 audit plan Part III) */}
+      {/* KPI grid — three hero metrics. Phase 2.1A retired activations24h
+          and openWhalesCount per v2 audit plan Part III. MR !27 promoted
+          stitchPct (Stitch Coverage) back into the hero in place of
+          Active Holders — see component docstring. */}
       <div style={kpiGridStyle}>
         <KPICard
           label="Registered Users"
@@ -136,14 +144,14 @@ export function PulseView() {
           asOf={asOf}
         />
         <KPICard
-          label="Active Holders"
-          value={kpis.activeHolders.value}
-          delta={kpis.activeHolders.delta24h}
-          deltaPct={kpis.activeHolders.delta24hPct}
-          formatValue={fmtCount}
-          icon={<Wallet size={11} weight="fill" color={TOKENS.textFaint} />}
+          label="Stitch Coverage"
+          value={kpis.stitchPct.value}
+          delta={kpis.stitchPct.delta24h}
+          deltaPct={kpis.stitchPct.delta24hPct}
+          formatValue={(n) => `${n.toFixed(1)}%`}
+          icon={<LinkSimple size={11} weight="fill" color={TOKENS.textFaint} />}
           tab={HUB_TABS.PULSE}
-          metricId={HUB_METRIC_IDS.PULSE_ACTIVE_HOLDERS}
+          metricId={HUB_METRIC_IDS.PULSE_IDENTITY_LINKS_PCT}
           asOf={asOf}
         />
         <KPICard

@@ -25,6 +25,7 @@ import { UtmGovernancePanel } from '@/components/DataHub/engineering/UtmGovernan
 import { AnalyticsRedirectCard } from '@/components/DataHub/engineering/AnalyticsRedirectCard';
 import { Tag } from '@phosphor-icons/react';
 import { HubSessionProvider, useHubSession } from '@/hooks/useHubSession';
+import { useSyncTopViewFromUrl } from '@/hooks/useTopViewFromUrl';
 import { FlagAffordanceStyles } from '@/components/DataHub/primitives/FlagButton';
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://shift-airdrop-backend.onrender.com";
@@ -928,6 +929,10 @@ function DataHubPageInner() {
     return 'pulse';  // Platform default — Pulse "what changed" overview (Phase 2 IA redesign)
   })();
   const [topView, setTopView] = useState<TopView>(initialView);
+  // HARVEST-006+008: keep topView in sync with `?view=` writes from drill-down
+  // links (KOL leaderboard row → Users, whale row → Users, etc.). Without this
+  // the URL updates but the visible tab stays put until the user clicks it.
+  useSyncTopViewFromUrl(searchParams, topView, setTopView);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [syncing, setSyncing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
