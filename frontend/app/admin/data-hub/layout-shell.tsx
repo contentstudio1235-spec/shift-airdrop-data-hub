@@ -121,7 +121,7 @@ export function LayoutShell({
         </div>
       </header>
       <div style={{ marginBottom: 16 }}>
-        <FilterBar />
+        <FilterBar activeView={activeView} />
       </div>
       <main>{children}</main>
     </div>
