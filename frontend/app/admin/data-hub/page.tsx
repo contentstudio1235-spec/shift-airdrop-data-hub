@@ -219,9 +219,11 @@ function OverviewPage({ data }: { data: HubData }) {
 
   const kpiCards = [
     { label: "Total AUM Holders", value: onchain?.uniqueHolders?.toLocaleString() || "—", sub: `${onchain?.totalHolderSlots || 0} total slots`, icon: "🏦", accent: "#00c896" },
-    { label: "Trading Volume", value: a ? fmtUSD(a.totalVolume) : "—", sub: `${a?.activeHolders || 0} active positions`, icon: "📈", accent: "#3b82f6" },
-    { label: "Registered Users", value: m?.total_users?.toLocaleString() || "—", sub: `${a?.stitchedUsers || 0} identity stitched`, icon: "👛", accent: "#8b5cf6" },
-    { label: "Total SHIFT Points", value: m?.total_xp ? `${(m.total_xp / 1_000_000).toFixed(2)}M` : "—", sub: `${m?.badge_count || 0} badges awarded`, icon: "⚡", accent: "#f59e0b" },
+    // Trading Volume is the lifetime SUM(position_size_usd) FROM positions (no WHERE — includes closed positions).
+    // activeHolders is the count of users with any open position (not the count of open positions themselves).
+    { label: "Trading Volume (Lifetime)", value: a ? fmtUSD(a.totalVolume) : "—", sub: `${a?.activeHolders || 0} active holders`, icon: "📈", accent: "#3b82f6" },
+    { label: "Registered Users (All-time)", value: m?.total_users?.toLocaleString() || "—", sub: `${a?.stitchedUsers || 0} identity stitched`, icon: "👛", accent: "#8b5cf6" },
+    { label: "Total SHIFT Points (Lifetime)", value: m?.total_xp ? `${(m.total_xp / 1_000_000).toFixed(2)}M` : "—", sub: `${m?.badge_count || 0} badges awarded`, icon: "⚡", accent: "#f59e0b" },
     { label: "Avg Multiplier", value: m?.avg_multiplier ? `${m.avg_multiplier.toFixed(3)}x` : "—", sub: "Across all active wallets", icon: "✖️", accent: "#ec4899" },
     { label: "On-Chain Tokens", value: onchain?.tokens?.length?.toString() || "6", sub: "Live SHIFT Series tokens", icon: "🔗", accent: "#00c896" },
   ];
