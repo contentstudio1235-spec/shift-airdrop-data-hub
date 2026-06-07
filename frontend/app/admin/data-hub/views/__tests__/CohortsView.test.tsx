@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import type { CohortsSnapshot } from '@/types/cohort';
 
 // Mock the hook BEFORE importing CohortsView
@@ -127,6 +127,36 @@ describe('CohortsView', () => {
     const { container } = render(<CohortsView />);
     expect(container.textContent).toContain('network_down');
     expect(container.textContent).toContain('Retry');
+  });
+
+  it('renders ReconciliationBadge on the W4 retention column header', () => {
+    useCohortsSnapshotMock.mockReturnValue({
+      data: buildSnapshot(),
+      loading: false,
+      error: null,
+      refetch: () => {},
+    });
+    render(<CohortsView />);
+    // W4 Ret column has flagMetricId = cohorts.retentionWeek4, which IS in the
+    // reconciliation catalog (cohortRetention.test.ts). Badge must mount.
+    expect(
+      screen.getByLabelText(/cohorts\.retentionWeek4 reconciled against second source/i),
+    ).toBeTruthy();
+  });
+
+  it('does NOT render ReconciliationBadge on activationPct column', () => {
+    useCohortsSnapshotMock.mockReturnValue({
+      data: buildSnapshot(),
+      loading: false,
+      error: null,
+      refetch: () => {},
+    });
+    render(<CohortsView />);
+    // activationPct column has no flagMetricId (not in COLUMNS), and even if
+    // it did, cohorts.activationPct is NOT in the reconciliation catalog yet.
+    expect(
+      screen.queryByLabelText(/cohorts\.activationPct reconciled against second source/i),
+    ).toBeNull();
   });
 
   it('renders the empty panel when cohorts array is empty', () => {

@@ -8,6 +8,7 @@ import { EmptyState } from '../primitives/EmptyState';
 import { CaretLeft, CaretRight, MagnifyingGlass } from '@phosphor-icons/react';
 import type { ProfileSummary } from '@/hooks/useUsersList';
 import { FlagButton, FLAG_AFFORDANCE_HOST_CLASS } from '../primitives/FlagButton';
+import { ReconciliationBadge } from '../primitives/ReconciliationBadge';
 import { HUB_METRIC_IDS, HUB_TABS } from '@/lib/hubMetricIds';
 
 const ROW_HEIGHT = 56;
@@ -124,6 +125,9 @@ function SortableHeader({ columns, activeSortKey, activeSortDir, onSort }: Sorta
                 style={{ position: 'relative', display: 'flex', width: '100%' }}
               >
                 {sortButton}
+                {col.flagMetricId && (
+                  <ReconciliationBadge metricId={col.flagMetricId} />
+                )}
                 <FlagButton
                   tab={HUB_TABS.USERS}
                   metricId={col.flagMetricId}

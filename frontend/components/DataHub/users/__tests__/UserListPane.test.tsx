@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, screen } from '@testing-library/react';
 import { UserListPane } from '../UserListPane';
 import type { ProfileSummary } from '@/hooks/useUsersList';
 
@@ -133,6 +133,27 @@ describe('UserListPane — SortableHeader', () => {
     expect(tgBtn).toBeUndefined();
     const text = container.textContent ?? '';
     expect(text).toContain('TG');
+  });
+
+  // ── ReconciliationBadge negative-case pins (MR !26b) ──────────────────
+  // Volume + Value columns have FlagButton mounted (Workflow 1 NODE 1 surface),
+  // but their metric_ids (users.list.lifetimeVolumeUSD, users.list.holdingsValueUSD)
+  // are NOT in RECONCILED_METRIC_IDS — no reconciliation test exists yet.
+  // The badge mount point exists in source but isReconciled() returns false,
+  // so the badge renders nothing. These tests pin that intentional absence.
+
+  it('does NOT render ReconciliationBadge on Volume column header (no recon test yet)', () => {
+    render(<UserListPane {...DEFAULT_PROPS} />);
+    expect(
+      screen.queryByLabelText(/users\.list\.lifetimeVolumeUSD reconciled against second source/i),
+    ).toBeNull();
+  });
+
+  it('does NOT render ReconciliationBadge on Value column header (no recon test yet)', () => {
+    render(<UserListPane {...DEFAULT_PROPS} />);
+    expect(
+      screen.queryByLabelText(/users\.list\.holdingsValueUSD reconciled against second source/i),
+    ).toBeNull();
   });
 
   it('renders loading skeleton when loading=true and rows=[]', () => {

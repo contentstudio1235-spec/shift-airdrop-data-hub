@@ -19,6 +19,7 @@ import { fmtUSD } from '@/lib/format';
 import { useCohortsSnapshot } from '@/hooks/useCohortsSnapshot';
 import type { CohortEntry, CohortSummary, CohortsSnapshot } from '@/types/cohort';
 import { FlagButton, FLAG_AFFORDANCE_HOST_CLASS } from '@/components/DataHub/primitives/FlagButton';
+import { ReconciliationBadge } from '@/components/DataHub/primitives/ReconciliationBadge';
 import { HUB_METRIC_IDS, HUB_TABS } from '@/lib/hubMetricIds';
 
 // ────────────────────────────────────────────────────────────
@@ -558,6 +559,9 @@ function HeaderCell({
       >
         {column.label}
         {active ? <Caret size={9} weight="bold" /> : null}
+        {column.flagMetricId && (
+          <ReconciliationBadge metricId={column.flagMetricId} />
+        )}
         {column.flagMetricId && (
           <FlagButton
             tab={HUB_TABS.COHORTS}
