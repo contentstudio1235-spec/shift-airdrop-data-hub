@@ -14,7 +14,7 @@ import type {
   AggregatedKPIs,
   FunnelTab,
 } from "@/components/DataHub/types";
-import { LayoutShell, type TopView } from './layout-shell';
+import { LayoutShell, isValidTopView, type TopView } from './layout-shell';
 import { FunnelsView } from './views/FunnelsView';
 import { AttributionView } from './views/AttributionView';
 import { CohortsView } from './views/CohortsView';
@@ -925,8 +925,7 @@ function DataHubPageInner() {
   const [page, setPage] = useState<HubPage>("overview");
   const initialView = ((): TopView => {
     const v = searchParams?.get('view');
-    if (v === 'pulse' || v === 'funnels' || v === 'attribution' || v === 'cohorts' || v === 'users' || v === 'raw') return v;
-    return 'pulse';  // Platform default — Pulse "what changed" overview (Phase 2 IA redesign)
+    return isValidTopView(v) ? v : 'pulse';  // Platform default — Pulse "what changed" overview (Phase 2 IA redesign)
   })();
   const [topView, setTopView] = useState<TopView>(initialView);
   // HARVEST-006+008: keep topView in sync with `?view=` writes from drill-down

@@ -73,3 +73,22 @@ describe('useFilters preserves foreign params on URL writes', () => {
     expect(url!).toContain('view=users');
   });
 });
+
+describe('useFilters does NOT inject phantom walletSize params on URL writeback', () => {
+  // Regression pin for MR !28 Fix 1. The previous paramsToFilters used
+  // `Number(p.get('walletSizeMin'))` which coerces null → 0, so a URL without
+  // those params would still write `walletSizeMin=0&walletSizeMax=0` back on
+  // every filter change. In prod this caused 181 console errors in a single
+  // session from re-fetch loops.
+  it('paramsToFilters: does NOT set walletSizeMin in URL writeback when param is absent', async () => {
+    const url = await mountAndChangeFilter('view=users');
+    expect(url).not.toBeNull();
+    expect(url!).not.toContain('walletSizeMin');
+  });
+
+  it('paramsToFilters: does NOT set walletSizeMax in URL writeback when param is absent', async () => {
+    const url = await mountAndChangeFilter('view=users');
+    expect(url).not.toBeNull();
+    expect(url!).not.toContain('walletSizeMax');
+  });
+});

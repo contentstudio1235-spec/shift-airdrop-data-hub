@@ -1,19 +1,6 @@
 "use client";
 import { useEffect } from 'react';
-import { type TopView } from '@/app/admin/data-hub/layout-shell';
-
-const VALID_VIEWS: ReadonlyArray<TopView> = [
-  'pulse',
-  'funnels',
-  'attribution',
-  'cohorts',
-  'users',
-  'raw',
-];
-
-function isValidTopView(v: string | null | undefined): v is TopView {
-  return !!v && (VALID_VIEWS as readonly string[]).includes(v);
-}
+import { isValidTopView, type TopView } from '@/app/admin/data-hub/layout-shell';
 
 /**
  * Sync local `topView` state with the `?view=` URL param. Used by the

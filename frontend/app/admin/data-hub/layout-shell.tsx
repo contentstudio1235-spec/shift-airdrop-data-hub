@@ -9,7 +9,17 @@ const accentDim = "rgba(0,200,150,0.15)";
 const accentBorder = "rgba(0,200,150,0.2)";
 const bg = "#030d0a";
 
-export type TopView = 'pulse' | 'funnels' | 'attribution' | 'cohorts' | 'users' | 'raw';
+// Single source of truth for top-level Data Hub views. Both the TypeScript
+// union type and the runtime validation guard derive from this one array, so
+// adding a new view here automatically updates the union, the guard, the
+// URL-param validation in `useTopViewFromUrl`, and the initialView IIFE in
+// `data-hub/page.tsx`. Closes MR !28 Fix 2.
+export const TOP_VIEWS = ['pulse', 'funnels', 'attribution', 'cohorts', 'users', 'raw'] as const;
+export type TopView = (typeof TOP_VIEWS)[number];
+
+export function isValidTopView(v: string | null | undefined): v is TopView {
+  return !!v && (TOP_VIEWS as readonly string[]).includes(v);
+}
 
 // Main outer-tab nav (Sprint 1+ views). Raw Data is intentionally NOT here —
 // it has been demoted to a quiet "Engineering" gear toggle in the top-right.

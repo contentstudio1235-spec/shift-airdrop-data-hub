@@ -39,10 +39,19 @@ function paramsToFilters(p: URLSearchParams): Filters {
   const asset = p.get('asset'); if (asset) f.asset = asset;
   const cohort = p.get('cohort');
   if (cohort === 'day' || cohort === 'week' || cohort === 'month') f.cohort = cohort;
-  const min = Number(p.get('walletSizeMin'));
-  if (Number.isFinite(min) && min >= 0) f.walletSizeMin = min;
-  const max = Number(p.get('walletSizeMax'));
-  if (Number.isFinite(max) && max >= 0) f.walletSizeMax = max;
+  // Gate on URLSearchParams.get() !== null BEFORE parsing — `Number(null)` is 0,
+  // which would phantom-inject `walletSizeMin=0&walletSizeMax=0` on every
+  // writeback when the URL had no such params (re-render loop in prod).
+  const minRaw = p.get('walletSizeMin');
+  if (minRaw !== null) {
+    const min = Number(minRaw);
+    if (Number.isFinite(min) && min >= 0) f.walletSizeMin = min;
+  }
+  const maxRaw = p.get('walletSizeMax');
+  if (maxRaw !== null) {
+    const max = Number(maxRaw);
+    if (Number.isFinite(max) && max >= 0) f.walletSizeMax = max;
+  }
   return f;
 }
 
