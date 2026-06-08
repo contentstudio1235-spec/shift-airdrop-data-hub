@@ -3,6 +3,30 @@ import type { FunnelQueryParams, CohortDim } from '../types/funnel';
 
 const ALLOWED_COHORT_DIMS: CohortDim[] = ['day', 'week', 'month'];
 
+// MR !29 (F1 funnel time-window selector). Frontend writes `?fwindow=30d`
+// for semantic URL clarity (operator mental model: "always last 30 days");
+// backend derives an absolute `from` cutoff so the existing funnelService
+// SQL (WHERE $1::timestamp IS NULL OR created_at >= $1) works unchanged.
+//
+// Explicit `from` in query still wins (back-compat for already-shared dated
+// URLs + per-funnel test fixtures). `fwindow=all` is a deliberate no-op
+// that suppresses any derived window so all-time data renders.
+const FWINDOW_TO_DAYS: Record<string, number | null> = {
+  '7d': 7,
+  '30d': 30,
+  '90d': 90,
+  'all': null,
+};
+
+function deriveFromForFwindow(fwindow: string | undefined): string | undefined {
+  if (!fwindow) return undefined;
+  if (!(fwindow in FWINDOW_TO_DAYS)) return undefined;
+  const days = FWINDOW_TO_DAYS[fwindow];
+  if (days === null) return undefined; // 'all' = no filter
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  return cutoff.toISOString().slice(0, 10);
+}
+
 export function parseQueryParams(raw: Record<string, string | undefined>): FunnelQueryParams {
   const parsed: FunnelQueryParams = {};
 
@@ -19,6 +43,11 @@ export function parseQueryParams(raw: Record<string, string | undefined>): Funne
 
   const max = raw.walletSizeMax ? Number(raw.walletSizeMax) : NaN;
   if (Number.isFinite(max) && max >= 0) parsed.walletSizeMax = max;
+
+  if (!parsed.from) {
+    const derived = deriveFromForFwindow(raw.fwindow);
+    if (derived) parsed.from = derived;
+  }
 
   return parsed;
 }

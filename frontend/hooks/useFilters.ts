@@ -2,6 +2,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
+export type FunnelWindow = '7d' | '30d' | '90d' | 'all';
+
+export const FUNNEL_WINDOWS: readonly FunnelWindow[] = ['7d', '30d', '90d', 'all'] as const;
+
+export function isFunnelWindow(v: string | null | undefined): v is FunnelWindow {
+  return !!v && (FUNNEL_WINDOWS as ReadonlyArray<string>).includes(v);
+}
+
 export interface Filters {
   from?: string;
   to?: string;
@@ -10,6 +18,11 @@ export interface Filters {
   cohort?: 'day' | 'week' | 'month';
   walletSizeMin?: number;
   walletSizeMax?: number;
+  // F1 / MR !29: funnel time window. Backend derives `from` from this when
+  // present (queryParams.ts). Lives on Filters so it round-trips via the same
+  // URL + localStorage machinery the rest of the filter state uses, and so it
+  // survives view switches via the FOREIGN_PARAMS allowlist below.
+  fwindow?: FunnelWindow;
 }
 
 const STORAGE_KEY = 'shift-data-hub-filters';
@@ -52,6 +65,8 @@ function paramsToFilters(p: URLSearchParams): Filters {
     const max = Number(maxRaw);
     if (Number.isFinite(max) && max >= 0) f.walletSizeMax = max;
   }
+  const fwin = p.get('fwindow');
+  if (isFunnelWindow(fwin)) f.fwindow = fwin;
   return f;
 }
 
@@ -64,6 +79,7 @@ function filtersToParams(f: Filters): URLSearchParams {
   if (f.cohort) p.set('cohort', f.cohort);
   if (f.walletSizeMin !== undefined) p.set('walletSizeMin', String(f.walletSizeMin));
   if (f.walletSizeMax !== undefined) p.set('walletSizeMax', String(f.walletSizeMax));
+  if (f.fwindow) p.set('fwindow', f.fwindow);
   return p;
 }
 
