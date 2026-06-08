@@ -23,6 +23,13 @@ export interface Filters {
   // URL + localStorage machinery the rest of the filter state uses, and so it
   // survives view switches via the FOREIGN_PARAMS allowlist below.
   fwindow?: FunnelWindow;
+  // MR !33: decoupled position-time window for the channel-roi volume fix.
+  // Only HeroVolume7d uses it today (passes volumeFrom=NOW-7d) — kept off the
+  // URL writer/reader since it's a derived ephemeral param, not an operator-
+  // chosen filter. Type-only so TS allows callers to pass it through
+  // useFunnelData's query-spread without complaint.
+  volumeFrom?: string;
+  volumeTo?: string;
 }
 
 const STORAGE_KEY = 'shift-data-hub-filters';

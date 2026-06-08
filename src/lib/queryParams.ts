@@ -32,6 +32,9 @@ export function parseQueryParams(raw: Record<string, string | undefined>): Funne
 
   if (raw.from && isValidISODate(raw.from)) parsed.from = raw.from;
   if (raw.to && isValidISODate(raw.to)) parsed.to = raw.to;
+  // MR !33: decoupled position-time window for channel-roi volume fix.
+  if (raw.volumeFrom && isValidISODate(raw.volumeFrom)) parsed.volumeFrom = raw.volumeFrom;
+  if (raw.volumeTo && isValidISODate(raw.volumeTo)) parsed.volumeTo = raw.volumeTo;
   if (raw.source && /^[a-z0-9_-]{1,40}$/i.test(raw.source)) parsed.source = raw.source.toLowerCase();
   if (raw.asset && /^[A-Z0-9]{2,10}$/.test(raw.asset)) parsed.asset = raw.asset.toUpperCase();
   if (raw.cohort && ALLOWED_COHORT_DIMS.includes(raw.cohort as CohortDim)) {

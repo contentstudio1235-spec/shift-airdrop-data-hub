@@ -25,6 +25,19 @@ async function computeChannelROI(params) {
     //   - 6-char alphanumeric values are Snag referral codes (e.g. ?ref=3VAN8Y),
     //     collapsed into a single 'snag_referrals' channel rather than appearing
     //     as 50+ pseudo-source rows
+    //
+    // MR !33 fix (Tomer reported "$1.2K" was wrong on HeroVolume7d):
+    //   Previously the SAME `from`/`to` params filtered BOTH user creation AND
+    //   position opening. Result: "7d volume" actually meant "7d-new-user 7d
+    //   trading volume," undercounting by 10-50× because returning-user
+    //   trading was excluded entirely.
+    //   Fix: decouple. `from`/`to` now scope user-cohort only (params $1/$2);
+    //   `volumeFrom`/`volumeTo` (params $3/$4) scope the positions window.
+    //   When volumeFrom is provided WITHOUT from, users are unfiltered — that
+    //   yields "all users' trading in last N days, attributed by their source,"
+    //   which is what "7d Volume" actually means.
+    //   Back-compat: when volumeFrom/volumeTo are NULL, falls back to from/to
+    //   for the positions window — preserves existing callers' semantics.
     const rows = await (0, pool_1.query)(`
     -- Check the 6-char Snag-referral pattern on raw values BEFORE the COALESCE
     -- falls through to 'direct'. Otherwise 'direct' (literally 6 letters) gets
@@ -50,8 +63,8 @@ async function computeChannelROI(params) {
     holders AS (
       SELECT wallet, SUM(position_size_usd) AS volume
       FROM positions
-      WHERE ($1::timestamp IS NULL OR opened_at >= $1)
-        AND ($2::timestamp IS NULL OR opened_at <= $2)
+      WHERE (COALESCE($3::timestamp, $1::timestamp) IS NULL OR opened_at >= COALESCE($3::timestamp, $1::timestamp))
+        AND (COALESCE($4::timestamp, $2::timestamp) IS NULL OR opened_at <= COALESCE($4::timestamp, $2::timestamp))
       GROUP BY wallet
     )
     SELECT
@@ -67,7 +80,7 @@ async function computeChannelROI(params) {
     GROUP BY us.source
     ORDER BY users DESC
     LIMIT 50
-    `, [params.from ?? null, params.to ?? null]);
+    `, [params.from ?? null, params.to ?? null, params.volumeFrom ?? null, params.volumeTo ?? null]);
     const result = rows.map(r => ({
         source: r.source,
         users: Number(r.users),
