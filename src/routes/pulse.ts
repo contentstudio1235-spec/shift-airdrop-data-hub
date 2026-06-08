@@ -9,6 +9,7 @@
 import { Router, type Request, type Response } from 'express';
 import { config } from '../config';
 import { getPulseSnapshot } from '../services/pulseService';
+import { getLaunchThisWeekSnapshot } from '../services/launchThisWeekService';
 
 const router = Router();
 
@@ -31,6 +32,22 @@ router.get('/snapshot', async (_req: Request, res: Response) => {
     res.json(snapshot);
   } catch (err) {
     console.error('[pulse/snapshot]', err);
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+/**
+ * GET /api/pulse/launch-this-week
+ * HARVEST-001 (MR !30, score 81). Per-channel marketing performance for
+ * campaigns launched this week. See src/services/launchThisWeekService.ts
+ * for the synthesis decisions encoded in the query + gating logic.
+ */
+router.get('/launch-this-week', async (_req: Request, res: Response) => {
+  try {
+    const snapshot = await getLaunchThisWeekSnapshot();
+    res.json(snapshot);
+  } catch (err) {
+    console.error('[pulse/launch-this-week]', err);
     res.status(500).json({ error: 'internal_error' });
   }
 });
