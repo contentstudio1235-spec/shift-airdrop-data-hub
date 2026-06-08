@@ -325,6 +325,16 @@ router.post('/campaigns', async (req: Request, res: Response) => {
       ],
     );
 
+    // MR !31 V2 fix (Code Reviewer nit #5): invalidate the launch-this-week
+    // Pulse cache so the operator's next poll reflects the new campaign +
+    // budget immediately, instead of showing "Add spend" for up to 60s after
+    // they just entered it. Lazy require to avoid a circular import at module
+    // load time.
+    try {
+      const { _clearLaunchThisWeekCache } = await import('../services/launchThisWeekService');
+      _clearLaunchThisWeekCache();
+    } catch { /* non-fatal: cache will self-expire in ≤60s anyway */ }
+
     res.status(201).json(inserted);
   } catch (err) {
     console.error('[utm/campaigns/create]', err);

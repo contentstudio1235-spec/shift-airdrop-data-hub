@@ -35,6 +35,7 @@
 // ============================================================
 Object.defineProperty(exports, "__esModule", { value: true });
 exports._clearLaunchThisWeekCache = _clearLaunchThisWeekCache;
+exports._passesConfidenceGate = _passesConfidenceGate;
 exports.getLaunchThisWeekSnapshot = getLaunchThisWeekSnapshot;
 const pool_1 = require("../db/pool");
 const CACHE_TTL_MS = 60_000;
@@ -57,7 +58,12 @@ function toNumber(v, fallback = 0) {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
 }
-function passesConfidenceGate(row) {
+/**
+ * Exported (with leading `_`) for unit tests. The leading underscore signals
+ * "internal — not part of the public service contract." Production code in
+ * this file is the only intended caller of the non-underscore version.
+ */
+function _passesConfidenceGate(row) {
     const medium = row.medium ?? '';
     let threshold;
     let metric;
@@ -81,6 +87,9 @@ function passesConfidenceGate(row) {
         pass: false,
         reason: `needs ${remaining} more ${metric} (${actual}/${threshold})`,
     };
+}
+function passesConfidenceGate(row) {
+    return _passesConfidenceGate(row);
 }
 async function getLaunchThisWeekSnapshot() {
     const cached = cache.get('snapshot');
@@ -150,25 +159,40 @@ async function getLaunchThisWeekSnapshot() {
         AND p.first_utm_source IS NOT NULL
         AND LOWER(p.first_utm_source) IN (${placeholdersOffset1})
     ),
-    first_trades AS (
-      SELECT wallet, MIN(opened_at) AS first_at
-      FROM positions
-      GROUP BY wallet
+    -- V2 fix (MR !31, Code Reviewer nit #6): aggregate first-trade per PROFILE,
+    -- not per primary_wallet. Profiles with multiple linked wallets (identity_links
+    -- of type='wallet') were under-counting holders because positions on the
+    -- non-primary wallet weren't matching. Build the full wallet set per
+    -- in-window profile then find MIN(opened_at) across all of them.
+    profile_wallets AS (
+      SELECT wp.profile_id, wp.primary_wallet AS wallet FROM window_profiles wp
+      UNION
+      SELECT il.profile_id, il.identity_value AS wallet
+      FROM identity_links il
+      WHERE il.identity_type = 'wallet'
+        AND il.unlinked_at IS NULL
+        AND il.profile_id IN (SELECT profile_id FROM window_profiles)
+    ),
+    first_trade_per_profile AS (
+      SELECT pw.profile_id, MIN(p.opened_at) AS first_at
+      FROM profile_wallets pw
+      JOIN positions p ON p.wallet = pw.wallet
+      GROUP BY pw.profile_id
     ),
     joined AS (
       SELECT
         wp.source,
         wp.profile_id,
         wp.is_stitched,
-        ft.first_at,
+        ftp.first_at,
         wp.first_seen_at,
         CASE
-          WHEN ft.first_at IS NOT NULL AND ft.first_at >= wp.first_seen_at
-          THEN EXTRACT(EPOCH FROM (ft.first_at - wp.first_seen_at))
+          WHEN ftp.first_at IS NOT NULL AND ftp.first_at >= wp.first_seen_at
+          THEN EXTRACT(EPOCH FROM (ftp.first_at - wp.first_seen_at))
           ELSE NULL
         END AS htft_seconds
       FROM window_profiles wp
-      LEFT JOIN first_trades ft ON ft.wallet = wp.primary_wallet
+      LEFT JOIN first_trade_per_profile ftp ON ftp.profile_id = wp.profile_id
     )
     SELECT
       source,
