@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from 'react';
-import { useFilters } from '@/hooks/useFilters';
+import { useFilters, type FunnelWindow } from '@/hooks/useFilters';
 import { useFunnelData } from '@/hooks/useFunnelData';
 import { FUNNEL_DISPLAY, getStepBenchmark, type FunnelId } from '@/lib/funnelTaxonomy';
 import { TOKENS } from '@/lib/chartTokens';
@@ -11,6 +11,7 @@ import { HeroVolume7d } from '@/components/DataHub/heroes/HeroVolume7d';
 import { HeroViralK } from '@/components/DataHub/heroes/HeroViralK';
 import { HeroAttributionCoverage } from '@/components/DataHub/heroes/HeroAttributionCoverage';
 import { FunnelSelector } from '@/components/DataHub/funnels/FunnelSelector';
+import { FunnelWindowSelector } from '@/components/DataHub/funnels/FunnelWindowSelector';
 import { AnimatedFunnel, type FunnelStep } from '@/components/DataHub/funnels/AnimatedFunnel';
 import { PerStepDrillDown } from '@/components/DataHub/funnels/PerStepDrillDown';
 import { AnomalyCallout, type AnomalySeverity } from '@/components/DataHub/primitives/AnomalyCallout';
@@ -36,6 +37,40 @@ const AVG_POSITION_USD = 56;
  * every lost user converted, which would massively overstate.
  */
 const ESTIMATED_CONVERSION = 0.10;
+
+/**
+ * MR !29 (F1 funnel time-window selector).
+ *
+ * - DEFAULT_WINDOW: chosen by synthesis of Analytics Reporter + UX Researcher
+ *   recommendations. PM dissented (preferring "all" to protect founder-surprise);
+ *   that concern is absorbed by FIRST_LOAD_HINT_MAX_VIEWS below + persistent
+ *   "Showing: X" chip in the funnel subtitle.
+ * - CONFIDENCE_GATE_N: minimum step denominator before we trust the leak
+ *   callout. Matches the Cohorts skill rule (n<100 = grayed/insufficient).
+ *   Below this, AnomalyCallout switches to "widen the window" copy instead
+ *   of citing a misleading drop percentage.
+ * - FIRST_LOAD_HINT_*: first-3-loads dismissable hint absorbs the change
+ *   from previous all-time default to new 30d default for stakeholders who
+ *   memorized the all-time numbers.
+ */
+const DEFAULT_WINDOW: FunnelWindow = '30d';
+const CONFIDENCE_GATE_N = 100;
+const FIRST_LOAD_HINT_MAX_VIEWS = 3;
+const FIRST_LOAD_HINT_KEY = 'funnels-window-hint-loads';
+
+const WINDOW_PHRASE: Record<FunnelWindow, string> = {
+  '7d': 'last 7 days',
+  '30d': 'last 30 days',
+  '90d': 'last 90 days',
+  'all': 'all-time',
+};
+
+const WINDOW_REVENUE_PHRASE: Record<FunnelWindow, string> = {
+  '7d': 'weekly revenue',
+  '30d': 'monthly revenue',
+  '90d': 'quarterly revenue',
+  'all': 'lifetime revenue',
+};
 
 // Display-only labels for synthetic source values returned by the backend.
 // Mirrored from AttributionView so the leak callout reads with the same
@@ -114,13 +149,63 @@ interface FunnelResponse {
 }
 
 export function FunnelsView() {
-  const [filters] = useFilters();
+  const [filters, setFilters] = useFilters();
   const [activeFunnel, setActiveFunnel] = useState<FunnelId>('acquisition');
   const [drillStepId, setDrillStepId] = useState<string | null>(null);
 
+  // F1 (MR !29): pure render-time fallback. We deliberately do NOT auto-write
+  // the default to the URL on mount because:
+  //   (1) useFilters hydrates from URL/localStorage in its own effect; if both
+  //       fired during the same React commit, the functional `setFilters`
+  //       update could merge over the hydrated URL value and clobber an
+  //       explicit `?fwindow=7d` deep link to `30d`. Reviewer-caught race.
+  //   (2) Keeps the URL clean — only writes `fwindow=` when the operator
+  //       deliberately picks a window. Sharing `?view=funnels` shows whatever
+  //       DEFAULT_WINDOW resolves to for the recipient (future-proof for
+  //       HARVEST-024 per-persona default landing).
+  //   (3) `activeWindow` is the single source of truth read by selector,
+  //       subtitle chip, AnomalyCallout copy, and first-load hint logic.
+  const activeWindow: FunnelWindow = filters.fwindow ?? DEFAULT_WINDOW;
+
+  // First-3-loads hint: localStorage counter only on the client; SSR-safe.
+  // Increments once per mount. After 3 mounts (or after the dismiss click),
+  // hint stays hidden forever.
+  const [showFirstLoadHint, setShowFirstLoadHint] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(FIRST_LOAD_HINT_KEY);
+      const loads = raw ? Number(raw) : 0;
+      const safeLoads = Number.isFinite(loads) ? loads : 0;
+      if (safeLoads < FIRST_LOAD_HINT_MAX_VIEWS) {
+        setShowFirstLoadHint(true);
+        window.localStorage.setItem(FIRST_LOAD_HINT_KEY, String(safeLoads + 1));
+      }
+    } catch {
+      // quota / private mode — silently skip the hint
+    }
+  }, []);
+
+  const dismissFirstLoadHint = () => {
+    setShowFirstLoadHint(false);
+    try {
+      window.localStorage.setItem(FIRST_LOAD_HINT_KEY, String(FIRST_LOAD_HINT_MAX_VIEWS));
+    } catch { /* ignore */ }
+  };
+
+  // Pass the *effective* window to the backend even when the URL has none —
+  // otherwise the UI would show "Showing: last 30 days" while the backend
+  // returned all-time data, which is exactly the trust-floor violation Phase 1
+  // shipped to prevent. The URL stays clean (no auto-write); the API call
+  // explicitly carries the resolved window so backend SQL filters match the
+  // label the operator sees.
+  const effectiveFilters = useMemo(
+    () => ({ ...filters, fwindow: activeWindow }),
+    [filters, activeWindow],
+  );
+
   const { data, loading, error, refetch } = useFunnelData<FunnelResponse>(
     `/api/funnels/${activeFunnel}`,
-    filters,
+    effectiveFilters,
   );
 
   // Track when the last fetch resolved so the header can show "updated HH:MM:SS".
@@ -147,22 +232,66 @@ export function FunnelsView() {
   // re-renders churning AnomalyCallout's aria-live region.
   const sourceFilter =
     filters.source && filters.source !== 'all' ? filters.source : null;
+
+  // F1 (MR !29): confidence-gated leak insight.
+  //
+  // (1) Compute the leak structurally first (computeLeaks).
+  // (2) If the leak's source step has fewer than CONFIDENCE_GATE_N users
+  //     in the active window, suppress the percentage citation and surface
+  //     a "widen the window" prompt instead — surfacing a 95% drop based on
+  //     n=12 users would be actively misleading per funnel-analysis Step 3.
+  // (3) Otherwise build the window-aware message:
+  //     "Biggest leak in last {window} is {step_from} → {step_to}
+  //      ({drop_pct}% drop). Recovering 10% of these users would unlock
+  //      ~${opportunity} in {window_revenue_label}."
   const leakInsight = useMemo(() => {
     const leaks = computeLeaks(data?.steps);
     if (!leaks) return null;
 
     const { biggest, smallest } = leaks;
+
+    // Find the step the biggest leak originates from to gate on its count.
+    const fromStep = data?.steps?.find(s => s.id === biggest.fromId);
+    const denominator = fromStep?.count ?? 0;
+    const insufficient = denominator < CONFIDENCE_GATE_N;
+
+    const windowPhrase = WINDOW_PHRASE[activeWindow];
+    const revenuePhrase = WINDOW_REVENUE_PHRASE[activeWindow];
+
+    if (insufficient) {
+      // Suppress per-source caveat when the gate trips — the operator's
+      // actionable hint is "widen the window," not "your filter is narrow."
+      const tryWiderWindow = activeWindow === 'all' ? null : (
+        activeWindow === '7d' ? '30d' : activeWindow === '30d' ? '90d' : 'all-time'
+      );
+      const widenHint = tryWiderWindow
+        ? ` Try ${tryWiderWindow} →`
+        : '';
+      const biggestMessage =
+        `Not enough volume in ${windowPhrase} to identify a meaningful leak ` +
+        `(n=${denominator.toLocaleString()} at ${biggest.fromName}).${widenHint}`;
+      return {
+        biggest,
+        smallest: null,
+        revenueOpportunity: 0,
+        sourceFilter,
+        biggestMessage,
+        insufficient: true as const,
+      };
+    }
+
     const revenueOpportunity =
       biggest.lost * AVG_POSITION_USD * ESTIMATED_CONVERSION;
 
-    const lede = sourceFilter
-      ? `Biggest leak for \`${formatSource(sourceFilter)}\``
-      : 'Biggest leak this period';
+    const sourceClause = sourceFilter
+      ? ` for \`${formatSource(sourceFilter)}\``
+      : '';
 
     const biggestMessage =
-      `${lede}: ${biggest.fromName} → ${biggest.toName} ` +
+      `Biggest leak in ${windowPhrase}${sourceClause}: ` +
+      `${biggest.fromName} → ${biggest.toName} ` +
       `(−${biggest.dropPct.toFixed(0)}% drop, ${biggest.lost.toLocaleString()} users) ` +
-      `≈${fmtUSD(revenueOpportunity)} opportunity if recovered`;
+      `≈${fmtUSD(revenueOpportunity)} in ${revenuePhrase} if 10% recovered`;
 
     return {
       biggest,
@@ -170,8 +299,9 @@ export function FunnelsView() {
       revenueOpportunity,
       sourceFilter,
       biggestMessage,
+      insufficient: false as const,
     };
-  }, [data?.steps, sourceFilter]);
+  }, [data?.steps, sourceFilter, activeWindow]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -183,6 +313,21 @@ export function FunnelsView() {
         onRefresh={refetch}
         loading={loading}
       />
+
+      {/* Row 0.5: First-3-loads hint absorbs default-change surprise (PM concern).
+          Renders only when localStorage counter < FIRST_LOAD_HINT_MAX_VIEWS. */}
+      {showFirstLoadHint && activeWindow !== 'all' && (
+        <AnomalyCallout
+          severity="info"
+          message={`Now showing ${WINDOW_PHRASE[activeWindow]} by default. Older "all-time" numbers may differ.`}
+          actionLabel="View all-time"
+          onAction={() => {
+            dismissFirstLoadHint();
+            setFilters({ fwindow: 'all' });
+          }}
+          dismissible
+        />
+      )}
 
       {/* Row 1: Insight strip (full width) */}
       <InsightStrip filters={filters} />
@@ -199,16 +344,23 @@ export function FunnelsView() {
         <HeroAttributionCoverage filters={filters} />
       </div>
 
-      {/* Row 2.5: Biggest-leak callout strip — surfaces worst drop-off above the chart */}
+      {/* Row 2.5: Biggest-leak callout strip — window-aware. When the active
+          window has fewer than CONFIDENCE_GATE_N users at the leaking step,
+          AnomalyCallout swaps to "widen the window" copy instead of citing
+          a misleading drop percentage (funnel-analysis Step 3 discipline). */}
       {leakInsight && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <AnomalyCallout
-            severity={severityForDrop(leakInsight.biggest.dropPct)}
+            severity={leakInsight.insufficient ? 'info' : severityForDrop(leakInsight.biggest.dropPct)}
             message={leakInsight.biggestMessage}
-            actionLabel="Investigate"
-            actionHref={`/admin/data-hub?view=users&q=${encodeURIComponent(leakInsight.biggest.fromName)}`}
+            actionLabel={leakInsight.insufficient ? undefined : 'Investigate'}
+            actionHref={
+              leakInsight.insufficient
+                ? undefined
+                : `/admin/data-hub?view=users&q=${encodeURIComponent(leakInsight.biggest.fromName)}`
+            }
           />
-          {leakInsight.smallest && leakInsight.smallest.dropPct > 5 && (
+          {!leakInsight.insufficient && leakInsight.smallest && leakInsight.smallest.dropPct > 5 && (
             <AnomalyCallout
               severity="info"
               message={`Smallest leak: ${leakInsight.smallest.fromName} → ${leakInsight.smallest.toName} (−${leakInsight.smallest.dropPct.toFixed(0)}% drop) — your healthiest stage.`}
@@ -225,12 +377,18 @@ export function FunnelsView() {
       }}>
         <ChartFrame
           title={FUNNEL_DISPLAY[activeFunnel].name}
-          subtitle={FUNNEL_DISPLAY[activeFunnel].description}
+          subtitle={`${FUNNEL_DISPLAY[activeFunnel].description} · Showing: ${WINDOW_PHRASE[activeWindow]}`}
           rightActions={
-            <FunnelSelector
-              active={activeFunnel}
-              onChange={(f) => { setActiveFunnel(f); setDrillStepId(null); }}
-            />
+            <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <FunnelWindowSelector
+                value={activeWindow}
+                onChange={(w) => setFilters({ fwindow: w })}
+              />
+              <FunnelSelector
+                active={activeFunnel}
+                onChange={(f) => { setActiveFunnel(f); setDrillStepId(null); }}
+              />
+            </div>
           }
           padding={24}
         >

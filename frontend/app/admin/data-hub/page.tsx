@@ -308,8 +308,11 @@ function MarketsPage({ data }: { data: HubData }) {
         {[
           { label: "Unique Holders", value: onchain?.uniqueHolders?.toLocaleString() || "—", icon: "🏦" },
           { label: "Total Holder Slots", value: onchain?.totalHolderSlots?.toLocaleString() || "—", icon: "🪙" },
-          { label: "Trading Volume", value: m ? fmtUSD(m.totalVolume) : "—", icon: "📊" },
-          { label: "Active Positions", value: m?.activeHolders?.toLocaleString() || "—", icon: "🔓" },
+          // Same lifetime SUM(position_size_usd) semantic as the Overview page
+          // card — the ef104ef commit disambiguated Overview but missed Markets.
+          // Mirror the (Lifetime) qualifier + holders-not-positions correction.
+          { label: "Trading Volume (Lifetime)", value: m ? fmtUSD(m.totalVolume) : "—", icon: "📊" },
+          { label: "Active Holders", value: m?.activeHolders?.toLocaleString() || "—", icon: "🔓" },
         ].map((k, i) => (
           <div key={i} style={{ ...S.card, padding: "20px" }}>
             <div style={{ fontSize: "22px", marginBottom: "8px" }}>{k.icon}</div>

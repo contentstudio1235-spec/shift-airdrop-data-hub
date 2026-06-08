@@ -74,6 +74,66 @@ describe('useFilters preserves foreign params on URL writes', () => {
   });
 });
 
+describe('useFilters round-trips funnel time-window (fwindow)', () => {
+  // MR !29: fwindow is the F1 funnel time-window selector value. It must:
+  // (a) parse from URL on mount, (b) serialize back to URL when written, and
+  // (c) survive view switches by joining the foreign-params allowlist when
+  // OTHER views write their own filter state (verified separately by the
+  // FOREIGN_PARAMS tests above — fwindow is owned by useFilters itself).
+  it('parses fwindow=7d from URL and re-emits it on writeback', async () => {
+    currentSearch = 'view=funnels&fwindow=7d';
+    const { result } = renderHook(() => useFilters());
+    await waitFor(() => {
+      expect(result.current[0].fwindow).toBe('7d');
+    });
+    // Trigger a different filter change; fwindow should still be in URL.
+    act(() => {
+      result.current[1]({ source: 'twitter' });
+    });
+    await waitFor(() => {
+      expect(replaceSpy).toHaveBeenCalled();
+    });
+    const lastUrl = replaceSpy.mock.calls.at(-1)?.[0] as string;
+    expect(lastUrl).toContain('fwindow=7d');
+    expect(lastUrl).toContain('source=twitter');
+  });
+
+  it('writes fwindow to URL when set via update()', async () => {
+    const url = await mountAndChangeFilter('view=funnels');
+    expect(url).not.toBeNull();
+    // Initial: no fwindow in either source or output.
+    expect(url!).not.toContain('fwindow');
+
+    // Now set fwindow explicitly via a second update.
+    const { result } = renderHook(() => useFilters());
+    act(() => {
+      result.current[1]({ fwindow: '30d' });
+    });
+    await waitFor(() => {
+      const calls = replaceSpy.mock.calls;
+      const lastCall = calls.at(-1)?.[0] as string;
+      expect(lastCall).toContain('fwindow=30d');
+    });
+  });
+
+  it('ignores invalid fwindow values from URL', async () => {
+    currentSearch = 'view=funnels&fwindow=garbage';
+    const { result } = renderHook(() => useFilters());
+    await waitFor(() => {
+      // hydration completes; fwindow rejected
+      expect(result.current[0].fwindow).toBeUndefined();
+    });
+  });
+
+  it('accepts fwindow=all as a valid value', async () => {
+    currentSearch = 'view=funnels&fwindow=all';
+    const { result } = renderHook(() => useFilters());
+    await waitFor(() => {
+      expect(result.current[0].fwindow).toBe('all');
+    });
+  });
+});
+
 describe('useFilters does NOT inject phantom walletSize params on URL writeback', () => {
   // Regression pin for MR !28 Fix 1. The previous paramsToFilters used
   // `Number(p.get('walletSizeMin'))` which coerces null → 0, so a URL without
