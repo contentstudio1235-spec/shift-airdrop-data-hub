@@ -91,3 +91,44 @@ export interface PulseSnapshot {
   whaleActivity24h: WhaleActivityEvent[];
   anomalies: PulseAnomaly[];
 }
+
+// ─── HARVEST-001 (MR !30): Launch This Week card ─────────────────────────────
+
+/**
+ * Per-channel performance row for the "Launch This Week" Pulse card.
+ * Mirrors `LaunchThisWeekChannel` in
+ * src/services/launchThisWeekService.ts on the backend — keep in sync.
+ */
+export interface LaunchThisWeekChannel {
+  source: string;
+  medium: string | null;
+  campaignCount: number;
+  signups: number;
+  stitched: number;
+  holders: number;
+  spendUSD: number | null;
+  cac: number | null;
+  htftMedianHours: number | null;
+  coveragePct: number;
+  gatePass: boolean;
+  gateReason?: string;
+}
+
+/**
+ * Full payload for GET /api/pulse/launch-this-week.
+ * `rankedChannels` = channels that cleared the confidence gate (paid ≥50
+ * stitched signups, KOL ≥20 holders, organic ≥30), sorted by CAC ascending.
+ * `gatheringSignal` = sub-threshold channels surfaced separately so the
+ * operator knows they're being watched.
+ * `coverageOverall` = % of this week's signups that have any attribution.
+ */
+export interface LaunchThisWeekSnapshot {
+  computedAt: string;
+  windowDays: number;
+  weekStart: string;
+  activeCampaignCount: number;
+  rankedChannels: LaunchThisWeekChannel[];
+  gatheringSignal: LaunchThisWeekChannel[];
+  coverageOverall: number;
+  campaignsMissingSpend: number;
+}

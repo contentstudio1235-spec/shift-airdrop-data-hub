@@ -16,6 +16,7 @@ import { KPICard } from './KPICard';
 import { AumSparkline } from './AumSparkline';
 import { SignupsBar } from './SignupsBar';
 import { WhaleFeed } from './WhaleFeed';
+import { LaunchThisWeekCard } from './LaunchThisWeekCard';
 import { usePulseSnapshot } from '@/hooks/usePulseSnapshot';
 import type { PulseAnomaly } from '@/types/pulse';
 import { HUB_METRIC_IDS, HUB_TABS } from '@/lib/hubMetricIds';
@@ -166,6 +167,13 @@ export function PulseView() {
           asOf={asOf}
         />
       </div>
+
+      {/* HARVEST-001 (MR !30): "Launch this week" per-channel marketing card.
+          Placed between hero KPIs and AUM sparkline per UX Researcher synthesis —
+          M1's 9am eye-path: hero (orient) → launch card (act) → sparkline (context).
+          The card self-renders nothing when there are no active campaigns this
+          week, so non-launch operators see no visual gap. */}
+      <LaunchThisWeekCard />
 
       {/* Two-column: AUM sparkline + signups bar chart */}
       <div style={twoColStyle}>
