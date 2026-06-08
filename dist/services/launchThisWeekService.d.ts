@@ -26,5 +26,14 @@ export interface LaunchThisWeekSnapshot {
 }
 /** Test helper — clears module-level cache. */
 export declare function _clearLaunchThisWeekCache(): void;
+/**
+ * Exported (with leading `_`) for unit tests. The leading underscore signals
+ * "internal — not part of the public service contract." Production code in
+ * this file is the only intended caller of the non-underscore version.
+ */
+export declare function _passesConfidenceGate(row: Pick<LaunchThisWeekChannel, 'medium' | 'signups' | 'holders'>): {
+    pass: boolean;
+    reason?: string;
+};
 export declare function getLaunchThisWeekSnapshot(): Promise<LaunchThisWeekSnapshot>;
 //# sourceMappingURL=launchThisWeekService.d.ts.map

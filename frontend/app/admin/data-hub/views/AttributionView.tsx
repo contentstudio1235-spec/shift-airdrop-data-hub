@@ -9,9 +9,11 @@ import {
   TrendUp,
   Medal,
   LinkSimple,
+  X as XIcon,
 } from '@phosphor-icons/react';
 import { TOKENS, MOTION } from '@/lib/chartTokens';
 import { fmtUSD, fmtWallet } from '@/lib/format';
+import { useFilters } from '@/hooks/useFilters';
 import {
   useAttributionOverview,
   type ChannelROIRow,
@@ -94,6 +96,22 @@ export function AttributionView() {
   const kol = useKOLLeaderboard({ limit: 50 });
   const whaleStream = useWhaleStream({ bufferSize: 30 });
 
+  // MR !31 V2 (Code Reviewer nit #3): read ?source= from URL so HARVEST-001's
+  // "Launch this week" Pulse card drill-down actually filters when the
+  // operator clicks a channel row. ChannelsCard renders the matching subset
+  // only; the rest of the view (Sankey, KOL, WhaleWatch) still shows full
+  // data — drill is a focus aid, not a hard scope reset.
+  const [filters, setFilters] = useFilters();
+  const sourceFilter = filters.source && filters.source.length > 0 ? filters.source : null;
+
+  const filteredChannels = React.useMemo(() => {
+    if (!data?.channels) return data?.channels;
+    if (!sourceFilter) return data.channels;
+    return data.channels.filter(c => c.source.toLowerCase() === sourceFilter.toLowerCase());
+  }, [data?.channels, sourceFilter]);
+
+  const clearSourceFilter = () => setFilters({ source: undefined });
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <TabHeader
@@ -103,6 +121,10 @@ export function AttributionView() {
         onRefresh={refetch}
         loading={loading}
       />
+
+      {sourceFilter && (
+        <SourceFilterPill source={sourceFilter} onClear={clearSourceFilter} />
+      )}
 
       {error ? (
         <ErrorPanel message={error} onRetry={refetch} />
@@ -120,7 +142,7 @@ export function AttributionView() {
               gap: 16,
             }}
           >
-            <ChannelsCard rows={data.channels} />
+            <ChannelsCard rows={filteredChannels ?? data.channels} />
             <CampaignsCard rows={data.campaigns} />
             <CoverageCard coverage={data.coverage} computedAt={data.computedAt} />
           </div>
@@ -153,6 +175,57 @@ export function AttributionView() {
           error={whaleStream.error}
         />
       </div>
+    </div>
+  );
+}
+
+// ─── Source Filter Pill (MR !31) ──────────────────────────────────────────────
+// Renders when ?source= is present in the URL. Lets the operator clear the
+// drill-down filter from HARVEST-001's "Launch this week" Pulse card without
+// leaving the view.
+
+interface SourceFilterPillProps {
+  source: string;
+  onClear: () => void;
+}
+
+function SourceFilterPill({ source, onClear }: SourceFilterPillProps) {
+  return (
+    <div
+      role="status"
+      style={{
+        display: 'inline-flex',
+        alignSelf: 'flex-start',
+        alignItems: 'center',
+        gap: 8,
+        padding: '6px 10px',
+        background: 'rgba(0,200,150,0.12)',
+        border: '1px solid rgba(0,200,150,0.3)',
+        borderRadius: 6,
+        fontSize: 12,
+        color: TOKENS.accent,
+        fontWeight: 600,
+      }}
+    >
+      <span>Filtered by source: {formatSource(source)}</span>
+      <button
+        type="button"
+        aria-label="Clear source filter"
+        onClick={onClear}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
+          margin: 0,
+          color: TOKENS.accent,
+          cursor: 'pointer',
+        }}
+      >
+        <XIcon size={12} weight="fill" color={TOKENS.accent} aria-hidden="true" />
+      </button>
     </div>
   );
 }
