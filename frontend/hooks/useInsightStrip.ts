@@ -20,9 +20,13 @@ export function useInsightStrip(filters: Filters): RenderedInsight[] {
         const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString().slice(0, 10);
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
 
-        const [acq, channelRoi, referral] = await Promise.allSettled([
+        // MR !33: removed the channel-roi fetch — it was dead code (the
+        // result was never read, only the WoW comparison comment was left).
+        // Removing also closes the misframed-volume blast radius: the call
+        // was using `from` for both user cohort + position window, same bug
+        // HeroVolume7d had.
+        const [acq, referral] = await Promise.allSettled([
           apiGet<any>('/api/funnels/acquisition', { query: { ...filters, from: sevenDaysAgo } }),
-          apiGet<any>('/api/attribution/channel-roi', { query: { ...filters, from: sevenDaysAgo } }),
           apiGet<any>('/api/funnels/referral', { query: { ...filters, from: thirtyDaysAgo } }),
         ]);
 
@@ -41,8 +45,6 @@ export function useInsightStrip(filters: Filters): RenderedInsight[] {
             ctx.medianHoursToTrade = acqRes.medianTimeToFirstTrade / 3600;
           }
         }
-
-        // channelRoi WoW comparison deferred to Sprint 2 (needs historical join)
 
         if (referral.status === 'fulfilled' && referral.value.steps) {
           const stepBy = (id: string) => referral.value.steps.find((s: any) => s.id === id);

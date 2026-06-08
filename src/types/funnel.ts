@@ -22,13 +22,23 @@ export type SourceDim =
 export type CohortDim = 'day' | 'week' | 'month';
 
 export interface FunnelQueryParams {
-  from?: string;        // ISO date
-  to?: string;          // ISO date
+  from?: string;        // ISO date — applies to user-cohort window (users.created_at)
+  to?: string;          // ISO date — applies to user-cohort window
   source?: string;      // e.g. 'twitter', 'discord'
   asset?: string;       // e.g. 'TSL2L'
   cohort?: CohortDim;
   walletSizeMin?: number;
   walletSizeMax?: number;
+  // MR !33 fix (HeroVolume7d "$1.2K" bug): decouple position-time window from
+  // user-cohort window. computeChannelROI previously applied `from` to BOTH
+  // users.created_at AND positions.opened_at, undercounting volume by orders
+  // of magnitude (a 7d slice showed only 7d-new-user 7d trading, not 7d
+  // total trading). When `volumeFrom`/`volumeTo` are present they scope the
+  // positions filter; `from`/`to` remain the user cohort window. When only
+  // volumeFrom is provided (without from), users are unfiltered — semantic:
+  // "all users' trading in last N days, broken down by their source."
+  volumeFrom?: string;  // ISO date — applies to positions.opened_at window
+  volumeTo?: string;    // ISO date — applies to positions.opened_at window
 }
 
 export interface FunnelStepResult {
