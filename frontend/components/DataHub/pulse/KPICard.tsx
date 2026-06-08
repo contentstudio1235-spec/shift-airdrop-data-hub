@@ -43,6 +43,19 @@ export interface KPICardProps {
   metricId?: string;
   /** Freshness timestamp shown in the flag dialog. */
   asOf?: string | null;
+  /**
+   * HARVEST-016 (MR !32): explicit threshold-classified severity. When set,
+   * overrides the default delta-sign-derived coloring AND tints the card
+   * border to match. Used by the recalibrated Pulse hero where threshold
+   * logic is more nuanced than "positive = good" (e.g. Open Whales: more
+   * isn't strictly better; Δ ≥ −2 + below 7d-avg×0.5 is red).
+   *   - 'green' → border accent + chip TOKENS.threshold.green
+   *   - 'yellow' → border + chip TOKENS.threshold.yellow
+   *   - 'red' → border + chip TOKENS.threshold.red
+   *   - null → noise floor; render neutral (no color override)
+   *   - undefined → default behavior preserved (positiveIsGood logic)
+   */
+  severity?: 'green' | 'yellow' | 'red' | null;
 }
 
 const defaultFormatValue = (n: number) => n.toLocaleString();
@@ -93,6 +106,7 @@ export function KPICard({
   tab,
   metricId,
   asOf,
+  severity,
 }: KPICardProps) {
   const [hover, setHover] = useState(false);
 
@@ -115,7 +129,22 @@ export function KPICard({
     }
   }
 
+  // HARVEST-016 (MR !32): explicit severity override beats delta-sign logic.
+  // When the caller has done its own threshold classification, trust it.
+  if (severity === 'green') deltaColor = TOKENS.threshold.green;
+  else if (severity === 'yellow') deltaColor = TOKENS.threshold.yellow;
+  else if (severity === 'red') deltaColor = TOKENS.threshold.red;
+  // severity === null intentionally falls through to whatever positiveIsGood
+  // produced (neutral noise-floor state).
+
   const flagEnabled = !!(tab && metricId);
+
+  // HARVEST-016 (MR !32): when severity is explicit, tint border to match.
+  // Hover state still overrides because hover is a user signal, not a metric
+  // signal. Falls back to existing accentBorder when severity is undefined.
+  let borderColor: string = hover ? TOKENS.accent : TOKENS.accentBorder;
+  if (!hover && severity === 'red') borderColor = `rgba(255,82,82,0.55)`;
+  else if (!hover && severity === 'yellow') borderColor = `rgba(255,193,7,0.4)`;
 
   const containerStyle: React.CSSProperties = {
     height: 120,
@@ -123,7 +152,7 @@ export function KPICard({
     boxSizing: 'border-box',
     padding: '14px 16px',
     background: TOKENS.panel,
-    border: `1px solid ${hover ? TOKENS.accent : TOKENS.accentBorder}`,
+    border: `1px solid ${borderColor}`,
     borderRadius: 12,
     backdropFilter: `blur(${TOKENS.glassBlur})`,
     WebkitBackdropFilter: `blur(${TOKENS.glassBlur})`,
