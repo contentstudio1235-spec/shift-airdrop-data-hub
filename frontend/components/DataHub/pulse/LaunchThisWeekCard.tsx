@@ -1,10 +1,11 @@
 "use client";
 
 import React from 'react';
-import { Rocket, Warning } from '@phosphor-icons/react';
+import { Rocket, Warning, CaretDown, CaretUp } from '@phosphor-icons/react';
 import { TOKENS } from '@/lib/chartTokens';
 import { fmtUSD } from '@/lib/format';
 import { Card } from '../primitives/Card';
+import { CoverageGapPanel } from './CoverageGapPanel';
 import { useLaunchThisWeek } from '@/hooks/useLaunchThisWeek';
 import type { LaunchThisWeekChannel } from '@/types/pulse';
 
@@ -37,6 +38,10 @@ const COVERAGE_LOW_THRESHOLD = 50; // % — below this CAC renders muted
 
 export function LaunchThisWeekCard() {
   const { data, loading, error } = useLaunchThisWeek();
+  // HARVEST-002 (MR !34): coverage-gap panel toggle. Local state so the
+  // operator can drill into "why is X% unattributed?" without leaving Pulse.
+  // Default closed — the panel is opt-in to keep Pulse glanceable.
+  const [coverageGapOpen, setCoverageGapOpen] = React.useState(false);
 
   // Don't render at all on first paint before the first response — the rest
   // of Pulse already has a skeleton overlay, this stays out of the way.
@@ -95,14 +100,38 @@ export function LaunchThisWeekCard() {
                 </a>
               )}
               {coverageOverall < 60 && (
-                <a
-                  href="/admin/data-hub?view=attribution"
-                  style={{ ...footerLinkStyle, color: TOKENS.threshold.yellow }}
+                // HARVEST-002 (MR !34): chip is now a toggle, not a nav link.
+                // Click expands inline CoverageGapPanel underneath — keeps
+                // operator in Pulse's daily-scan flow.
+                <button
+                  type="button"
+                  aria-expanded={coverageGapOpen}
+                  aria-controls="coverage-gap-panel"
+                  onClick={() => setCoverageGapOpen(o => !o)}
+                  style={{
+                    ...footerLinkStyle,
+                    color: TOKENS.threshold.yellow,
+                    background: 'transparent',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
                 >
                   <Warning size={12} weight="fill" color={TOKENS.threshold.yellow} aria-hidden="true" />
                   {' '}{(100 - coverageOverall).toFixed(0)}% of new signups unattributed
-                </a>
+                  {coverageGapOpen
+                    ? <CaretUp size={11} weight="fill" color={TOKENS.threshold.yellow} aria-hidden="true" />
+                    : <CaretDown size={11} weight="fill" color={TOKENS.threshold.yellow} aria-hidden="true" />
+                  }
+                </button>
               )}
+            </div>
+          )}
+
+          {coverageOverall < 60 && coverageGapOpen && (
+            <div id="coverage-gap-panel">
+              <CoverageGapPanel />
             </div>
           )}
         </>
