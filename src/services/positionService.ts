@@ -5,6 +5,7 @@
 import { query, queryOne, execute } from '../db/pool';
 import { Position, User } from '../types';
 import { extractSwapPriceFromTx, batchExtractSwapPrices } from './heliusTransactionService';
+import { positionPriceService } from './positionPriceService';
 
 export class PositionService {
   /**
@@ -61,6 +62,19 @@ export class PositionService {
     );
 
     console.log(`[Position] Opened: ${wallet.slice(0, 8)}... | ${asset} | $${positionSizeUSD.toFixed(2)}`);
+
+    // Record live entry price immediately (non-blocking)
+    if (assetMint && tokenAmount) {
+      const newPos = await queryOne<{ id: string }>(
+        `SELECT id FROM positions WHERE tx_signature_open = $1`, [txSignature]
+      );
+      if (newPos) {
+        positionPriceService.recordEntryPrice(newPos.id, assetMint, tokenAmount).catch(err =>
+          console.error('[Position] Entry price record failed:', err)
+        );
+      }
+    }
+
     return true;
   }
 
@@ -93,10 +107,18 @@ export class PositionService {
       return null;
     }
 
+    // Record live close price (non-blocking) before zeroing position_size_usd
+    if (position.asset_mint && position.token_amount) {
+      positionPriceService.recordClosePrice(position.id, position.asset_mint, Number(position.token_amount)).catch(err =>
+        console.error('[Position] Close price record failed:', err)
+      );
+    }
+
     // Close it
     await execute(
       `UPDATE positions
-       SET closed_at = $1, status = 'closed', tx_signature_close = $2
+       SET closed_at = $1, status = 'closed', tx_signature_close = $2,
+           position_size_usd = 0
        WHERE id = $3`,
       [timestamp, txSignature, position.id]
     );
