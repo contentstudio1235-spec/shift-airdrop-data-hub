@@ -432,16 +432,18 @@ class BadgeService {
         return null;
     }
     /**
-     * Badge: The OG — active trader in the first 30 days of SHIFT launch (May 19 - Jun 18, 2026).
+     * Badge: The OG — active trader in the first 30 days of SHIFT launch.
+     * Launch date: May 26 2026. Window closes: June 25 2026.
+     * Pre-launch wallets (before May 26) also qualify — they're even more OG.
      */
     async checkTheOG(wallet) {
         if (await this.hasBadge(wallet, 'the_og'))
             return null;
-        const launchStart = new Date('2026-05-19');
-        const launchEnd = new Date('2026-06-18');
+        const ogWindowClose = new Date('2026-06-25T23:59:59Z');
+        // After window closes, only users who joined during the window qualify
         const position = await (0, pool_1.queryOne)(`SELECT id FROM positions
        WHERE wallet = $1 AND status != 'filtered'
-         AND opened_at >= $2 AND opened_at <= $3 LIMIT 1`, [wallet, launchStart, launchEnd]);
+         AND opened_at <= $2 LIMIT 1`, [wallet, ogWindowClose]);
         if (position) {
             await this.awardBadge(wallet, 'the_og');
             return { badge_name: 'the_og', wallet };
@@ -469,14 +471,30 @@ class BadgeService {
         const badge = await (0, pool_1.queryOne)('SELECT id FROM badges WHERE wallet = $1 AND badge_name = $2', [wallet, badgeName]);
         return !!badge;
     }
+    // XP granted per badge rarity tier (flat bonus on earn)
+    static BADGE_XP = {
+        common: 100,
+        rare: 150,
+        epic: 200,
+        legend: 300,
+    };
     /**
-     * Award a badge to a wallet + queue immediate real-time SNAG sync.
+     * Award a badge to a wallet, grant rarity-based XP, and queue SNAG sync.
      */
     async awardBadge(wallet, badgeName) {
         // Ensure user exists first (required for FK constraint in badges table)
         await positionService_1.positionService.ensureUserExists(wallet);
-        await (0, pool_1.execute)(`INSERT INTO badges (wallet, badge_name) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [wallet, badgeName]);
-        console.log(`[Badges] 🏆 Awarded "${badgeName}" to ${wallet.slice(0, 8)}...`);
+        const inserted = await (0, pool_1.execute)(`INSERT INTO badges (wallet, badge_name) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [wallet, badgeName]);
+        // Only award XP if this was genuinely a new badge (not a duplicate)
+        if (inserted?.rowCount > 0) {
+            // Look up rarity for this badge
+            const def = await (0, pool_1.queryOne)(`SELECT rarity FROM badge_definitions WHERE badge_name = $1`, [badgeName]);
+            const rarity = def?.rarity ?? 'common';
+            const xpGrant = BadgeService.BADGE_XP[rarity] ?? 100;
+            // Credit XP to the user
+            await (0, pool_1.execute)(`UPDATE users SET total_xp = total_xp + $1, updated_at = NOW() WHERE wallet = $2`, [xpGrant, wallet]);
+            console.log(`[Badges] 🏆 Awarded "${badgeName}" (${rarity}) to ${wallet.slice(0, 8)}... +${xpGrant} XP`);
+        }
         // Queue immediate sync to SNAG (badges are not debounced — sync immediately)
         await realtimeSnagSyncService_1.realtimeSnagSyncService.queueBadgeSync(wallet, badgeName);
     }
