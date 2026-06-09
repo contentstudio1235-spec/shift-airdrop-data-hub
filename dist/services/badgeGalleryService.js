@@ -12,17 +12,23 @@ class BadgeGalleryService {
      */
     async getAllBadges() {
         try {
-            const result = await pool_1.pool.query(`SELECT badge_name, display_name, description, icon, rarity, unlock_requirement
+            const result = await pool_1.pool.query(`SELECT
+           badge_name,
+           COALESCE(display_name, badge_name)       AS display_name,
+           COALESCE(description, '')                AS description,
+           COALESCE(icon, icon_url, '🏅')           AS icon,
+           COALESCE(rarity, 'common')               AS rarity,
+           COALESCE(unlock_requirement, '')         AS unlock_requirement
          FROM badge_definitions
          WHERE is_active = true
          ORDER BY
-           CASE rarity
+           CASE COALESCE(rarity,'common')
              WHEN 'legend' THEN 1
-             WHEN 'epic' THEN 2
-             WHEN 'rare' THEN 3
+             WHEN 'epic'   THEN 2
+             WHEN 'rare'   THEN 3
              ELSE 4
            END,
-           display_name`);
+           display_name NULLS LAST`);
             return result.rows.map(row => ({
                 badgeName: row.badge_name,
                 displayName: row.display_name,
@@ -44,25 +50,28 @@ class BadgeGalleryService {
         try {
             const result = await pool_1.pool.query(`SELECT
            bd.badge_name,
-           bd.display_name,
-           bd.description,
-           bd.icon,
-           bd.rarity,
-           bd.unlock_requirement,
-           b.earned_at IS NOT NULL as earned,
+           COALESCE(bd.display_name, bd.badge_name)  AS display_name,
+           COALESCE(bd.description, '')               AS description,
+           COALESCE(bd.icon, bd.icon_url, '🏅')       AS icon,
+           COALESCE(bd.rarity, 'common')              AS rarity,
+           COALESCE(bd.unlock_requirement, '')        AS unlock_requirement,
+           (b.earned_at IS NOT NULL)                  AS earned,
            b.earned_at
          FROM badge_definitions bd
-         LEFT JOIN badges b ON bd.badge_name = b.badge_name AND b.wallet = $1
+         LEFT JOIN badges b
+           ON bd.badge_name = b.badge_name
+          AND b.wallet = $1
+          AND b.status  = 'active'
          WHERE bd.is_active = true
          ORDER BY
            b.earned_at DESC NULLS LAST,
-           CASE bd.rarity
+           CASE COALESCE(bd.rarity,'common')
              WHEN 'legend' THEN 1
-             WHEN 'epic' THEN 2
-             WHEN 'rare' THEN 3
+             WHEN 'epic'   THEN 2
+             WHEN 'rare'   THEN 3
              ELSE 4
            END,
-           bd.display_name`, [wallet]);
+           bd.display_name NULLS LAST`, [wallet]);
             return result.rows.map(row => ({
                 badgeName: row.badge_name,
                 displayName: row.display_name,
@@ -70,7 +79,7 @@ class BadgeGalleryService {
                 icon: row.icon,
                 rarity: row.rarity,
                 unlockRequirement: row.unlock_requirement,
-                earned: row.earned,
+                earned: row.earned === true,
                 earnedAt: row.earned_at ? new Date(row.earned_at) : null,
             }));
         }
@@ -99,15 +108,18 @@ class BadgeGalleryService {
         try {
             const result = await pool_1.pool.query(`SELECT
            bd.badge_name,
-           bd.display_name,
-           bd.description,
-           bd.icon,
-           bd.rarity,
-           bd.unlock_requirement,
-           b.earned_at IS NOT NULL as earned,
+           COALESCE(bd.display_name, bd.badge_name)  AS display_name,
+           COALESCE(bd.description, '')               AS description,
+           COALESCE(bd.icon, bd.icon_url, '🏅')       AS icon,
+           COALESCE(bd.rarity, 'common')              AS rarity,
+           COALESCE(bd.unlock_requirement, '')        AS unlock_requirement,
+           (b.earned_at IS NOT NULL)                  AS earned,
            b.earned_at
          FROM badge_definitions bd
-         LEFT JOIN badges b ON bd.badge_name = b.badge_name AND b.wallet = $1
+         LEFT JOIN badges b
+           ON bd.badge_name = b.badge_name
+          AND b.wallet = $1
+          AND b.status  = 'active'
          WHERE bd.is_active = true AND bd.rarity = $2
          ORDER BY b.earned_at DESC NULLS LAST`, [wallet, rarity]);
             return result.rows.map(row => ({
@@ -117,7 +129,7 @@ class BadgeGalleryService {
                 icon: row.icon,
                 rarity: row.rarity,
                 unlockRequirement: row.unlock_requirement,
-                earned: row.earned,
+                earned: row.earned === true,
                 earnedAt: row.earned_at ? new Date(row.earned_at) : null,
             }));
         }
