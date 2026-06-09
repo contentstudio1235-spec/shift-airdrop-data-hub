@@ -4,18 +4,34 @@ import {
   ChartBar,
   Megaphone,
   Gauge,
-  ArrowClockwise,
   Warning,
   CircleNotch,
+  TrendUp,
+  Medal,
+  LinkSimple,
+  X as XIcon,
 } from '@phosphor-icons/react';
 import { TOKENS, MOTION } from '@/lib/chartTokens';
-import { fmtUSD } from '@/lib/format';
+import { fmtUSD, fmtWallet } from '@/lib/format';
+import { useFilters } from '@/hooks/useFilters';
 import {
   useAttributionOverview,
   type ChannelROIRow,
   type TopCampaignRow,
   type AttributionCoverage,
+  type AttributionOverview,
 } from '@/hooks/useAttributionOverview';
+import { useWhaleOrigins } from '@/hooks/useWhaleOrigins';
+import {
+  useKOLLeaderboard,
+  type KOLEntry,
+  type KOLPayload,
+} from '@/hooks/useKOLLeaderboard';
+import { useWhaleStream } from '@/hooks/useWhaleStream';
+import { WhaleSankey } from '@/components/DataHub/attribution/WhaleSankey';
+import { KOLLeaderboard } from '@/components/DataHub/attribution/KOLLeaderboard';
+import { WhaleWatch } from '@/components/DataHub/attribution/WhaleWatch';
+import { TabHeader } from '@/components/DataHub/shared/TabHeader';
 
 const cardStyle: React.CSSProperties = {
   background: TOKENS.panel,
@@ -57,96 +73,380 @@ function formatSource(source: string): string {
   return SOURCE_LABEL[source] ?? source;
 }
 
+// The backend's residual "no attribution signal" bucket can surface under a
+// handful of labels depending on the data path. When this bucket wins the
+// Best ROI race we must warn operators it's NOT a real channel — otherwise
+// the card actively misleads M1 (HARVEST-005).
+const UNATTRIBUTED_SOURCE_LABELS = new Set([
+  'Direct',
+  'direct',
+  'DIRECT',
+  '',
+  '(direct)',
+  '(none)',
+]);
+
+function isUnattributedSource(source: string): boolean {
+  return UNATTRIBUTED_SOURCE_LABELS.has(source);
+}
+
 export function AttributionView() {
   const { data, loading, error, refetch } = useAttributionOverview();
+  const whaleOrigins = useWhaleOrigins();
+  const kol = useKOLLeaderboard({ limit: 50 });
+  const whaleStream = useWhaleStream({ bufferSize: 30 });
+
+  // MR !31 V2 (Code Reviewer nit #3): read ?source= from URL so HARVEST-001's
+  // "Launch this week" Pulse card drill-down actually filters when the
+  // operator clicks a channel row. ChannelsCard renders the matching subset
+  // only; the rest of the view (Sankey, KOL, WhaleWatch) still shows full
+  // data — drill is a focus aid, not a hard scope reset.
+  const [filters, setFilters] = useFilters();
+  const sourceFilter = filters.source && filters.source.length > 0 ? filters.source : null;
+
+  const filteredChannels = React.useMemo(() => {
+    if (!data?.channels) return data?.channels;
+    if (!sourceFilter) return data.channels;
+    return data.channels.filter(c => c.source.toLowerCase() === sourceFilter.toLowerCase());
+  }, [data?.channels, sourceFilter]);
+
+  const clearSourceFilter = () => setFilters({ source: undefined });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <Header data={data} loading={loading} onRefresh={refetch} />
+      <TabHeader
+        title="Source Attribution"
+        subtitle={data?.note ?? 'UTM-first attribution. Stitching activated Sprint 2.3.'}
+        lastUpdated={data ? new Date(data.computedAt) : null}
+        onRefresh={refetch}
+        loading={loading}
+      />
+
+      {sourceFilter && (
+        <SourceFilterPill source={sourceFilter} onClear={clearSourceFilter} />
+      )}
 
       {error ? (
         <ErrorPanel message={error} onRetry={refetch} />
       ) : loading && !data ? (
         <LoadingPanel />
       ) : !data ? null : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr)',
-            gap: 16,
-          }}
-        >
-          <ChannelsCard rows={data.channels} />
-          <CampaignsCard rows={data.campaigns} />
-          <CoverageCard coverage={data.coverage} computedAt={data.computedAt} />
-        </div>
+        <>
+          {/* Phase 3.3: Level-1 KPI cards above Whale Sankey */}
+          <SourceKPIRow overview={data} kol={kol.data} />
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr)',
+              gap: 16,
+            }}
+          >
+            <ChannelsCard rows={filteredChannels ?? data.channels} />
+            <CampaignsCard rows={data.campaigns} />
+            <CoverageCard coverage={data.coverage} computedAt={data.computedAt} />
+          </div>
+        </>
       )}
+
+      {/* Sprint 3 Row 2: Sankey */}
+      <WhaleSankey
+        data={whaleOrigins.data}
+        loading={whaleOrigins.loading}
+        error={whaleOrigins.error}
+      />
+
+      {/* Sprint 3 Row 3: KOL + WhaleWatch */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)',
+          gap: 16,
+        }}
+      >
+        <KOLLeaderboard
+          data={kol.data}
+          loading={kol.loading}
+          error={kol.error}
+        />
+        <WhaleWatch
+          events={whaleStream.events}
+          connected={whaleStream.connected}
+          error={whaleStream.error}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Source Filter Pill (MR !31) ──────────────────────────────────────────────
+// Renders when ?source= is present in the URL. Lets the operator clear the
+// drill-down filter from HARVEST-001's "Launch this week" Pulse card without
+// leaving the view.
+
+interface SourceFilterPillProps {
+  source: string;
+  onClear: () => void;
+}
+
+function SourceFilterPill({ source, onClear }: SourceFilterPillProps) {
+  return (
+    <div
+      role="status"
+      style={{
+        display: 'inline-flex',
+        alignSelf: 'flex-start',
+        alignItems: 'center',
+        gap: 8,
+        padding: '6px 10px',
+        background: 'rgba(0,200,150,0.12)',
+        border: '1px solid rgba(0,200,150,0.3)',
+        borderRadius: 6,
+        fontSize: 12,
+        color: TOKENS.accent,
+        fontWeight: 600,
+      }}
+    >
+      <span>Filtered by source: {formatSource(source)}</span>
+      <button
+        type="button"
+        aria-label="Clear source filter"
+        onClick={onClear}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
+          margin: 0,
+          color: TOKENS.accent,
+          cursor: 'pointer',
+        }}
+      >
+        <XIcon size={12} weight="fill" color={TOKENS.accent} aria-hidden="true" />
+      </button>
     </div>
   );
 }
 
 // ─── Header strip ─────────────────────────────────────────────────────────────
 
-function Header({
-  data,
-  loading,
-  onRefresh,
+// ─── Phase 3.3: Source Level-1 KPI cards ──────────────────────────────────────
+// Three "what's the answer?" cards rendered above the Whale Sankey:
+//   1) Best ROI source — highest holder/user conversion rate from channels[]
+//   2) Top KOL this week — best referrer in the leaderboard, filtered to the
+//      last 7 days when lastSeenAt allows it (falls back to highest score)
+//   3) Stitch coverage — overall % of profiles with any attribution signal
+//
+// Computed entirely client-side from existing hook payloads. No backend change.
+
+interface BestSource {
+  source: string;
+  users: number;
+  holders: number;
+  holderRatePct: number;
+}
+
+/**
+ * Find the channel with the highest holder/user ratio.
+ * Tie-breaker: highest users count.
+ * Returns null when no channel has any users.
+ */
+function pickBestROISource(channels: ChannelROIRow[]): BestSource | null {
+  let best: BestSource | null = null;
+  for (const row of channels) {
+    if (row.users <= 0) continue;
+    const ratio = row.holders / row.users;
+    if (
+      best === null ||
+      ratio > best.holderRatePct / 100 ||
+      (ratio === best.holderRatePct / 100 && row.users > best.users)
+    ) {
+      best = {
+        source: row.source,
+        users: row.users,
+        holders: row.holders,
+        holderRatePct: Math.round(ratio * 1000) / 10,
+      };
+    }
+  }
+  return best;
+}
+
+/**
+ * Pick the top KOL — prefer entries seen in the last 7 days, then highest score.
+ * Falls back to the highest-score entry overall when nothing is recent.
+ */
+function pickTopKOL(rows: KOLEntry[]): KOLEntry | null {
+  if (rows.length === 0) return null;
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const recent = rows.filter(r => {
+    const t = new Date(r.lastSeenAt).getTime();
+    return Number.isFinite(t) && t >= cutoff;
+  });
+  const pool = recent.length > 0 ? recent : rows;
+  return pool.reduce((best, r) => (best === null || r.score > best.score ? r : best), null as KOLEntry | null);
+}
+
+/**
+ * Truncate a referrer label — looks like a wallet (Base58 ≥ 32 chars, no
+ * spaces) → middle-truncate; otherwise show as-is.
+ */
+function formatReferrer(referrer: string): string {
+  if (!referrer) return '—';
+  if (referrer.length >= 32 && /^[A-Za-z0-9]+$/.test(referrer)) {
+    return fmtWallet(referrer);
+  }
+  return referrer;
+}
+
+export function SourceKPIRow({
+  overview,
+  kol,
 }: {
-  data: { computedAt: string; dataQuality: string; note?: string } | null;
-  loading: boolean;
-  onRefresh: () => void;
+  overview: AttributionOverview;
+  kol: KOLPayload | null;
 }) {
+  const best = pickBestROISource(overview.channels);
+  const topKOL = kol ? pickTopKOL(kol.rows) : null;
+  const coveragePct = overview.coverage.percentWithSignal;
+  const stitchedCount =
+    overview.coverage.withUtm + overview.coverage.withReferralOnly;
+
   return (
     <div
       style={{
-        background: TOKENS.panel,
-        backdropFilter: `blur(${TOKENS.glassBlur})`,
-        border: `1px solid ${TOKENS.accentBorder}`,
-        borderRadius: 12,
-        padding: '14px 20px',
-        display: 'flex',
-        alignItems: 'center',
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr 1fr',
         gap: 16,
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
       }}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: TOKENS.textPrimary, letterSpacing: '-0.02em' }}>
-          Source Attribution
-        </div>
-        <div style={{ fontSize: 11, color: TOKENS.textMuted, marginTop: 2 }}>
-          {data?.note ?? 'UTM-first attribution. Stitching activated Sprint 2.3.'}
-        </div>
+      <SourceKPI
+        icon={<TrendUp size={12} weight="bold" />}
+        label="Best ROI Source · 30d"
+        value={best ? formatSource(best.source) : '—'}
+        subtitle={
+          best
+            ? `${best.holders.toLocaleString()} holders / ${best.users.toLocaleString()} users (${best.holderRatePct.toFixed(1)}% conv)${isUnattributedSource(best.source) ? ' — unattributed' : ''}`
+            : 'No channel data yet'
+        }
+      />
+      <SourceKPI
+        icon={<Medal size={12} weight="bold" />}
+        label="Top KOL · 7d"
+        value={topKOL ? formatReferrer(topKOL.referrer) : '—'}
+        subtitle={
+          topKOL
+            ? `${topKOL.users.toLocaleString()} users · ${
+                topKOL.totalVolumeUSD > 0 ? fmtUSD(topKOL.totalVolumeUSD) : '$0'
+              } volume`
+            : 'No referrers yet'
+        }
+      />
+      <SourceKPI
+        icon={<LinkSimple size={12} weight="bold" />}
+        label="Attribution Signal"
+        value={`${coveragePct.toFixed(1)}%`}
+        subtitle={`${stitchedCount.toLocaleString()} stitched / ${overview.coverage.total.toLocaleString()} total`}
+        tooltip="% of profiles with any attribution signal (UTM tag or referral source)"
+      />
+    </div>
+  );
+}
+
+/**
+ * SourceKPI — local hero card variant for the Sources tab.
+ * Differs from Pulse's KPICard because the value can be a string (a source
+ * name, a wallet/referrer code, or a formatted percent) and the layout shows
+ * an explanatory subtitle below the value rather than a Δ-vs-24h chip.
+ *
+ * `tooltip` is an optional native HTML `title` applied to the card root —
+ * used to surface the precise formula behind a metric on hover (e.g. the
+ * "Attribution Signal" card explains it counts UTM + referral profiles).
+ */
+function SourceKPI({
+  icon,
+  label,
+  value,
+  subtitle,
+  tooltip,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  subtitle: string;
+  tooltip?: string;
+}) {
+  const [hover, setHover] = React.useState(false);
+
+  const containerStyle: React.CSSProperties = {
+    height: 120,
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '14px 16px',
+    background: TOKENS.panel,
+    border: `1px solid ${hover ? TOKENS.accent : TOKENS.accentBorder}`,
+    borderRadius: 12,
+    backdropFilter: `blur(${TOKENS.glassBlur})`,
+    WebkitBackdropFilter: `blur(${TOKENS.glassBlur})`,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    transition: `border-color ${MOTION.fast}`,
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
+    overflow: 'hidden',
+  };
+
+  const labelRowStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    fontSize: 10,
+    fontWeight: 700,
+    color: TOKENS.textFaint,
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase',
+  };
+
+  const valueStyle: React.CSSProperties = {
+    fontSize: 24,
+    fontWeight: 800,
+    color: TOKENS.textPrimary,
+    lineHeight: 1.0,
+    letterSpacing: '-0.02em',
+    fontVariantNumeric: 'tabular-nums',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  };
+
+  const subtitleStyle: React.CSSProperties = {
+    fontSize: 11,
+    fontWeight: 600,
+    color: TOKENS.textMuted,
+    fontVariantNumeric: 'tabular-nums',
+    lineHeight: 1.3,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  };
+
+  return (
+    <div
+      style={containerStyle}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={tooltip}
+    >
+      <div style={labelRowStyle}>
+        <span aria-hidden style={{ display: 'inline-flex' }}>{icon}</span>
+        <span>{label}</span>
       </div>
-      {data && (
-        <div style={{ fontSize: 11, color: TOKENS.textFaint, fontVariantNumeric: 'tabular-nums' }}>
-          updated {new Date(data.computedAt).toLocaleTimeString()}
-        </div>
-      )}
-      <button
-        onClick={onRefresh}
-        disabled={loading}
-        aria-label="Refresh"
-        style={{
-          background: 'transparent',
-          border: `1px solid ${TOKENS.accentBorder}`,
-          borderRadius: 8,
-          color: TOKENS.accent,
-          padding: '6px 10px',
-          cursor: loading ? 'not-allowed' : 'pointer',
-          opacity: loading ? 0.5 : 1,
-          fontFamily: 'inherit',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          fontSize: 11,
-          fontWeight: 700,
-          transition: `all ${MOTION.fast}`,
-        }}
-      >
-        <ArrowClockwise size={12} weight="bold" />
-        Refresh
-      </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={valueStyle} title={tooltip ? undefined : value}>{value}</div>
+        <div style={subtitleStyle} title={tooltip ? undefined : subtitle}>{subtitle}</div>
+      </div>
     </div>
   );
 }

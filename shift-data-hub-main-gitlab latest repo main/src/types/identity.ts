@@ -68,14 +68,22 @@ export interface ProfileWithLinks extends Profile {
   lifetimeStats?: LifetimeStats;
 }
 
+export type SortKey = 'last_seen' | 'volume' | 'holdings' | 'holdings_value' | 'x' | 'discord' | 'referral_source';
+export type SortDir = 'asc' | 'desc';
+
 export interface ProfileSummary {
   profileId: string;
   primaryWallet: string;
   displayName: string | null;
+  firstSeenAt: string;                // ISO timestamp from user_profiles.first_seen_at
   lastSeenAt: string;
   firstUtmSource: string | null;
   stitchedPct: number;                // 0-100 — derived from links count vs ideal-coverage
   lifetimeVolumeUSD: number;          // pre-aggregated for list display
+  holdingsValueUSD: number;           // sum of position_size_usd where status='open' — current capital at risk
+  holdings: number;                   // count of open positions
+  hasX: boolean;                      // has linked x_handle identity
+  hasDiscord: boolean;                // has linked discord_id identity
 }
 
 export interface ProfileFilters {
@@ -86,6 +94,15 @@ export interface ProfileFilters {
   walletSizeMin?: number;             // USD
   activitySince?: string;             // ISO date — last_seen_at >= this
   q?: string;                         // free-text: wallet prefix, display_name, identity_value
+  hasSocial?: 'x' | 'discord' | 'both' | 'none'; // social connection filter
+  sortBy?: SortKey;
+  sortDir?: SortDir;
+  // KOL drill-down contract: an unambiguous pair that selects which column the
+  // referrer string matches against. `referrerType='snag'` filters on
+  // users.referred_by_code via EXISTS; `referrerType='utm'` filters on
+  // user_profiles.first_utm_source. Both must be supplied together.
+  referrer?: string;
+  referrerType?: 'snag' | 'utm';
 }
 
 export interface RecordEventInput {

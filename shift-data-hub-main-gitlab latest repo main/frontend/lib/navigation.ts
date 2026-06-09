@@ -8,11 +8,11 @@ import { useCallback } from 'react';
  */
 export function linkToProfile(profileId: string | null | undefined): string | null {
   if (!profileId) return null;
-  return `/admin/data-hub?tab=users&profileId=${encodeURIComponent(profileId)}`;
+  return `/admin/data-hub?view=users&profileId=${encodeURIComponent(profileId)}`;
 }
 
 export function linkToProfileByWallet(wallet: string): string {
-  return `/admin/data-hub?tab=users&wallet=${encodeURIComponent(wallet)}`;
+  return `/admin/data-hub?view=users&wallet=${encodeURIComponent(wallet)}`;
 }
 
 /**
@@ -25,7 +25,7 @@ export function useProfileDeepLink() {
 
   return useCallback((profileId: string) => {
     const next = new URLSearchParams(params?.toString() ?? '');
-    next.set('tab', 'users');
+    next.set('view', 'users');
     next.set('profileId', profileId);
     router.push(`/admin/data-hub?${next.toString()}`);
   }, [router, params]);

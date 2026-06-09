@@ -30,6 +30,12 @@ import cohortsRoutes from './routes/cohorts';
 import streamRoutes from './routes/stream';
 import usersRoutes from './routes/users';
 import trackRoutes from './routes/track';
+import pulseRoutes from './routes/pulse';
+import utmRoutes from './routes/utm';
+import hubTrustRouter from './routes/hubTrust';
+
+// Middleware
+import { utmCapture } from './middleware/utmCapture';
 
 const app = express();
 
@@ -68,6 +74,19 @@ app.use('/api/webhooks', express.json({
 // Standard JSON parsing for other routes
 app.use(express.json());
 
+// ── UTM Capture (Phase A) ──
+// Mounted BEFORE user-landing routes so utm_* params on incoming requests
+// are normalized + validated and stashed on req.utmNormalized. No-op when
+// no utm_* params present. Failures never break the user flow.
+//
+// IMPORTANT: only user-facing endpoints get this. /api/dashboard is an admin
+// endpoint and has no user-attribution semantics — mounting the capture there
+// would just waste cycles and pollute utm_violations with noise from internal
+// dashboard polls. /api/airdrop covers POST /register, /api/track covers the
+// landing + wallet_connect beacons.
+app.use('/api/airdrop', utmCapture());
+app.use('/api/track', utmCapture());
+
 // ── Routes ──
 
 app.use('/api/webhooks', webhookRoutes);
@@ -87,6 +106,9 @@ app.use('/api/cohorts', cohortsRoutes);
 app.use('/api/stream', streamRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/track', trackRoutes);
+app.use('/api/pulse', pulseRoutes);
+app.use('/api/utm', utmRoutes);
+app.use('/api/hub-trust', hubTrustRouter);
 
 // ── Data Hub Static Dashboard ──
 // Serves the SHIFT RWA Cross-Channel Data Hub frontend at /hub
@@ -190,28 +212,6 @@ async function startServer() {
     // Initialize cron jobs
     initCronJobs();
 
-    // ── Render free-tier keepalive ──
-    // Render spins down free services after 15min of inactivity.
-    // Self-ping every 10 minutes prevents spindown so cron keeps running.
-    if (config.nodeEnv === 'production') {
-      const backendUrl = config.backendUrl || `http://localhost:${config.port}`;
-      setInterval(async () => {
-        try {
-          const http = await import('http');
-          const url = new URL(`${backendUrl}/health`);
-          const options = { hostname: url.hostname, port: url.port || 443, path: '/health', method: 'GET' };
-          const proto = url.protocol === 'https:' ? await import('https') : http;
-          (proto as any).get(`${backendUrl}/health`, (res: any) => {
-            console.log(`[Keepalive] Self-ping /health → ${res.statusCode}`);
-          }).on('error', (e: any) => {
-            console.warn(`[Keepalive] Self-ping failed: ${e.message}`);
-          });
-        } catch (e) {
-          // Non-fatal — cron will still run
-        }
-      }, 10 * 60 * 1000); // every 10 minutes
-      console.log('[Keepalive] Self-ping enabled (every 10min) to prevent Render spindown');
-    }
   });
 }
 

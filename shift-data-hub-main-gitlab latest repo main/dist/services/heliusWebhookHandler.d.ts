@@ -14,6 +14,7 @@ export declare class HeliusWebhookHandler {
     private processSwapEvent;
     /**
      * Fallback: extract position data from raw token transfers when no swap event.
+     * CRITICAL: Check for stablecoin inputs to set positionSizeUSD correctly
      */
     private processFromTokenTransfers;
     /**

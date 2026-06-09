@@ -14,6 +14,25 @@ router.use((req, res, next) => {
     }
     next();
 });
+/**
+ * GET /api/cohorts/snapshot
+ * Weekly signup cohorts (up to 12, newest first) with activation,
+ * retention, AUM, whale count, and identity-stitch metrics +
+ * summary trend block. Cached server-side for 60 seconds.
+ *
+ * Must be mounted BEFORE the `/:dim` catch-all so "snapshot" isn't
+ * interpreted as a cohort-dim parameter.
+ */
+router.get('/snapshot', async (_req, res) => {
+    try {
+        const snapshot = await (0, cohortService_1.getCohortsSnapshot)();
+        res.json(snapshot);
+    }
+    catch (err) {
+        console.error('[cohorts/snapshot]', err);
+        res.status(500).json({ error: 'internal_error' });
+    }
+});
 router.get('/:dim', async (req, res) => {
     const { dim } = req.params;
     if (!VALID_DIMS.includes(dim)) {

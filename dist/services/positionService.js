@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.positionService = exports.PositionService = void 0;
 const pool_1 = require("../db/pool");
 const heliusTransactionService_1 = require("./heliusTransactionService");
+const positionPriceService_1 = require("./positionPriceService");
 class PositionService {
     /**
      * Ensure a user record exists (upsert on first seen wallet).
@@ -35,6 +36,13 @@ class PositionService {
         // Mark tx as processed
         await (0, pool_1.execute)('INSERT INTO processed_transactions (tx_signature) VALUES ($1) ON CONFLICT DO NOTHING', [txSignature]);
         console.log(`[Position] Opened: ${wallet.slice(0, 8)}... | ${asset} | $${positionSizeUSD.toFixed(2)}`);
+        // Record live entry price immediately (non-blocking)
+        if (assetMint && tokenAmount) {
+            const newPos = await (0, pool_1.queryOne)(`SELECT id FROM positions WHERE tx_signature_open = $1`, [txSignature]);
+            if (newPos) {
+                positionPriceService_1.positionPriceService.recordEntryPrice(newPos.id, assetMint, tokenAmount).catch(err => console.error('[Position] Entry price record failed:', err));
+            }
+        }
         return true;
     }
     /**
@@ -53,9 +61,14 @@ class PositionService {
             console.log(`[Position] No open position found to close: ${wallet.slice(0, 8)}... | ${asset}`);
             return null;
         }
+        // Record live close price (non-blocking) before zeroing position_size_usd
+        if (position.asset_mint && position.token_amount) {
+            positionPriceService_1.positionPriceService.recordClosePrice(position.id, position.asset_mint, Number(position.token_amount)).catch(err => console.error('[Position] Close price record failed:', err));
+        }
         // Close it
         await (0, pool_1.execute)(`UPDATE positions
-       SET closed_at = $1, status = 'closed', tx_signature_close = $2
+       SET closed_at = $1, status = 'closed', tx_signature_close = $2,
+           position_size_usd = 0
        WHERE id = $3`, [timestamp, txSignature, position.id]);
         // Mark tx processed
         await (0, pool_1.execute)('INSERT INTO processed_transactions (tx_signature) VALUES ($1) ON CONFLICT DO NOTHING', [txSignature]);

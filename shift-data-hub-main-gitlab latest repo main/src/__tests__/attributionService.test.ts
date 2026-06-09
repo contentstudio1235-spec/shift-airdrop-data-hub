@@ -29,15 +29,17 @@ describe('computeWhaleOrigins', () => {
     invalidateAttributionCache();
   });
 
-  it('produces sankey edges for top whales', async () => {
+  it('returns Sankey-shaped response with nodes, edges, and totals', async () => {
     vi.spyOn(db, 'query').mockResolvedValueOnce([
-      { from_node: 'twitter', to_node: 'first_trade', value: '14' },
-      { from_node: 'discord', to_node: 'first_trade', value: '6' },
-    ] satisfies Array<{ from_node: string; to_node: string; value: string }>);
+      { source: 'twitter', cohort: 'whale', outcome: 'active', users: '14', volume: '28000' },
+      { source: 'discord', cohort: 'whale', outcome: 'active', users: '6', volume: '12000' },
+    ] as any);
 
     const result = await computeWhaleOrigins({});
-    expect(result).toHaveLength(2);
-    expect(result[0].from).toBe('twitter');
-    expect(result[0].value).toBe(14);
+    expect(result.nodes.some(n => n.kind === 'source' && n.id === 'src:twitter')).toBe(true);
+    expect(result.edges.some(e => e.from === 'src:twitter' && e.to === 'coh:whale')).toBe(true);
+    expect(result.totals.whales).toBe(20);
+    expect(result.totals.whaleVolumeUSD).toBe(40000);
+    expect(result.dataQuality).toBe('sprint_2_3_live');
   });
 });

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { TOKENS, MOTION } from '@/lib/chartTokens';
 import type { Icon } from '@phosphor-icons/react';
-import { Wallet, ChartLineUp, Trophy, TwitterLogo, DiscordLogo, TelegramLogo, Plus, ArrowsMerge, Gear, DotsThree } from '@phosphor-icons/react';
+import { Wallet, ChartLineUp, Trophy, TwitterLogo, DiscordLogo, TelegramLogo, Plus, ArrowsMerge, Gear, DotsThree, CheckCircle } from '@phosphor-icons/react';
 import { Card } from '../primitives/Card';
 import { fmtWallet, fmtRelativeTime } from '@/lib/format';
 import type { ProfileWithLinks, IdentityLink } from '@/hooks/useUserProfile';
@@ -14,9 +14,9 @@ const IDENTITY_ICONS: Record<string, Icon> = {
   wallet: Wallet,
   ga_client_id: ChartLineUp,
   snag_user_id: Trophy,
-  social_x: TwitterLogo,
-  social_discord: DiscordLogo,
-  social_telegram: TelegramLogo,
+  x_handle: TwitterLogo,
+  discord_id: DiscordLogo,
+  telegram_id: TelegramLogo,
 };
 
 const CONFIDENCE_STYLE: Record<string, { color: string; label: string }> = {
@@ -58,14 +58,42 @@ export function IdentityCard({ profile, onMutated }: { profile: ProfileWithLinks
   const [unlinkLink, setUnlinkLink] = useState<IdentityLink | null>(null);
   const walletLinks = profile.links.filter(l => l.type === 'wallet');
   const canSetPrimary = walletLinks.length >= 2;
+  const activeTypes = new Set(profile.links.map(l => l.type));
+  const stitchedCount = activeTypes.size;
+  const fullyStitched = stitchedCount >= 6;
+  const perfectlyStitched = stitchedCount === 7;
 
   return (
     <>
       <Card padding={20}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <span style={{ fontSize: 10, fontWeight: 800, color: TOKENS.textFaint, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-            Identity
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 10, fontWeight: 800, color: TOKENS.textFaint, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+              Identity
+            </span>
+            {fullyStitched && (
+              <span
+                aria-label={perfectlyStitched ? 'Fully stitched — 7 of 7 link types' : 'Heavily stitched — 6 of 7 link types'}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  background: 'rgba(94,224,168,0.12)',
+                  border: '1px solid rgba(94,224,168,0.25)',
+                  color: TOKENS.threshold.green,
+                  fontSize: 10,
+                  fontWeight: 800,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                <CheckCircle size={10} weight="fill" />
+                {perfectlyStitched ? 'Fully Stitched' : `${stitchedCount}/7`}
+              </span>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <ActionButton onClick={() => setAddOpen(true)}>
               <Plus size={12} weight="bold" /> Add Link

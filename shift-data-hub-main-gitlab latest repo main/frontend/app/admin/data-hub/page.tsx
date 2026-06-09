@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAdminAuth } from "@/hooks/useAdminAuth";
 import type {
   HubData,
@@ -14,12 +14,19 @@ import type {
   AggregatedKPIs,
   FunnelTab,
 } from "@/components/DataHub/types";
-import { LayoutShell, type TopView } from './layout-shell';
+import { LayoutShell, isValidTopView, type TopView } from './layout-shell';
 import { FunnelsView } from './views/FunnelsView';
 import { AttributionView } from './views/AttributionView';
 import { CohortsView } from './views/CohortsView';
 import { RawDataView } from './views/RawDataView';
 import { UsersView } from '@/components/DataHub/users/UsersView';
+import { PulseView } from '@/components/DataHub/pulse/PulseView';
+import { UtmGovernancePanel } from '@/components/DataHub/engineering/UtmGovernancePanel';
+import { AnalyticsRedirectCard } from '@/components/DataHub/engineering/AnalyticsRedirectCard';
+import { Tag } from '@phosphor-icons/react';
+import { HubSessionProvider, useHubSession } from '@/hooks/useHubSession';
+import { useSyncTopViewFromUrl } from '@/hooks/useTopViewFromUrl';
+import { FlagAffordanceStyles } from '@/components/DataHub/primitives/FlagButton';
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://shift-airdrop-backend.onrender.com";
 const KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || "ShiftRwa2026@@$$Key";
@@ -212,9 +219,11 @@ function OverviewPage({ data }: { data: HubData }) {
 
   const kpiCards = [
     { label: "Total AUM Holders", value: onchain?.uniqueHolders?.toLocaleString() || "—", sub: `${onchain?.totalHolderSlots || 0} total slots`, icon: "🏦", accent: "#00c896" },
-    { label: "Trading Volume", value: a ? fmtUSD(a.totalVolume) : "—", sub: `${a?.activeHolders || 0} active positions`, icon: "📈", accent: "#3b82f6" },
-    { label: "Registered Users", value: m?.total_users?.toLocaleString() || "—", sub: `${a?.stitchedUsers || 0} identity stitched`, icon: "👛", accent: "#8b5cf6" },
-    { label: "Total SHIFT Points", value: m?.total_xp ? `${(m.total_xp / 1_000_000).toFixed(2)}M` : "—", sub: `${m?.badge_count || 0} badges awarded`, icon: "⚡", accent: "#f59e0b" },
+    // Trading Volume is the lifetime SUM(position_size_usd) FROM positions (no WHERE — includes closed positions).
+    // activeHolders is the count of users with any open position (not the count of open positions themselves).
+    { label: "Trading Volume (Lifetime)", value: a ? fmtUSD(a.totalVolume) : "—", sub: `${a?.activeHolders || 0} active holders`, icon: "📈", accent: "#3b82f6" },
+    { label: "Registered Users (All-time)", value: m?.total_users?.toLocaleString() || "—", sub: `${a?.stitchedUsers || 0} identity stitched`, icon: "👛", accent: "#8b5cf6" },
+    { label: "Total SHIFT Points (Lifetime)", value: m?.total_xp ? `${(m.total_xp / 1_000_000).toFixed(2)}M` : "—", sub: `${m?.badge_count || 0} badges awarded`, icon: "⚡", accent: "#f59e0b" },
     { label: "Avg Multiplier", value: m?.avg_multiplier ? `${m.avg_multiplier.toFixed(3)}x` : "—", sub: "Across all active wallets", icon: "✖️", accent: "#ec4899" },
     { label: "On-Chain Tokens", value: onchain?.tokens?.length?.toString() || "6", sub: "Live SHIFT Series tokens", icon: "🔗", accent: "#00c896" },
   ];
@@ -299,8 +308,11 @@ function MarketsPage({ data }: { data: HubData }) {
         {[
           { label: "Unique Holders", value: onchain?.uniqueHolders?.toLocaleString() || "—", icon: "🏦" },
           { label: "Total Holder Slots", value: onchain?.totalHolderSlots?.toLocaleString() || "—", icon: "🪙" },
-          { label: "Trading Volume", value: m ? fmtUSD(m.totalVolume) : "—", icon: "📊" },
-          { label: "Active Positions", value: m?.activeHolders?.toLocaleString() || "—", icon: "🔓" },
+          // Same lifetime SUM(position_size_usd) semantic as the Overview page
+          // card — the ef104ef commit disambiguated Overview but missed Markets.
+          // Mirror the (Lifetime) qualifier + holders-not-positions correction.
+          { label: "Trading Volume (Lifetime)", value: m ? fmtUSD(m.totalVolume) : "—", icon: "📊" },
+          { label: "Active Holders", value: m?.activeHolders?.toLocaleString() || "—", icon: "🔓" },
         ].map((k, i) => (
           <div key={i} style={{ ...S.card, padding: "20px" }}>
             <div style={{ fontSize: "22px", marginBottom: "8px" }}>{k.icon}</div>
@@ -396,7 +408,14 @@ function MarketsPage({ data }: { data: HubData }) {
   );
 }
 
-// ─── ANALYTICS PAGE ───────────────────────────────────────────────────────────
+// ─── ANALYTICS PAGE (RETIRED — soft retirement in Phase 2.1A) ────────────────
+// This was the GA4 mirror — a 1-hour-stale cached copy of what GA4 native
+// already shows authoritatively. UX Researcher flagged it as a trust
+// collision (when the mirror disagrees with GA4, which one is right?).
+// The function is intentionally kept here so the diff is easy to review
+// and we can purge after Phase 2 stabilizes. It is no longer mounted —
+// AnalyticsRedirectCard (below) renders instead.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function AnalyticsPage({ data }: { data: HubData }) {
   const { ga4, analytics } = data;
 
@@ -440,26 +459,48 @@ function AnalyticsPage({ data }: { data: HubData }) {
         </div>
       )}
 
-      {/* Summary KPIs */}
+      {/* Summary KPIs — bounce rate & avg session duration are weighted from channels[] (backend doesn't aggregate on totals) */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: "14px" }}>
-        {[
-          { label: "Active Users (30d)", value: totalUsers.toLocaleString(), icon: "👤", c: accent },
-          { label: "Sessions", value: (showGA4?.totals?.sessions || "—").toLocaleString(), icon: "🖱️", c: "#3b82f6" },
-          { label: "Page Views", value: (showGA4?.totals?.pageViews || "—").toLocaleString(), icon: "📄", c: "#8b5cf6" },
-          { label: "New Users", value: (showGA4?.totals?.newUsers || "—").toLocaleString(), icon: "🆕", c: "#f59e0b" },
-          { label: "Bounce Rate", value: showGA4?.totals?.bounceRate ? `${(showGA4.totals.bounceRate * 100).toFixed(1)}%` : "—", icon: "↩️", c: "#f87171" },
-          { label: "Avg Session", value: showGA4?.totals?.avgSessionDuration ? `${Math.floor(showGA4.totals.avgSessionDuration / 60)}m ${Math.floor(showGA4.totals.avgSessionDuration % 60)}s` : "—", icon: "⏱️", c: "#10b981" },
-        ].map((k, i) => (
-          <div key={i} style={{ ...S.card, padding: "18px" }}>
-            <div style={{ fontSize: "20px", marginBottom: "8px" }}>{k.icon}</div>
-            <div style={S.label}>{k.label}</div>
-            <div style={{ ...S.value, color: k.c, fontSize: "22px" }}>
-              {typeof k.value === "string" && k.value.endsWith("%")
-                ? <><span style={{ fontWeight: 400 }}>{k.value.slice(0, -1)}</span>%</>
-                : k.value}
+        {(() => {
+          let totalSessions = 0;
+          let weightedBounceSum = 0;
+          let weightedDurationSum = 0;
+          for (const ch of showGA4?.channels ?? []) {
+            const s = parseInt(ch.sessions, 10);
+            if (!Number.isFinite(s) || s <= 0) continue;
+            totalSessions += s;
+            if (ch.bounceRate !== undefined) {
+              const br = parseFloat(ch.bounceRate);
+              if (Number.isFinite(br)) weightedBounceSum += br * s;
+            }
+            if (ch.avgSessionDuration !== undefined) {
+              const d = parseFloat(ch.avgSessionDuration);
+              if (Number.isFinite(d)) weightedDurationSum += d * s;
+            }
+          }
+          const weightedBounce = totalSessions > 0 ? weightedBounceSum / totalSessions : null;
+          const weightedDuration = totalSessions > 0 ? weightedDurationSum / totalSessions : null;
+
+          const cards = [
+            { label: "Active Users (30d)", value: totalUsers.toLocaleString(), icon: "👤", c: accent },
+            { label: "Sessions", value: (showGA4?.totals?.sessions || "—").toLocaleString(), icon: "🖱️", c: "#3b82f6" },
+            { label: "Page Views", value: (showGA4?.totals?.screenPageViews || "—").toLocaleString(), icon: "📄", c: "#8b5cf6" },
+            { label: "New Users", value: (showGA4?.totals?.newUsers || "—").toLocaleString(), icon: "🆕", c: "#f59e0b" },
+            { label: "Bounce Rate", value: weightedBounce !== null ? `${(weightedBounce * 100).toFixed(1)}%` : "—", icon: "↩️", c: "#f87171" },
+            { label: "Avg Session", value: weightedDuration !== null ? `${Math.floor(weightedDuration / 60)}m ${Math.floor(weightedDuration % 60)}s` : "—", icon: "⏱️", c: "#10b981" },
+          ];
+          return cards.map((k, i) => (
+            <div key={i} style={{ ...S.card, padding: "18px" }}>
+              <div style={{ fontSize: "20px", marginBottom: "8px" }}>{k.icon}</div>
+              <div style={S.label}>{k.label}</div>
+              <div style={{ ...S.value, color: k.c, fontSize: "22px" }}>
+                {typeof k.value === "string" && k.value.endsWith("%")
+                  ? <><span style={{ fontWeight: 400 }}>{k.value.slice(0, -1)}</span>%</>
+                  : k.value}
+              </div>
             </div>
-          </div>
-        ))}
+          ));
+        })()}
       </div>
 
       {/* GA4 Properties */}
@@ -503,26 +544,31 @@ function AnalyticsPage({ data }: { data: HubData }) {
         <Card title="Traffic Channels" subtitle="Session distribution by source">
           {showGA4?.channels ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {showGA4.channels.map((ch, i) => {
-                const c = CHANNEL_COLORS[ch.channel] || "#6b7280";
-                return (
-                  <div key={i}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <div style={{ width: "8px", height: "8px", borderRadius: "2px", background: c, flexShrink: 0 }} />
-                        <span style={{ fontSize: "12px", color: "#7ab09a" }}>{ch.channel}</span>
+              {(() => {
+                const channelTotal = showGA4.channels.reduce((sum, ch) => sum + (parseInt(ch.sessions, 10) || 0), 0);
+                return showGA4.channels.map((ch, i) => {
+                  const c = CHANNEL_COLORS[ch.channel] || "#6b7280";
+                  const sessions = parseInt(ch.sessions, 10) || 0;
+                  const pct = channelTotal > 0 ? Math.round((sessions * 100) / channelTotal) : 0;
+                  return (
+                    <div key={i}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <div style={{ width: "8px", height: "8px", borderRadius: "2px", background: c, flexShrink: 0 }} />
+                          <span style={{ fontSize: "12px", color: "#7ab09a" }}>{ch.channel}</span>
+                        </div>
+                        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                          <span style={{ fontSize: "11px", color: "#5a9070" }}>{sessions.toLocaleString()}</span>
+                          <span style={S.badge(c)}>{pct}%</span>
+                        </div>
                       </div>
-                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                        <span style={{ fontSize: "11px", color: "#5a9070" }}>{ch.sessions.toLocaleString()}</span>
-                        <span style={S.badge(c)}>{ch.pct}%</span>
+                      <div style={{ height: "4px", background: "rgba(255,255,255,0.05)", borderRadius: "2px" }}>
+                        <div style={{ height: "100%", width: `${pct}%`, background: c, borderRadius: "2px" }} />
                       </div>
                     </div>
-                    <div style={{ height: "4px", background: "rgba(255,255,255,0.05)", borderRadius: "2px" }}>
-                      <div style={{ height: "100%", width: `${ch.pct}%`, background: c, borderRadius: "2px" }} />
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -866,24 +912,44 @@ function AdminSystemPage({ data }: { data: HubData }) {
 // MAIN HUB SHELL
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const NAV_ITEMS: { page: HubPage; label: string; icon: string; audience: string }[] = [
+const NAV_ITEMS: { page: HubPage; label: string; icon: React.ReactNode; audience: string }[] = [
   { page: "overview", label: "Dashboard", icon: "◈", audience: "All teams" },
   { page: "markets", label: "Markets", icon: "📈", audience: "Finance · BD" },
   { page: "analytics", label: "Analytics", icon: "📊", audience: "Marketing" },
   { page: "stitched", label: "Stitched GA4", icon: "🔗", audience: "Dev · Marketing" },
   { page: "portfolios", label: "Portfolios", icon: "💼", audience: "Finance" },
   { page: "admin", label: "Admin", icon: "⚙️", audience: "Engineering" },
+  { page: "utm", label: "UTM", icon: <Tag size={14} weight="bold" />, audience: "Marketing · Engineering" },
 ];
 
-export default function DataHubPage() {
+function DataHubPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isAuthenticated } = useAdminAuth();
   const [authed, setAuthed] = useState(false);
   const [page, setPage] = useState<HubPage>("overview");
-  const [topView, setTopView] = useState<TopView>('raw');
+  const initialView = ((): TopView => {
+    const v = searchParams?.get('view');
+    return isValidTopView(v) ? v : 'pulse';  // Platform default — Pulse "what changed" overview (Phase 2 IA redesign)
+  })();
+  const [topView, setTopView] = useState<TopView>(initialView);
+  // HARVEST-006+008: keep topView in sync with `?view=` writes from drill-down
+  // links (KOL leaderboard row → Users, whale row → Users, etc.). Without this
+  // the URL updates but the visible tab stays put until the user clicks it.
+  useSyncTopViewFromUrl(searchParams, topView, setTopView);
   const [lastSync, setLastSync] = useState<Date | null>(null);
   const [syncing, setSyncing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Persist topView in URL so it survives AuthGate remounts (kills the tab-reset-on-auto-refresh bug)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('view') !== topView) {
+      url.searchParams.set('view', topView);
+      window.history.replaceState(null, '', url.toString());
+    }
+  }, [topView]);
 
   const [data, setData] = useState<HubData>({
     admin: null, onchain: null, analytics: null, leaderboard: null,
@@ -942,13 +1008,76 @@ export default function DataHubPage() {
 
   if (!authed) return <AuthGate onAuth={() => setAuthed(true)} />;
 
+  return (
+    <HubSessionProvider initialView={topView}>
+      <FlagAffordanceStyles />
+      <DataHubAuthedShell
+        topView={topView}
+        setTopView={setTopView}
+        page={page}
+        setPage={setPage}
+        data={data}
+        lastSync={lastSync}
+        syncing={syncing}
+        fetchAll={fetchAll}
+      />
+    </HubSessionProvider>
+  );
+}
+
+interface DataHubAuthedShellProps {
+  topView: TopView;
+  setTopView: (v: TopView) => void;
+  page: HubPage;
+  setPage: (p: HubPage) => void;
+  data: HubData;
+  lastSync: Date | null;
+  syncing: boolean;
+  fetchAll: () => Promise<void>;
+}
+
+function DataHubAuthedShell({
+  topView,
+  setTopView,
+  page,
+  setPage,
+  data,
+  lastSync,
+  syncing,
+  fetchAll,
+}: DataHubAuthedShellProps) {
+  const { recordEvent } = useHubSession();
+
+  // tab_open / tab_close telemetry — wire to the topView changeHandler.
+  // Fire-and-forget; setTopView is synchronous so the URL persistence still
+  // runs from the parent's useEffect.
+  const handleChangeView = useCallback(
+    (next: TopView) => {
+      if (next === topView) return;
+      recordEvent('tab_close', { tab: topView, metadata: { to: next } });
+      recordEvent('tab_open', { tab: next, metadata: { from: topView } });
+      setTopView(next);
+    },
+    [topView, setTopView, recordEvent],
+  );
+
+  // card_click telemetry on the legacy Raw Data force-sync action.
+  const handleRawRefresh = useCallback(() => {
+    recordEvent('card_click', { tab: 'raw', metadata: { target: 'refresh' } });
+    fetchAll();
+  }, [recordEvent, fetchAll]);
+
   const pageComponent: Record<HubPage, React.ReactNode> = {
     overview: <OverviewPage data={data} />,
     markets: <MarketsPage data={data} />,
-    analytics: <AnalyticsPage data={data} />,
+    // Phase 2.1A — AnalyticsPage (above) is the legacy GA4 mirror. It's
+    // intentionally not deleted (soft retirement). AnalyticsRedirectCard
+    // replaces it in the UI and points operators to GA4 native.
+    analytics: <AnalyticsRedirectCard />,
     stitched: <StitchedPage data={data} />,
     portfolios: <PortfoliosPage data={data} />,
     admin: <AdminSystemPage data={data} />,
+    utm: <UtmGovernancePanel />,
   };
 
   const currentNav = NAV_ITEMS.find(n => n.page === page)!;
@@ -967,7 +1096,8 @@ export default function DataHubPage() {
         a { text-decoration: none; }
       `}</style>
 
-      <LayoutShell activeView={topView} onChangeView={setTopView}>
+      <LayoutShell activeView={topView} onChangeView={handleChangeView}>
+        {topView === 'pulse' && <PulseView />}
         {topView === 'funnels' && <FunnelsView />}
         {topView === 'attribution' && <AttributionView />}
         {topView === 'cohorts' && <CohortsView />}
@@ -1006,7 +1136,7 @@ export default function DataHubPage() {
             {/* Right side */}
             <div style={{ display: "flex", alignItems: "center", gap: "10px", marginLeft: "16px", flexShrink: 0 }}>
               {lastSync && <div style={{ fontSize: "10px", color: "#3a7060" }}>{lastSync.toLocaleTimeString()}</div>}
-              <button onClick={fetchAll} disabled={syncing} style={{
+              <button onClick={handleRawRefresh} disabled={syncing} style={{
                 display: "flex", alignItems: "center", gap: "6px", padding: "6px 14px",
                 background: accentDim, color: accent, border: `1px solid ${accentBorder}`,
                 borderRadius: "8px", fontSize: "11px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
@@ -1022,15 +1152,20 @@ export default function DataHubPage() {
         {/* ── Page Header ───────────────────────────────────────────── */}
         <div style={{ maxWidth: "1440px", margin: "0 auto", padding: "28px 24px 0" }}>
           <div style={{ marginBottom: "24px" }}>
-            <h1 style={{ fontSize: "24px", fontWeight: 800, color: "#fff" }}>{currentNav.icon} {currentNav.label}</h1>
+            <h1 style={{ fontSize: "24px", fontWeight: 800, color: "#fff", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ display: "inline-flex", alignItems: "center" }}>{currentNav.icon}</span>
+              {currentNav.label}
+            </h1>
             <p style={{ color: "#3a7060", fontSize: "13px", marginTop: "4px" }}>
-              {currentNav.audience} · 4 live data feeds · Auto-refresh every 30s
+              {currentNav.audience}
+              {page === "utm" ? " · UTM governance · campaigns log + violations" : " · 4 live data feeds · Auto-refresh every 30s"}
             </p>
           </div>
 
           {/* ── Page Content ───────────────────────────────────────────── */}
           <div style={{ paddingBottom: "48px" }}>
-            {data.loading ? (
+            {/* UTM panel manages its own loading/error state (it doesn't depend on HubData feeds). */}
+            {data.loading && page !== "utm" ? (
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                 {[180, 300, 240].map((h, i) => <Skeleton key={i} h={h} />)}
               </div>
@@ -1042,5 +1177,15 @@ export default function DataHubPage() {
         )}
       </LayoutShell>
     </>
+  );
+}
+
+// Wrap in Suspense — Next.js 16 requires useSearchParams() to be inside a Suspense boundary
+// so the static shell can prerender while the search-params-dependent subtree streams in.
+export default function DataHubPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: '100vh', background: bg }} />}>
+      <DataHubPageInner />
+    </Suspense>
   );
 }

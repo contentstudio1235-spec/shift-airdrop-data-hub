@@ -9,6 +9,8 @@ export interface FunnelQueryParams {
     cohort?: CohortDim;
     walletSizeMin?: number;
     walletSizeMax?: number;
+    volumeFrom?: string;
+    volumeTo?: string;
 }
 export interface FunnelStepResult {
     id: string;

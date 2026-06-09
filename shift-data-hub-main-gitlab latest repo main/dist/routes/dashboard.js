@@ -10,15 +10,19 @@ const missionsService_1 = require("../services/missionsService");
 const badgeGalleryService_1 = require("../services/badgeGalleryService");
 const referralTrackingService_1 = require("../services/referralTrackingService");
 const levelSystem_1 = require("../utils/levelSystem");
+const positionService_1 = require("../services/positionService");
+const jupiterPriceService_1 = require("../services/jupiterPriceService");
+const pnlService_1 = require("../services/pnlService");
 const router = (0, express_1.Router)();
 // Get dashboard summary for a specific wallet
 router.get('/:wallet', async (req, res) => {
     const { wallet } = req.params;
     try {
         // 1. Get user stats & SNAG points in parallel
-        const [user, snagBalance] = await Promise.all([
+        const [user, snagBalance, positions] = await Promise.all([
             (0, pool_1.queryOne)('SELECT total_xp, claim_multiplier, current_streak, snag_user_id, snag_points FROM users WHERE wallet = $1', [wallet]),
-            snagSyncService_1.snagSyncService.getUserPoints(wallet)
+            snagSyncService_1.snagSyncService.getUserPoints(wallet),
+            positionService_1.positionService.getActivePositions(wallet)
         ]);
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
@@ -43,6 +47,19 @@ router.get('/:wallet', async (req, res) => {
        WHERE (u.total_xp + GREATEST(0, COALESCE(u.snag_points, 0) - COALESCE(s.last_synced_xp, 0))) > $1`, [totalSp]);
         // 3. Get active positions count
         const positionsResult = await (0, pool_1.queryOne)(`SELECT COUNT(*) as count FROM positions WHERE wallet = $1 AND status IN ('open', 'active')`, [wallet]);
+        // 4. Calculate P&L for dashboard (if positions exist)
+        let dashboardPnL = null;
+        if (positions && positions.length > 0) {
+            try {
+                const assetMints = [...new Set(positions.map(p => p.asset_mint || p.asset).filter(Boolean))];
+                const prices = await jupiterPriceService_1.jupiterPriceService.getPrices(assetMints);
+                dashboardPnL = (0, pnlService_1.calculateDashboardPnL)(positions, prices);
+            }
+            catch (err) {
+                console.warn('[Dashboard] P&L calculation error:', err);
+                // Continue without P&L data if calculation fails
+            }
+        }
         res.json({
             wallet,
             // Combined SP (main display value)
@@ -59,7 +76,14 @@ router.get('/:wallet', async (req, res) => {
             currentStreak: user.current_streak,
             rank: parseInt(rankResult?.rank || '1', 10),
             activePositions: parseInt(positionsResult?.count || '0', 10),
-            projectedAllocation: 'TBD'
+            projectedAllocation: 'TBD',
+            // P&L summary
+            ...(dashboardPnL && {
+                totalUnrealizedPnL: dashboardPnL.totalUnrealizedPnL,
+                totalRealizedPnL: dashboardPnL.totalRealizedPnL,
+                totalPnLUsd: dashboardPnL.totalPnLUsd,
+                totalPnLPct: dashboardPnL.totalPnLPct,
+            }),
         });
     }
     catch (error) {

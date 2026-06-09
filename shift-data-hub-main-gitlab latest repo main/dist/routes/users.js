@@ -18,9 +18,36 @@ const VALID_IDENTITY_TYPES = [
     'wallet', 'ga_client_id', 'snag_user_id', 'x_handle', 'discord_id', 'telegram_id', 'email',
 ];
 const VALID_CONFIDENCE = ['deterministic', 'probabilistic', 'manual'];
+const VALID_SORT_KEYS = ['last_seen', 'volume', 'holdings', 'x', 'discord', 'referral_source'];
+const VALID_HAS_SOCIAL = ['x', 'discord', 'both', 'none'];
+const VALID_REFERRER_TYPES = ['snag', 'utm'];
 // GET /api/users — paginated list
 router.get('/', async (req, res) => {
     try {
+        const sortByRaw = typeof req.query.sortBy === 'string' ? req.query.sortBy : undefined;
+        const sortDirRaw = typeof req.query.sortDir === 'string' ? req.query.sortDir : undefined;
+        const sortBy = (sortByRaw && VALID_SORT_KEYS.includes(sortByRaw))
+            ? sortByRaw : undefined;
+        const sortDir = sortDirRaw === 'asc' || sortDirRaw === 'desc' ? sortDirRaw : undefined;
+        const hasSocialRaw = typeof req.query.hasSocial === 'string' ? req.query.hasSocial : undefined;
+        if (hasSocialRaw && !VALID_HAS_SOCIAL.includes(hasSocialRaw)) {
+            return res.status(400).json({ error: 'invalid hasSocial' });
+        }
+        const hasSocial = hasSocialRaw;
+        // ── KOL drill-down contract ────────────────────────────────────────────
+        // ?referrer=<string>&referrerType=snag|utm. Both must be present and
+        // referrerType must be one of the two literals — otherwise either reject
+        // (invalid referrerType) or silently drop the filter (missing pair).
+        const referrerRaw = typeof req.query.referrer === 'string' ? req.query.referrer : undefined;
+        const referrerTypeRaw = typeof req.query.referrerType === 'string' ? req.query.referrerType : undefined;
+        if (referrerTypeRaw && !VALID_REFERRER_TYPES.includes(referrerTypeRaw)) {
+            return res.status(400).json({ error: 'invalid referrerType' });
+        }
+        const referrerType = referrerTypeRaw;
+        // Only forward the pair when BOTH are supplied — service treats single
+        // param as missing-filter no-op.
+        const referrer = (referrerRaw && referrerType) ? referrerRaw : undefined;
+        const referrerTypeOut = (referrerRaw && referrerType) ? referrerType : undefined;
         const result = await (0, identityService_1.searchProfiles)({
             page: req.query.page ? Number(req.query.page) : undefined,
             pageSize: req.query.pageSize ? Number(req.query.pageSize) : undefined,
@@ -29,6 +56,11 @@ router.get('/', async (req, res) => {
             walletSizeMin: req.query.walletSizeMin ? Number(req.query.walletSizeMin) : undefined,
             activitySince: typeof req.query.activitySince === 'string' ? req.query.activitySince : undefined,
             q: typeof req.query.q === 'string' ? req.query.q : undefined,
+            hasSocial,
+            sortBy,
+            sortDir,
+            referrer,
+            referrerType: referrerTypeOut,
         });
         res.json(result);
     }

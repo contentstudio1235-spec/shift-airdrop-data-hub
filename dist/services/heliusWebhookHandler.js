@@ -14,6 +14,7 @@ const jupiterPriceService_1 = require("./jupiterPriceService");
 const antiFarmService_1 = require("./antiFarmService");
 const streamService_1 = require("./streamService");
 const funnelService_1 = require("./funnelService");
+const identityService_1 = require("./identityService");
 // Jupiter Program ID
 const JUPITER_PROGRAM = 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4';
 // Stablecoin mints (positions denominated against these)
@@ -252,6 +253,23 @@ class HeliusWebhookHandler {
             (0, funnelService_1.invalidateFunnelCache)('conversion');
             (0, funnelService_1.invalidateFunnelCache)('activation');
         }
+        // Identity wiring — non-fatal
+        try {
+            const profile = await (0, identityService_1.findOrCreateProfile)({ type: 'wallet', value: wallet }, 'system');
+            await (0, identityService_1.recordEvent)({
+                event_name: 'position_open',
+                event_id: txSignature,
+                profile_id: profile.profileId,
+                wallet,
+                asset,
+                value_usd: positionSizeUSD,
+                occurred_at: timestamp.toISOString(),
+                payload: { side: 'long' },
+            });
+        }
+        catch (err) {
+            console.error('[helius/handleBuy] identity wiring failed', err);
+        }
     }
     /**
      * Handle a sell (close position).
@@ -272,6 +290,23 @@ class HeliusWebhookHandler {
             (0, funnelService_1.invalidateFunnelCache)('whale_pipeline');
             (0, funnelService_1.invalidateFunnelCache)('conversion');
             (0, funnelService_1.invalidateFunnelCache)('activation');
+        }
+        // Identity wiring — non-fatal
+        try {
+            const profile = await (0, identityService_1.findOrCreateProfile)({ type: 'wallet', value: wallet }, 'system');
+            await (0, identityService_1.recordEvent)({
+                event_name: 'position_close',
+                event_id: txSignature,
+                profile_id: profile.profileId,
+                wallet,
+                asset,
+                value_usd: closed?.position_size_usd != null ? Number(closed.position_size_usd) : undefined,
+                occurred_at: timestamp.toISOString(),
+                payload: { side: 'short' },
+            });
+        }
+        catch (err) {
+            console.error('[helius/handleSell] identity wiring failed', err);
         }
     }
     /**

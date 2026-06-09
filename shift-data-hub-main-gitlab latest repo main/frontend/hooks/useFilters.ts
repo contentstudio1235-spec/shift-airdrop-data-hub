@@ -2,6 +2,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
+export type FunnelWindow = '7d' | '30d' | '90d' | 'all';
+
+export const FUNNEL_WINDOWS: readonly FunnelWindow[] = ['7d', '30d', '90d', 'all'] as const;
+
+export function isFunnelWindow(v: string | null | undefined): v is FunnelWindow {
+  return !!v && (FUNNEL_WINDOWS as ReadonlyArray<string>).includes(v);
+}
+
 export interface Filters {
   from?: string;
   to?: string;
@@ -10,6 +18,18 @@ export interface Filters {
   cohort?: 'day' | 'week' | 'month';
   walletSizeMin?: number;
   walletSizeMax?: number;
+  // F1 / MR !29: funnel time window. Backend derives `from` from this when
+  // present (queryParams.ts). Lives on Filters so it round-trips via the same
+  // URL + localStorage machinery the rest of the filter state uses, and so it
+  // survives view switches via the FOREIGN_PARAMS allowlist below.
+  fwindow?: FunnelWindow;
+  // MR !33: decoupled position-time window for the channel-roi volume fix.
+  // Only HeroVolume7d uses it today (passes volumeFrom=NOW-7d) — kept off the
+  // URL writer/reader since it's a derived ephemeral param, not an operator-
+  // chosen filter. Type-only so TS allows callers to pass it through
+  // useFunnelData's query-spread without complaint.
+  volumeFrom?: string;
+  volumeTo?: string;
 }
 
 const STORAGE_KEY = 'shift-data-hub-filters';
@@ -39,10 +59,21 @@ function paramsToFilters(p: URLSearchParams): Filters {
   const asset = p.get('asset'); if (asset) f.asset = asset;
   const cohort = p.get('cohort');
   if (cohort === 'day' || cohort === 'week' || cohort === 'month') f.cohort = cohort;
-  const min = Number(p.get('walletSizeMin'));
-  if (Number.isFinite(min) && min >= 0) f.walletSizeMin = min;
-  const max = Number(p.get('walletSizeMax'));
-  if (Number.isFinite(max) && max >= 0) f.walletSizeMax = max;
+  // Gate on URLSearchParams.get() !== null BEFORE parsing — `Number(null)` is 0,
+  // which would phantom-inject `walletSizeMin=0&walletSizeMax=0` on every
+  // writeback when the URL had no such params (re-render loop in prod).
+  const minRaw = p.get('walletSizeMin');
+  if (minRaw !== null) {
+    const min = Number(minRaw);
+    if (Number.isFinite(min) && min >= 0) f.walletSizeMin = min;
+  }
+  const maxRaw = p.get('walletSizeMax');
+  if (maxRaw !== null) {
+    const max = Number(maxRaw);
+    if (Number.isFinite(max) && max >= 0) f.walletSizeMax = max;
+  }
+  const fwin = p.get('fwindow');
+  if (isFunnelWindow(fwin)) f.fwindow = fwin;
   return f;
 }
 
@@ -55,6 +86,7 @@ function filtersToParams(f: Filters): URLSearchParams {
   if (f.cohort) p.set('cohort', f.cohort);
   if (f.walletSizeMin !== undefined) p.set('walletSizeMin', String(f.walletSizeMin));
   if (f.walletSizeMax !== undefined) p.set('walletSizeMax', String(f.walletSizeMax));
+  if (f.fwindow) p.set('fwindow', f.fwindow);
   return p;
 }
 
@@ -72,13 +104,23 @@ export function useFilters(): [Filters, (next: Partial<Filters>) => void, () => 
     setHydrated(true);
   }, []);  // intentionally empty — run once on mount
 
-  // Sync filter changes back to URL + localStorage, but only after hydration
+  // Sync filter changes back to URL + localStorage, but only after hydration.
+  // Preserve foreign params (e.g. ?view= owned by data-hub page shell) so we
+  // don't fight other URL writers and create a re-render loop.
   useEffect(() => {
     if (!hydrated) return;
     writeStorage(filters);
     const p = filtersToParams(filters);
+    const existing = new URLSearchParams(searchParams?.toString() ?? '');
+    // Preserve foreign params owned by other URL writers (data-hub shell + per-tab
+    // drill-down filters). Add new names here when wiring new owners.
+    const FOREIGN_PARAMS = ['view', 'referrer', 'referrerType', 'wallet', 'profileId', 'q'] as const;
+    for (const name of FOREIGN_PARAMS) {
+      const value = existing.get(name);
+      if (value) p.set(name, value);
+    }
     const next = p.toString();
-    const current = searchParams?.toString() ?? '';
+    const current = existing.toString();
     if (next !== current) {
       router.replace(`?${next}`, { scroll: false });
     }

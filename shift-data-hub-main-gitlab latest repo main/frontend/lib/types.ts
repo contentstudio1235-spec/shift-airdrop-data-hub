@@ -17,6 +17,11 @@ export interface DashboardResponse {
   activePositions: number;
   currentStreak: number;
   projectedAllocation: string;
+  // P&L summary (new)
+  totalUnrealizedPnL?: number;
+  totalRealizedPnL?: number;
+  totalPnLUsd?: number;
+  totalPnLPct?: number;
 }
 
 export interface Position {
@@ -31,6 +36,11 @@ export interface Position {
   progressionHook: string;
   status: 'open' | 'closed';
   openedAt: string;
+  // P&L fields (new)
+  priceAtOpen?: number;
+  currentPrice?: number;
+  pnlUsd?: number;
+  pnlPct?: number;
 }
 
 export interface PositionsResponse {
@@ -48,6 +58,11 @@ export interface HistoryPosition {
   xpPerWeek: number;
   totalSpEarned: number;
   status: 'closed';
+  // P&L fields (new)
+  priceAtOpen?: number;
+  priceAtClose?: number;
+  pnlUsd?: number;
+  pnlPct?: number;
 }
 
 export interface PositionHistoryResponse {

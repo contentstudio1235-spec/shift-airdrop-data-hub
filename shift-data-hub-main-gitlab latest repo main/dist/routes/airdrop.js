@@ -157,6 +157,11 @@ router.get('/referrals/:wallet', async (req, res) => {
 // ── POST /api/airdrop/register ────────────────────────────────────────────
 // Register wallet; optionally apply referral code (?ref=CODE in body)
 // After registration, automatically syncs on-chain SHIFT token holdings.
+//
+// UTM Phase A: when utmCapture middleware has set req.utmNormalized,
+// persist first_utm_* (if not locked) and always overwrite last_utm_*
+// on the user_profiles row keyed by this wallet. Failures are swallowed
+// so registration never fails on attribution-write side effects.
 router.post('/register', async (req, res) => {
     try {
         const { wallet, refCode } = req.body;
@@ -166,6 +171,45 @@ router.post('/register', async (req, res) => {
         const result = await referralService_1.referralService.registerWithReferral(wallet, refCode || undefined);
         // Fire-and-forget: sync holdings after new registration
         walletSyncService_1.walletSyncService.syncWallet(wallet).catch((err) => console.warn(`[Airdrop] Post-register sync failed for ${wallet.slice(0, 8)}...:`, err));
+        // UTM persistence — additive, non-blocking
+        if (req.utmNormalized) {
+            const u = req.utmNormalized;
+            // Only touch user_profiles when at least one normalized value survived
+            // validation (otherwise we'd write nothing of value).
+            if (u.source || u.medium || u.campaign || u.content || u.term) {
+                // Fire-and-forget; swallow errors so registration response is unaffected.
+                (async () => {
+                    try {
+                        await pool_1.pool.query(`
+              UPDATE user_profiles AS p
+              SET first_utm_source   = COALESCE(p.first_utm_source, $2),
+                  first_utm_medium   = COALESCE(p.first_utm_medium, $3),
+                  first_utm_campaign = COALESCE(p.first_utm_campaign, $4),
+                  first_utm_content  = COALESCE(p.first_utm_content, $5),
+                  first_utm_term     = COALESCE(p.first_utm_term, $6),
+                  last_utm_source    = COALESCE($2, p.last_utm_source),
+                  last_utm_medium    = COALESCE($3, p.last_utm_medium),
+                  last_utm_campaign  = COALESCE($4, p.last_utm_campaign),
+                  last_seen_at       = NOW(),
+                  updated_at         = NOW()
+              FROM identity_links l
+              WHERE l.profile_id = p.profile_id
+                AND l.identity_type = 'wallet'
+                AND l.identity_value = $1
+                AND l.unlinked_at IS NULL
+                AND (p.attribution_locked_at IS NULL OR (
+                  p.last_utm_source IS DISTINCT FROM $2
+                  OR p.last_utm_medium IS DISTINCT FROM $3
+                  OR p.last_utm_campaign IS DISTINCT FROM $4
+                ))
+              `, [wallet, u.source, u.medium, u.campaign, u.content, u.term]);
+                    }
+                    catch (err) {
+                        console.warn('[Airdrop/register] UTM persistence failed:', err);
+                    }
+                })();
+            }
+        }
         res.json(result);
     }
     catch (error) {

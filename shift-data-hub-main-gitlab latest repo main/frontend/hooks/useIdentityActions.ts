@@ -6,7 +6,7 @@ import type { IdentityLink, ProfileWithLinks } from './useUserProfile';
 type Result<T> = { ok: true; data: T } | { ok: false; error: ApiError | Error };
 
 interface AddLinkPayload {
-  type: 'wallet' | 'ga_client_id' | 'snag_user_id' | 'social_x' | 'social_discord' | 'social_telegram';
+  type: 'wallet' | 'ga_client_id' | 'snag_user_id' | 'x_handle' | 'discord_id' | 'telegram_id' | 'email';
   value: string;
   confidence?: 'deterministic' | 'probabilistic' | 'manual';
   evidence?: string;
