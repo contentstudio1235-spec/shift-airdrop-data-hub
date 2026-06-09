@@ -47,7 +47,55 @@ export interface Badge {
   earned_at: Date;
 }
 
-export type BadgeName = 'first_trade' | 'diamond_hands' | 'earnings_reactor' | 'fomc_trader' | 'shift_holder' | 'fed_day_trade' | 'cpi_bet' | 'news_reactor' | 'earnings_conviction' | 'geopolitical_trade' | 'long_hauler' | 'the_believer';
+export type BadgeName =
+  // Core position badges
+  | 'first_trade'
+  | 'diamond_hands_7d'
+  | 'diamond_hands'
+  | 'long_hauler'
+  | 'the_believer'
+  // Volume badges
+  | 'volume_veteran_i'
+  | 'volume_veteran_ii'
+  | 'volume_veteran_iii'
+  // Stacking badges
+  | 'doubled_down'
+  | 'triple_down'
+  | 'conviction_stack'
+  | 'pyramid_up'
+  // Social badges
+  | 'community_builder'
+  | 'referral_king'
+  // XP badges
+  | 'legend'
+  // OG badge
+  | 'the_og'
+  // Earnings / event badges
+  | 'earnings_reactor'
+  | 'multi_earnings_holder'
+  | 'fomc_trader'
+  | 'fed_day_trade'
+  | 'cpi_bet'
+  | 'news_reactor'
+  | 'earnings_conviction'
+  | 'geopolitical_trade'
+  // Blockchain badges
+  | 'shift_holder'
+  // Future / market-data badges
+  | 'dip_buyer'
+  | 'crash_buyer'
+  | 'black_swan_buyer'
+  | 'breakout_buyer'
+  | 'top_caller'
+  | 'momentum_rider'
+  | 'new_high_holder'
+  | 'macro_bear'
+  | 'iron_hands'
+  | 'squeeze_survivor'
+  | 'earnings_short'
+  | 'first_short'
+  | 'whale_mode'
+  | 'streak_7d';
 
 export interface Event {
   id: string;
