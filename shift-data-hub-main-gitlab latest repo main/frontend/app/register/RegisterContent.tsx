@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import ShiftIdCard from '@/components/ShiftIdCard';
@@ -10,6 +10,10 @@ import { useToast } from '@/components/ToastContext';
 
 // ── API Configuration ──
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://shift-airdrop-backend.onrender.com';
+
+// ── Simple cache for dashboard data (5 minute TTL) ──
+const dashboardCache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 interface AirdropUser {
   wallet: string;
@@ -137,20 +141,37 @@ export default function RegisterContent() {
         if (!res.ok) throw new Error('Failed to fetch user data');
         const data: AirdropUser = await res.json();
 
-        // Fetch leaderboard rank (position by SP, not registration order)
-        try {
-          const dashRes = await fetch(`${API_URL}/api/dashboard/${wallet}`);
-          if (dashRes.ok) {
-            const dashData = await dashRes.json();
-            data.rank = dashData.rank; // Actual leaderboard rank
-          }
-        } catch (e) {
-          console.warn('[Register] Could not fetch dashboard rank:', e);
-          // Fallback: if rank fetch fails, show queue position
-          data.rank = data.queuePosition;
-        }
+        // Set initial data immediately (don't wait for dashboard rank)
+        setUserData({ ...data, rank: data.queuePosition });
 
-        setUserData(data);
+        // Fetch leaderboard rank in parallel WITHOUT blocking (non-critical)
+        const fetchDashboardRank = async () => {
+          try {
+            // Check cache first
+            const cached = dashboardCache.get(wallet);
+            if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+              console.log('[Register] Using cached dashboard data');
+              setUserData(prev => prev ? { ...prev, rank: cached.data.rank } : null);
+              return;
+            }
+
+            const dashRes = await fetch(`${API_URL}/api/dashboard/${wallet}`);
+            if (!dashRes.ok) throw new Error('Dashboard fetch failed');
+
+            const dashData = await dashRes.json();
+            // Cache the result
+            dashboardCache.set(wallet, { data: dashData, timestamp: Date.now() });
+
+            // Update with actual rank
+            setUserData(prev => prev ? { ...prev, rank: dashData.rank } : null);
+          } catch (e) {
+            console.warn('[Register] Could not fetch dashboard rank:', e);
+            // Keep queue position as fallback (already set)
+          }
+        };
+
+        fetchDashboardRank();
+
       } catch (error) {
         console.error('[Register] Failed to fetch user data:', error);
         toast('Failed to load airdrop data. Please refresh.');
@@ -160,16 +181,16 @@ export default function RegisterContent() {
     };
 
     fetchUserData();
-  }, [wallet, refCode, toast]);
+  }, [wallet, refCode]);
 
-  // ── Handlers ──
-  const handleCopy = () => {
+  // ── Handlers (memoized to prevent re-renders) ──
+  const handleCopy = useCallback(() => {
     if (!userData) return;
     navigator.clipboard.writeText(userData.referralLink);
     toast('Referral link copied!');
-  };
+  }, [userData, toast]);
 
-  const handleShareX = () => {
+  const handleShareX = useCallback(() => {
     if (!userData) return;
     const text = encodeURIComponent(
       `I just joined the @ShiftRWA airdrop — queue position #${userData.queuePosition}! 🚀\n\nTrade RWA tokens on Solana and earn XP. Join via my link:`
@@ -178,7 +199,7 @@ export default function RegisterContent() {
       `https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(userData.referralLink)}`,
       '_blank'
     );
-  };
+  }, [userData]);
 
   // ── Render ──
   if (!wallet) {

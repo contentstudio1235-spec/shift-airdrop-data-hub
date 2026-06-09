@@ -8,8 +8,9 @@ vi.mock('@/lib/api');
 const sampleResponse = {
   rows: [{
     profileId: 'p-1', primaryWallet: 'AbCd1234', displayName: null,
-    lastSeenAt: '2026-06-03T00:00:00Z', firstUtmSource: 'twitter',
-    stitchedPct: 95, lifetimeVolumeUSD: 4200,
+    firstSeenAt: '2026-01-01T00:00:00Z', lastSeenAt: '2026-06-03T00:00:00Z',
+    firstUtmSource: 'twitter', stitchedPct: 95, lifetimeVolumeUSD: 4200,
+    holdingsValueUSD: 0, holdings: 2, hasX: true, hasDiscord: false,
   }],
   total: 1, page: 1, pageSize: 50,
 };
@@ -57,5 +58,17 @@ describe('useUsersList', () => {
     const callsBefore = (api.apiGet as any).mock.calls.length;
     result.current.refetch();
     expect((api.apiGet as any).mock.calls.length).toBeGreaterThan(callsBefore);
+  });
+
+  it('threads sortBy and sortDir into the fetch query string', async () => {
+    vi.spyOn(api, 'apiGet').mockResolvedValueOnce(sampleResponse);
+    const { result } = renderHook(() =>
+      useUsersList({ sortBy: 'volume', sortDir: 'desc' }, 1),
+    );
+    vi.runAllTimers();
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(api.apiGet).toHaveBeenCalledWith('/api/users', expect.objectContaining({
+      query: expect.objectContaining({ sortBy: 'volume', sortDir: 'desc' }),
+    }));
   });
 });

@@ -27,6 +27,10 @@ export const TOKENS = {
 
   chartGrid: 'rgba(255,255,255,0.04)',
   chartFill: 'rgba(255,255,255,0.03)',
+
+  // Sprint 3: KOLLeaderboard row hover + Sankey source node border
+  nodeSourceStroke: 'rgba(255,255,255,0.12)',
+  tableRowHover: 'rgba(0,200,150,0.04)',
 } as const;
 
 export const MOTION = {

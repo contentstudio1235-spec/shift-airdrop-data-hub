@@ -1,13 +1,167 @@
 "use client";
 import React, { useEffect, useRef, useState } from 'react';
 import { List } from 'react-window';
+import { ArrowUp, ArrowDown } from '@phosphor-icons/react';
 import { TOKENS, MOTION } from '@/lib/chartTokens';
-import { UserListRow } from './UserListRow';
+import { UserListRow, GRID_COLUMNS } from './UserListRow';
 import { EmptyState } from '../primitives/EmptyState';
 import { CaretLeft, CaretRight, MagnifyingGlass } from '@phosphor-icons/react';
 import type { ProfileSummary } from '@/hooks/useUsersList';
+import { FlagButton, FLAG_AFFORDANCE_HOST_CLASS } from '../primitives/FlagButton';
+import { ReconciliationBadge } from '../primitives/ReconciliationBadge';
+import { HUB_METRIC_IDS, HUB_TABS } from '@/lib/hubMetricIds';
 
 const ROW_HEIGHT = 56;
+
+// ─── Grid template — imported from UserListRow (single source of truth) ──────
+// UserListPane re-exports GRID_COLUMNS so consumers can import from either file.
+export { GRID_COLUMNS };
+const GRID_GAP = 10;
+
+// ─── SortableHeader ───────────────────────────────────────────────────────────
+
+interface SortableHeaderColumn {
+  key: string;
+  label: string;
+  width: string;
+  align?: 'left' | 'right' | 'center';
+  sortKey?: 'last_seen' | 'volume' | 'holdings' | 'holdings_value' | 'x' | 'discord';
+  /** When set, renders a FlagButton in this column header's negative space. */
+  flagMetricId?: string;
+}
+
+interface SortableHeaderProps {
+  columns: SortableHeaderColumn[];
+  activeSortKey: string | undefined;
+  activeSortDir: 'asc' | 'desc';
+  onSort: (key: string) => void;
+}
+
+function SortableHeader({ columns, activeSortKey, activeSortDir, onSort }: SortableHeaderProps) {
+  return (
+    <>
+      {/* Focus ring CSS for sortable header buttons */}
+      <style>{`
+        .sh-header-btn:focus-visible {
+          outline: 2px solid ${TOKENS.accent};
+          outline-offset: 2px;
+        }
+      `}</style>
+      <div
+        style={{
+          height: 36,
+          padding: '0 14px 0 12px',
+          display: 'grid',
+          gridTemplateColumns: GRID_COLUMNS,
+          columnGap: GRID_GAP,
+          alignItems: 'center',
+          background: TOKENS.panel,
+          borderBottom: `1px solid ${TOKENS.chartGrid}`,
+          flexShrink: 0,
+        }}
+      >
+        {columns.map((col) => {
+          const isActive = activeSortKey === col.sortKey && col.sortKey !== undefined;
+          const labelStyle: React.CSSProperties = {
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+            textAlign: col.align ?? 'left',
+            userSelect: 'none',
+          };
+
+          // Columns without sortKey render as static spans (non-interactive)
+          if (!col.sortKey) {
+            return (
+              <span
+                key={col.key}
+                style={{ ...labelStyle, color: TOKENS.textFaint }}
+              >
+                {col.label}
+              </span>
+            );
+          }
+
+          const sortButton = (
+            <button
+              className="sh-header-btn"
+              onClick={() => onSort(col.sortKey!)}
+              aria-sort={isActive ? (activeSortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+              style={{
+                all: 'unset',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: col.align === 'right' ? 'flex-end' : col.align === 'center' ? 'center' : 'flex-start',
+                gap: 4,
+                cursor: 'pointer',
+                ...labelStyle,
+                color: isActive ? TOKENS.textPrimary : TOKENS.textFaint,
+                padding: '4px 0',
+                borderRadius: 3,
+                transition: `color ${MOTION.fast}`,
+                outline: 'none',
+                width: '100%',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = TOKENS.tableRowHover; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              {col.label}
+              {isActive && (
+                activeSortDir === 'asc'
+                  ? <ArrowUp size={10} weight="bold" />
+                  : <ArrowDown size={10} weight="bold" />
+              )}
+            </button>
+          );
+
+          // Wrap with a flag-affordance host when the column declares a flag
+          // metric id. The button is a sibling of the FlagButton, never nested.
+          if (col.flagMetricId) {
+            return (
+              <span
+                key={col.key}
+                className={FLAG_AFFORDANCE_HOST_CLASS}
+                style={{ position: 'relative', display: 'flex', width: '100%' }}
+              >
+                {sortButton}
+                {col.flagMetricId && (
+                  <ReconciliationBadge metricId={col.flagMetricId} />
+                )}
+                <FlagButton
+                  tab={HUB_TABS.USERS}
+                  metricId={col.flagMetricId}
+                  displayedValue={`column:${col.key}`}
+                />
+              </span>
+            );
+          }
+
+          return <React.Fragment key={col.key}>{sortButton}</React.Fragment>;
+        })}
+      </div>
+    </>
+  );
+}
+
+// Column definitions — 10 columns matching the wider-pane spec.
+// WALLET and NAME: no sortKey → static spans.
+// FIRST SEEN: no sortKey → static span (first_seen sort not in backend safelist yet).
+// TG: no sortKey → static span (no backend data).
+// STITCH: no sortKey → static span (dot column, label intentionally empty).
+const HEADER_COLUMNS: SortableHeaderColumn[] = [
+  { key: 'wallet',      label: 'Wallet',     width: '224px', align: 'left' },
+  { key: 'name',        label: 'Name',       width: '148px', align: 'left' },
+  { key: 'volume',      label: 'Volume',     width: '92px',  align: 'right',  sortKey: 'volume',          flagMetricId: HUB_METRIC_IDS.USERS_LIST_VOLUME },
+  { key: 'value',       label: 'Value',      width: '92px',  align: 'right',  sortKey: 'holdings_value',  flagMetricId: HUB_METRIC_IDS.USERS_LIST_VALUE },
+  { key: 'last_seen',   label: 'Last Seen',  width: '80px',  align: 'right',  sortKey: 'last_seen' },
+  { key: 'first_seen',  label: 'First Seen', width: '76px',  align: 'right' },
+  { key: 'holdings',    label: 'Hold',       width: '56px',  align: 'right',  sortKey: 'holdings' },
+  { key: 'x',          label: 'X',          width: '28px',  align: 'center', sortKey: 'x' },
+  { key: 'discord',    label: '◆',          width: '28px',  align: 'center', sortKey: 'discord' },
+  { key: 'tg',         label: 'TG',         width: '28px',  align: 'center' },
+  { key: 'stitch',     label: '',           width: '28px',  align: 'center' },
+];
 
 export interface UserListPaneProps {
   rows: ProfileSummary[];
@@ -21,10 +175,13 @@ export interface UserListPaneProps {
   onPageChange: (page: number) => void;
   onResetFilters?: () => void;
   onRetry?: () => void;
+  // Sort props threaded from UsersView
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
+  onSort?: (key: string) => void;
 }
 
-// react-window v2 rowProps type — cannot contain ariaAttributes, index, or style
-// These are the extra props passed through to rowComponent beyond the injected ones
+// react-window v2 rowProps type — extra props beyond index/style/ariaAttributes
 type RowExtraProps = {
   rows: ProfileSummary[];
   selectedId: string | null;
@@ -92,11 +249,16 @@ function SkeletonRows() {
     <div>
       <style>{`@keyframes users-skeleton-shimmer { 0% { opacity: 0.3 } 50% { opacity: 0.5 } 100% { opacity: 0.3 } }`}</style>
       {Array.from({ length: 8 }, (_, i) => (
-        <div key={i} style={{ height: ROW_HEIGHT, padding: '0 14px 0 12px', display: 'grid', gridTemplateColumns: '140px 100px 90px 80px 20px', columnGap: 14, alignItems: 'center', borderBottom: `1px solid ${TOKENS.chartGrid}` }}>
+        <div key={i} style={{ height: ROW_HEIGHT, padding: '0 14px 0 12px', display: 'grid', gridTemplateColumns: GRID_COLUMNS, columnGap: GRID_GAP, alignItems: 'center', borderBottom: `1px solid ${TOKENS.chartGrid}` }}>
           <div style={{ height: 12, width: '80%', background: 'rgba(255,255,255,0.04)', borderRadius: 4, animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
           <div style={{ height: 10, width: '60%', background: 'rgba(255,255,255,0.04)', borderRadius: 4, animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
           <div style={{ height: 12, width: '70%', background: 'rgba(255,255,255,0.04)', borderRadius: 4, animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
           <div style={{ height: 10, width: '50%', background: 'rgba(255,255,255,0.04)', borderRadius: 4, animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
+          <div style={{ height: 10, width: '50%', background: 'rgba(255,255,255,0.04)', borderRadius: 4, animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
+          <div style={{ height: 10, width: '40%', background: 'rgba(255,255,255,0.04)', borderRadius: 4, animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', animation: 'users-skeleton-shimmer 1.6s ease-in-out infinite' }} />
         </div>
       ))}
@@ -134,9 +296,34 @@ function VirtualRow({
   );
 }
 
-export function UserListPane({ rows, total, page, pageSize, loading, error, selectedId, onSelect, onPageChange, onResetFilters, onRetry }: UserListPaneProps) {
+export function UserListPane({
+  rows,
+  total,
+  page,
+  pageSize,
+  loading,
+  error,
+  selectedId,
+  onSelect,
+  onPageChange,
+  onResetFilters,
+  onRetry,
+  sortBy,
+  sortDir = 'desc',
+  onSort,
+}: UserListPaneProps) {
   const listContainerRef = useRef<HTMLDivElement>(null);
   const height = useResizeObserver(listContainerRef);
+
+  // Accessible sort announcement for screen readers
+  const [sortAnnouncement, setSortAnnouncement] = useState('');
+  const handleSort = (key: string) => {
+    if (!onSort) return;
+    onSort(key);
+    const col = HEADER_COLUMNS.find(c => c.sortKey === key);
+    const newDir = sortBy === key ? (sortDir === 'asc' ? 'desc' : 'asc') : 'desc';
+    setSortAnnouncement(`Sorted by ${col?.label ?? key} ${newDir === 'asc' ? 'ascending' : 'descending'}`);
+  };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rowProps = { rows, selectedId, onSelect } as any;
@@ -147,16 +334,29 @@ export function UserListPane({ rows, total, page, pageSize, loading, error, sele
       background: TOKENS.panel, border: `1px solid ${TOKENS.accentBorder}`,
       borderRadius: 16, backdropFilter: 'blur(12px)', overflow: 'hidden',
     }}>
-      {/* Header row */}
-      <div style={{
-        height: 32, padding: '0 14px 0 12px', display: 'grid',
-        gridTemplateColumns: '140px 100px 90px 80px 20px', columnGap: 14, alignItems: 'center',
-        borderBottom: `1px solid ${TOKENS.accentBorder}`, flexShrink: 0,
-      }}>
-        {(['WALLET', 'NAME', 'VOLUME', 'LAST SEEN', ''] as const).map((label, i) => (
-          <span key={i} style={{ fontSize: 10, fontWeight: 800, color: TOKENS.textFaint, letterSpacing: '0.12em', textTransform: 'uppercase', textAlign: i >= 2 && i <= 3 ? 'right' : 'left' }}>{label}</span>
-        ))}
-      </div>
+      {/* aria-live region for sort change announcements (includes Holdings) */}
+      <span
+        aria-live="polite"
+        style={{
+          position: 'absolute',
+          width: 1, height: 1,
+          padding: 0, margin: -1,
+          overflow: 'hidden',
+          clip: 'rect(0,0,0,0)',
+          whiteSpace: 'nowrap',
+          border: 0,
+        }}
+      >
+        {sortAnnouncement}
+      </span>
+
+      {/* Pinned sortable header — NOT inside the scroll viewport */}
+      <SortableHeader
+        columns={HEADER_COLUMNS}
+        activeSortKey={sortBy}
+        activeSortDir={sortDir}
+        onSort={handleSort}
+      />
 
       {/* Body */}
       <div ref={listContainerRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>

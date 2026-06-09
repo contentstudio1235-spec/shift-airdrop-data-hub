@@ -24,9 +24,15 @@ const fmtUSD = (n: number) =>
 
 export function HeroVolume7d({ filters }: { filters: Filters }) {
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  // MR !33 fix (Tomer reported "$1.2K" was wrong): pass `volumeFrom` NOT
+  // `from`. The `from` param scopes the user-cohort (who registered when);
+  // `volumeFrom` scopes the trading window. Previously both fired off the
+  // single `from` value, so we showed "7d-new-user 7d trading volume" rather
+  // than actual 7d trading volume from all users. See attributionService.ts
+  // header comment for the full semantic.
   const { data, loading, error, refetch } = useFunnelData<ChannelROIResponse>(
     '/api/attribution/channel-roi',
-    { ...filters, from: sevenDaysAgo },
+    { ...filters, volumeFrom: sevenDaysAgo },
   );
 
   if (loading && !data) {
@@ -40,8 +46,14 @@ export function HeroVolume7d({ filters }: { filters: Filters }) {
   const top5 = (data.rows ?? []).slice(0, 5);
   const isPlaceholder = data.dataQuality === 'sprint_0_placeholder';
 
+  // MR !33: subtitle previously leaked the column name (`Source: utm_source`)
+  // as if it were a data value. Restated as plain attribution method.
+  const subtitle = isPlaceholder
+    ? 'Attribution: referral-code (legacy)'
+    : 'Positions opened in last 7d, attributed by first UTM source';
+
   return (
-    <ChartFrame title="7d Volume" subtitle={isPlaceholder ? 'Source: referred_by_code (v1)' : 'Source: utm_source'}>
+    <ChartFrame title="7d Volume" subtitle={subtitle}>
       <BigNumber value={total} formatter={fmtUSD} />
       <div style={{ marginTop: 12, height: 64 }}>
         <ResponsiveContainer>

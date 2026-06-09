@@ -4,6 +4,7 @@ exports.computeChannelROI = computeChannelROI;
 exports.computeTopCampaigns = computeTopCampaigns;
 exports.computeAttributionCoverage = computeAttributionCoverage;
 exports.computeWhaleOrigins = computeWhaleOrigins;
+exports.computeKOLLeaderboard = computeKOLLeaderboard;
 exports.invalidateAttributionCache = invalidateAttributionCache;
 // src/services/attributionService.ts
 const pool_1 = require("../db/pool");
@@ -24,6 +25,19 @@ async function computeChannelROI(params) {
     //   - 6-char alphanumeric values are Snag referral codes (e.g. ?ref=3VAN8Y),
     //     collapsed into a single 'snag_referrals' channel rather than appearing
     //     as 50+ pseudo-source rows
+    //
+    // MR !33 fix (Tomer reported "$1.2K" was wrong on HeroVolume7d):
+    //   Previously the SAME `from`/`to` params filtered BOTH user creation AND
+    //   position opening. Result: "7d volume" actually meant "7d-new-user 7d
+    //   trading volume," undercounting by 10-50× because returning-user
+    //   trading was excluded entirely.
+    //   Fix: decouple. `from`/`to` now scope user-cohort only (params $1/$2);
+    //   `volumeFrom`/`volumeTo` (params $3/$4) scope the positions window.
+    //   When volumeFrom is provided WITHOUT from, users are unfiltered — that
+    //   yields "all users' trading in last N days, attributed by their source,"
+    //   which is what "7d Volume" actually means.
+    //   Back-compat: when volumeFrom/volumeTo are NULL, falls back to from/to
+    //   for the positions window — preserves existing callers' semantics.
     const rows = await (0, pool_1.query)(`
     -- Check the 6-char Snag-referral pattern on raw values BEFORE the COALESCE
     -- falls through to 'direct'. Otherwise 'direct' (literally 6 letters) gets
@@ -49,8 +63,8 @@ async function computeChannelROI(params) {
     holders AS (
       SELECT wallet, SUM(position_size_usd) AS volume
       FROM positions
-      WHERE ($1::timestamp IS NULL OR opened_at >= $1)
-        AND ($2::timestamp IS NULL OR opened_at <= $2)
+      WHERE (COALESCE($3::timestamp, $1::timestamp) IS NULL OR opened_at >= COALESCE($3::timestamp, $1::timestamp))
+        AND (COALESCE($4::timestamp, $2::timestamp) IS NULL OR opened_at <= COALESCE($4::timestamp, $2::timestamp))
       GROUP BY wallet
     )
     SELECT
@@ -66,7 +80,7 @@ async function computeChannelROI(params) {
     GROUP BY us.source
     ORDER BY users DESC
     LIMIT 50
-    `, [params.from ?? null, params.to ?? null]);
+    `, [params.from ?? null, params.to ?? null, params.volumeFrom ?? null, params.volumeTo ?? null]);
     const result = rows.map(r => ({
         source: r.source,
         users: Number(r.users),
@@ -162,32 +176,150 @@ async function computeAttributionCoverage(params) {
     return result;
 }
 async function computeWhaleOrigins(params) {
-    const cacheKey = `whale_origins|${(0, cache_1.buildCacheKey)('whale_origins', params)}`;
+    const cacheKey = `whale_origins_v2|${(0, cache_1.buildCacheKey)('whale_origins_v2', params)}`;
     const cached = cache.get(cacheKey);
     if (cached)
         return cached;
     const rows = await (0, pool_1.query)(`
-    WITH whales AS (
-      SELECT DISTINCT p.wallet FROM positions p
-      WHERE p.position_size_usd >= 1000
-        AND ($1::timestamp IS NULL OR p.opened_at >= $1)
-        AND ($2::timestamp IS NULL OR p.opened_at <= $2)
+    WITH base AS (
+      SELECT
+        CASE
+          WHEN NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy') ~ '^[a-zA-Z0-9]{6}$' THEN 'snag_referrals'
+          WHEN NULLIF(u.referred_by_code, '') ~ '^[a-zA-Z0-9]{6}$' THEN 'snag_referrals'
+          ELSE COALESCE(
+            NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy'),
+            NULLIF(u.referred_by_code, ''),
+            'direct'
+          )
+        END AS source,
+        u.wallet,
+        p.last_seen_at
+      FROM users u
+      LEFT JOIN user_profiles p ON p.primary_wallet = u.wallet AND p.merged_into_profile_id IS NULL
+      WHERE ($1::timestamp IS NULL OR u.created_at >= $1)
+        AND ($2::timestamp IS NULL OR u.created_at <= $2)
     ),
-    whale_sources AS (
-      SELECT COALESCE(NULLIF(u.referred_by_code, ''), 'direct') AS source, w.wallet
-      FROM whales w INNER JOIN users u ON u.wallet = w.wallet
+    vol AS (
+      SELECT b.wallet, b.source, b.last_seen_at,
+             COALESCE(SUM(pos.position_size_usd), 0) AS volume
+      FROM base b
+      LEFT JOIN positions pos ON pos.wallet = b.wallet
+      GROUP BY b.wallet, b.source, b.last_seen_at
     )
-    SELECT source AS from_node, 'whale_trade'::text AS to_node, COUNT(*)::bigint AS value
-    FROM whale_sources
-    GROUP BY source
-    ORDER BY value DESC
-    LIMIT 50
+    SELECT source,
+           CASE WHEN volume >= 1000 THEN 'whale'
+                WHEN volume > 0 THEN 'dolphin'
+                ELSE 'fish' END AS cohort,
+           CASE WHEN last_seen_at IS NULL THEN 'churned'
+                WHEN last_seen_at > NOW() - INTERVAL '30 days' THEN 'active'
+                ELSE 'dormant' END AS outcome,
+           COUNT(*)::text AS users,
+           SUM(volume)::text AS volume
+    FROM vol
+    GROUP BY source, cohort, outcome
     `, [params.from ?? null, params.to ?? null]);
-    const result = rows.map(r => ({
-        from: r.from_node,
-        to: r.to_node,
-        value: Number(r.value),
-    }));
+    const sources = new Map();
+    const cohorts = new Map();
+    const outcomes = new Map();
+    const sourceToCohort = new Map();
+    const cohortToOutcome = new Map();
+    let totalWhales = 0, totalWhaleVolume = 0, totalSourceUsers = 0;
+    for (const r of rows) {
+        const users = Number(r.users);
+        const volume = Number(r.volume);
+        sources.set(r.source, (sources.get(r.source) ?? 0) + users);
+        cohorts.set(r.cohort, (cohorts.get(r.cohort) ?? 0) + users);
+        outcomes.set(r.outcome, (outcomes.get(r.outcome) ?? 0) + users);
+        const sKey = `src:${r.source}|coh:${r.cohort}`;
+        sourceToCohort.set(sKey, (sourceToCohort.get(sKey) ?? 0) + users);
+        const cKey = `coh:${r.cohort}|out:${r.outcome}`;
+        cohortToOutcome.set(cKey, (cohortToOutcome.get(cKey) ?? 0) + users);
+        totalSourceUsers += users;
+        if (r.cohort === 'whale') {
+            totalWhales += users;
+            totalWhaleVolume += volume;
+        }
+    }
+    const nodes = [
+        ...Array.from(sources.entries()).map(([s, v]) => ({ id: `src:${s}`, label: s, kind: 'source', value: v })),
+        ...Array.from(cohorts.entries()).map(([c, v]) => ({ id: `coh:${c}`, label: c, kind: 'cohort', value: v })),
+        ...Array.from(outcomes.entries()).map(([o, v]) => ({ id: `out:${o}`, label: o, kind: 'outcome', value: v })),
+    ];
+    const edges = [
+        ...Array.from(sourceToCohort.entries()).map(([k, v]) => { const [from, to] = k.split('|'); return { from, to, value: v }; }),
+        ...Array.from(cohortToOutcome.entries()).map(([k, v]) => { const [from, to] = k.split('|'); return { from, to, value: v }; }),
+    ];
+    const result = {
+        nodes, edges,
+        totals: { sourceUsers: totalSourceUsers, whales: totalWhales, whaleVolumeUSD: totalWhaleVolume },
+        computedAt: new Date().toISOString(),
+        dataQuality: 'sprint_2_3_live',
+    };
+    cache.set(cacheKey, result);
+    return result;
+}
+async function computeKOLLeaderboard(params, limit = 50) {
+    const cacheKey = `kol|${(0, cache_1.buildCacheKey)('kol', { ...params, limit })}`;
+    const cached = cache.get(cacheKey);
+    if (cached)
+        return cached;
+    const rows = await (0, pool_1.query)(`
+    WITH agg AS (
+      SELECT u.referred_by_code AS referrer,
+             u.wallet,
+             u.created_at,
+             COALESCE(SUM(p.position_size_usd), 0) AS user_volume
+      FROM users u
+      LEFT JOIN positions p ON p.wallet = u.wallet
+      WHERE u.referred_by_code IS NOT NULL AND u.referred_by_code <> ''
+        AND ($1::timestamp IS NULL OR u.created_at >= $1)
+        AND ($2::timestamp IS NULL OR u.created_at <= $2)
+      GROUP BY u.referred_by_code, u.wallet, u.created_at
+    )
+    SELECT referrer,
+           COUNT(*)::text AS users,
+           COUNT(*) FILTER (WHERE user_volume > 0)::text AS holders,
+           COUNT(*) FILTER (WHERE user_volume >= 1000)::text AS whales,
+           SUM(user_volume)::text AS volume,
+           MIN(created_at)::text AS first_seen,
+           MAX(created_at)::text AS last_seen
+    FROM agg
+    GROUP BY referrer
+    HAVING COUNT(*) >= 5
+    LIMIT $3
+    `, [params.from ?? null, params.to ?? null, limit * 4]);
+    const entries = rows.map(r => {
+        const users = Number(r.users);
+        const holders = Number(r.holders);
+        const volume = Number(r.volume);
+        // holderRate is a FRACTION (0..1). KOLLeaderboard frontend multiplies by 100
+        // for display and uses fraction thresholds (>=0.1=green, >=0.03=yellow).
+        // Per Code Reviewer sprint-3-code-review.md BLOCKER 1 — backend used to emit
+        // percent (15 for 15%) which the frontend then re-multiplied → "1500.0%".
+        const holderRate = users === 0 ? 0 : Math.round((holders / users) * 10000) / 10000;
+        // Score uses the percent representation so log10 spread reads sensibly.
+        // Multiplying every score by 100 is a monotonic transform — ranking preserved.
+        const score = (holderRate * 100) * Math.log10(1 + volume) * Math.log10(1 + users);
+        const isSnag = /^[a-zA-Z0-9]{6}$/.test(r.referrer);
+        return {
+            referrer: r.referrer,
+            source: isSnag ? 'snag_referrals' : 'other',
+            users, holders, whales: Number(r.whales),
+            holderRate,
+            totalVolumeUSD: volume,
+            avgVolumePerUserUSD: users === 0 ? 0 : Math.round(volume / users),
+            score: Math.round(score * 100) / 100,
+            firstSeenAt: r.first_seen,
+            lastSeenAt: r.last_seen,
+        };
+    });
+    entries.sort((a, b) => b.score - a.score);
+    const result = {
+        rows: entries.slice(0, limit),
+        totals: { totalReferrers: entries.length, activeReferrers: entries.filter(e => e.holders > 0).length },
+        computedAt: new Date().toISOString(),
+        dataQuality: 'sprint_2_3_live',
+    };
     cache.set(cacheKey, result);
     return result;
 }

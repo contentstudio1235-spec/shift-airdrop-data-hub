@@ -12,6 +12,8 @@ import type {
   ProfileSummary,
   ProfileFilters,
   TimelineEntry,
+  SortKey,
+  SortDir,
 } from '../types/identity';
 import { IdentityConflictError, ProfileNotFoundError, MergeWithoutEvidenceError } from '../types/identity';
 
@@ -304,12 +306,72 @@ export async function getProfile(profileId: string): Promise<ProfileWithLinks | 
 
 // ─── searchProfiles ───────────────────────────────────────────────────────────
 
+// ── Correlated scalar subquery templates for position-derived metrics ────────
+// These MUST be scalar subqueries (not JOIN-based aggregates), because joining
+// positions through identity_links at the outer query level multiplies rows by
+// the number of identity_link rows per profile (one per identity_type), producing
+// N× inflation of SUM/COUNT. The detail endpoint (getProfile) already uses this
+// pattern correctly — listing must match.
+const VOLUME_SUBQUERY = `(
+  SELECT COALESCE(SUM(ps.position_size_usd), 0)
+  FROM positions ps
+  JOIN identity_links il2
+    ON il2.identity_value = ps.wallet
+   AND il2.identity_type = 'wallet'
+   AND il2.unlinked_at IS NULL
+  WHERE il2.profile_id = p.profile_id
+)`;
+const HOLDINGS_VALUE_SUBQUERY = `(
+  SELECT COALESCE(SUM(ps.position_size_usd), 0)
+  FROM positions ps
+  JOIN identity_links il2
+    ON il2.identity_value = ps.wallet
+   AND il2.identity_type = 'wallet'
+   AND il2.unlinked_at IS NULL
+  WHERE il2.profile_id = p.profile_id
+    AND ps.status = 'open'
+)`;
+const HOLDINGS_COUNT_SUBQUERY = `(
+  SELECT COUNT(*)
+  FROM positions ps
+  JOIN identity_links il2
+    ON il2.identity_value = ps.wallet
+   AND il2.identity_type = 'wallet'
+   AND il2.unlinked_at IS NULL
+  WHERE il2.profile_id = p.profile_id
+    AND ps.status = 'open'
+)`;
+
+// Safelist: maps SortKey values to their SQL expressions.
+// NEVER concatenate user-supplied sortBy directly — always index through this map.
+const SORT_EXPR: Record<SortKey, string> = {
+  last_seen: 'p.last_seen_at',
+  volume: VOLUME_SUBQUERY,
+  holdings: HOLDINGS_COUNT_SUBQUERY,
+  holdings_value: HOLDINGS_VALUE_SUBQUERY,
+  x: 'COUNT(DISTINCT ilx.id)',
+  discord: 'COUNT(DISTINCT ild.id)',
+  referral_source: `CASE
+    WHEN NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy') ~ '^[a-zA-Z0-9]{6}$' THEN 'snag_referrals'
+    ELSE COALESCE(NULLIF(NULLIF(LOWER(p.first_utm_source), ''), 'unknown_legacy'), 'zzz_direct')
+  END`,
+};
+
+const VALID_SORT_KEYS = new Set<SortKey>(['last_seen', 'volume', 'holdings', 'holdings_value', 'x', 'discord', 'referral_source']);
+
 export async function searchProfiles(
   filters: ProfileFilters,
 ): Promise<{ rows: ProfileSummary[]; total: number; page: number; pageSize: number }> {
   const page = Math.max(1, filters.page ?? 1);
   const pageSize = Math.min(200, Math.max(1, filters.pageSize ?? 50));
   const offset = (page - 1) * pageSize;
+
+  // Safelist sortBy — fall back to last_seen if unknown value supplied
+  const sortKey: SortKey = (filters.sortBy && VALID_SORT_KEYS.has(filters.sortBy))
+    ? filters.sortBy
+    : 'last_seen';
+  const sortDir: SortDir = filters.sortDir === 'asc' ? 'asc' : 'desc';
+  const orderBySql = `ORDER BY ${SORT_EXPR[sortKey]} ${sortDir.toUpperCase()} NULLS LAST`;
 
   const where: string[] = ['p.merged_into_profile_id IS NULL'];
   const params: unknown[] = [];
@@ -321,6 +383,34 @@ export async function searchProfiles(
   if (filters.activitySince) {
     params.push(filters.activitySince);
     where.push(`p.last_seen_at >= $${params.length}::timestamptz`);
+  }
+
+  // ── KOL drill-down referrer filter ──────────────────────────────────────────
+  // Driven by ?referrer=<value>&referrerType=snag|utm. Both must be present;
+  // missing either → no referrer filter applied. Bound as separate parameters
+  // (no string interpolation of `referrer` into SQL bodies).
+  //
+  // referrerType='snag' uses an EXISTS subquery against `users` joined to the
+  // profile via `users.user_profile_id` (see migration 017). This is a semi-join
+  // — it cannot multiply outer rows even if a profile has multiple `users`
+  // rows, so the recent row-multiplication fix (MR !21, which moved positions
+  // to scalar subqueries) is NOT reintroduced here.
+  //
+  // referrerType='utm' uses the same column as the free-form `source` filter,
+  // but bound to its own parameter so the two can coexist if both supplied.
+  if (filters.referrer && filters.referrerType) {
+    params.push(filters.referrer);
+    const refIdx = params.length;
+    if (filters.referrerType === 'snag') {
+      where.push(`EXISTS (
+        SELECT 1 FROM users u_ref
+        WHERE u_ref.user_profile_id = p.profile_id
+          AND u_ref.referred_by_code = $${refIdx}
+      )`);
+    } else {
+      // referrerType === 'utm'
+      where.push(`p.first_utm_source = $${refIdx}`);
+    }
   }
   if (filters.q) {
     params.push(`${filters.q.toLowerCase()}%`);
@@ -337,36 +427,82 @@ export async function searchProfiles(
     )`);
   }
 
+  // hasSocial filter — gated by enum, SQL is static (no user input interpolation)
+  // Same clause applied to both rowsQuery and countQuery via shared whereSql so
+  // `total` stays consistent with the returned rows.
+  if (filters.hasSocial === 'x' || filters.hasSocial === 'both') {
+    where.push(`EXISTS (
+      SELECT 1 FROM identity_links ilx_f
+      WHERE ilx_f.profile_id = p.profile_id
+        AND ilx_f.identity_type = 'x_handle'
+        AND ilx_f.unlinked_at IS NULL
+    )`);
+  }
+  if (filters.hasSocial === 'discord' || filters.hasSocial === 'both') {
+    where.push(`EXISTS (
+      SELECT 1 FROM identity_links ild_f
+      WHERE ild_f.profile_id = p.profile_id
+        AND ild_f.identity_type = 'discord_id'
+        AND ild_f.unlinked_at IS NULL
+    )`);
+  }
+  if (filters.hasSocial === 'none') {
+    where.push(`NOT EXISTS (
+      SELECT 1 FROM identity_links ilx_n
+      WHERE ilx_n.profile_id = p.profile_id
+        AND ilx_n.identity_type = 'x_handle'
+        AND ilx_n.unlinked_at IS NULL
+    )`);
+    where.push(`NOT EXISTS (
+      SELECT 1 FROM identity_links ild_n
+      WHERE ild_n.profile_id = p.profile_id
+        AND ild_n.identity_type = 'discord_id'
+        AND ild_n.unlinked_at IS NULL
+    )`);
+  }
+
   const whereSql = `WHERE ${where.join(' AND ')}`;
   const walletSizeMinNum = filters.walletSizeMin !== undefined ? Number(filters.walletSizeMin) : null;
   const stitchPctMinNum = filters.stitchPctMin !== undefined ? Number(filters.stitchPctMin) : null;
 
   const havingClauses: string[] = [];
   if (walletSizeMinNum !== null && Number.isFinite(walletSizeMinNum) && walletSizeMinNum >= 0) {
-    havingClauses.push(`COALESCE(SUM(pos.position_size_usd), 0) >= ${walletSizeMinNum}`);
+    // Use scalar subquery — see VOLUME_SUBQUERY comment above. The HAVING clause
+    // is evaluated after GROUP BY, where p.profile_id is resolved per group, so
+    // the correlated subquery sees a stable per-group p.profile_id reference.
+    havingClauses.push(`${VOLUME_SUBQUERY} >= ${walletSizeMinNum}`);
   }
   if (stitchPctMinNum !== null && Number.isFinite(stitchPctMinNum) && stitchPctMinNum >= 0) {
     havingClauses.push(`(COUNT(DISTINCT il.identity_type) * 100.0 / 7.0) >= ${stitchPctMinNum}`);
   }
   const havingSql = havingClauses.length > 0 ? `HAVING ${havingClauses.join(' AND ')}` : '';
 
+  // NOTE: positions are NOT joined in this query. Position-derived metrics
+  // (lifetime_volume_usd, holdings_value_usd, holdings) are computed via
+  // correlated scalar subqueries against `positions` to avoid row multiplication
+  // when a profile has multiple identity_links rows. See VOLUME_SUBQUERY above.
   const rowsQuery = `
     SELECT
       p.profile_id,
       p.primary_wallet,
       p.display_name,
+      p.first_seen_at,
       p.last_seen_at,
       p.first_utm_source,
       (COUNT(DISTINCT il.identity_type) * 100.0 / 7.0) AS stitched_pct,
-      COALESCE(SUM(pos.position_size_usd), 0) AS lifetime_volume_usd
+      ${VOLUME_SUBQUERY} AS lifetime_volume_usd,
+      ${HOLDINGS_VALUE_SUBQUERY} AS holdings_value_usd,
+      ${HOLDINGS_COUNT_SUBQUERY}::int AS holdings,
+      (COUNT(DISTINCT ilx.id) > 0) AS has_x,
+      (COUNT(DISTINCT ild.id) > 0) AS has_discord
     FROM user_profiles p
     LEFT JOIN identity_links il ON il.profile_id = p.profile_id AND il.unlinked_at IS NULL
-    LEFT JOIN identity_links wl ON wl.profile_id = p.profile_id AND wl.identity_type = 'wallet' AND wl.unlinked_at IS NULL
-    LEFT JOIN positions pos ON pos.wallet = wl.identity_value
+    LEFT JOIN identity_links ilx ON ilx.profile_id = p.profile_id AND ilx.identity_type = 'x_handle' AND ilx.unlinked_at IS NULL
+    LEFT JOIN identity_links ild ON ild.profile_id = p.profile_id AND ild.identity_type = 'discord_id' AND ild.unlinked_at IS NULL
     ${whereSql}
     GROUP BY p.profile_id
     ${havingSql}
-    ORDER BY p.last_seen_at DESC NULLS LAST
+    ${orderBySql}
     LIMIT ${pageSize} OFFSET ${offset}
   `;
 
@@ -374,10 +510,15 @@ export async function searchProfiles(
     profile_id: string;
     primary_wallet: string;
     display_name: string | null;
+    first_seen_at: string;
     last_seen_at: string;
     first_utm_source: string | null;
     stitched_pct: string;
     lifetime_volume_usd: string;
+    holdings_value_usd: string;
+    holdings: string;
+    has_x: boolean;
+    has_discord: boolean;
   }>(rowsQuery, params);
 
   const countQuery = `
@@ -396,10 +537,15 @@ export async function searchProfiles(
       profileId: r.profile_id,
       primaryWallet: r.primary_wallet,
       displayName: r.display_name,
+      firstSeenAt: r.first_seen_at,
       lastSeenAt: r.last_seen_at,
       firstUtmSource: r.first_utm_source,
       stitchedPct: Math.round(Number(r.stitched_pct) * 10) / 10,
       lifetimeVolumeUSD: Number(r.lifetime_volume_usd),
+      holdingsValueUSD: Number(r.holdings_value_usd),
+      holdings: Number(r.holdings),
+      hasX: r.has_x,
+      hasDiscord: r.has_discord,
     })),
     total: Number(totalRow?.total ?? 0),
     page,

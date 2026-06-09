@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { label: 'Trade', href: 'https://app.shiftrwa.xyz', soon: false, external: true },
   { label: 'Airdrop', href: '/airdrop', soon: false, external: false },
   { label: 'Loyalty', href: '/loyalty', soon: false, external: false },
+  { label: 'Referral', href: '/referral', soon: false, external: false },
   { label: 'Leaderboard', href: '/leaderboard', soon: false, external: false },
   { label: 'Equities Score', href: '/equities', soon: true, external: false },
   { label: 'Certificates', href: '/certificates', soon: true, external: false },

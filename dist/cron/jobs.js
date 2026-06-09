@@ -10,8 +10,10 @@ exports.initCronJobs = initCronJobs;
 exports.runManualSync = runManualSync;
 const node_cron_1 = __importDefault(require("node-cron"));
 const snagSyncService_1 = require("../services/snagSyncService");
+const positionPriceService_1 = require("../services/positionPriceService");
 let isRunning = false;
 let isQueueRunning = false;
+let isPriceRunning = false;
 /**
  * Initialize all cron jobs.
  */
@@ -55,7 +57,28 @@ function initCronJobs() {
             isQueueRunning = false;
         }
     });
-    console.log('[Cron] ✅ Scheduled: full sync every 5 minutes, queue retry every 2 minutes');
+    // ── Live price update every 5 minutes ──
+    // Fetches current market prices for all open positions and updates:
+    //   • current_price
+    //   • position_size_usd = token_amount × current_price
+    // This ensures XP is calculated on LIVE holding value, not stale entry price.
+    node_cron_1.default.schedule('*/5 * * * *', async () => {
+        if (isPriceRunning) {
+            console.log('[Cron] Previous price update still running, skipping…');
+            return;
+        }
+        isPriceRunning = true;
+        try {
+            await positionPriceService_1.positionPriceService.updateAllOpenPositionPrices();
+        }
+        catch (err) {
+            console.error('[Cron] ❌ Price update failed:', err);
+        }
+        finally {
+            isPriceRunning = false;
+        }
+    });
+    console.log('[Cron] ✅ Scheduled: full sync every 5 min, price update every 5 min, queue retry every 2 min');
 }
 /**
  * Run a manual sync (for testing / admin endpoint).

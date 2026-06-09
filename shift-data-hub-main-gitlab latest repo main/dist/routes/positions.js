@@ -5,8 +5,10 @@ const positionService_1 = require("../services/positionService");
 const tokens_1 = require("../config/tokens");
 const xpEngine_1 = require("../services/xpEngine");
 const launchMultipliers_1 = require("../config/launchMultipliers");
+const jupiterPriceService_1 = require("../services/jupiterPriceService");
+const pnlService_1 = require("../services/pnlService");
 const router = (0, express_1.Router)();
-// Get active positions for a wallet with detailed XP projections
+// Get active positions for a wallet with detailed XP projections and P&L
 router.get('/:wallet/active', async (req, res) => {
     const { wallet } = req.params;
     try {
@@ -15,7 +17,10 @@ router.get('/:wallet/active', async (req, res) => {
         // Get detailed XP breakdown
         const xpBreakdown = await xpEngine_1.xpEngine.getXPBreakdown(wallet);
         const breakdownMap = new Map(xpBreakdown.map(b => [b.asset, b]));
-        // Add real-time projections for the frontend UX
+        // Fetch current prices for P&L calculation
+        const assetMints = [...new Set(positions.map(p => p.asset_mint || p.asset).filter(Boolean))];
+        const prices = await jupiterPriceService_1.jupiterPriceService.getPrices(assetMints);
+        // Add real-time projections and P&L for the frontend UX
         const enrichedPositions = positions.map(pos => {
             const { weeks, days } = positionService_1.positionService.getPositionAge(pos.opened_at);
             // Base multiplier from token configuration (e.g., SOX3L = 1.25x)
@@ -36,6 +41,9 @@ router.get('/:wallet/active', async (req, res) => {
             const xpPerHour = Math.floor((baseXpPerWeek * launchPhase.multiplier) / (7 * 24));
             // Launch event info
             const breakdownInfo = breakdownMap.get(pos.asset);
+            // P&L calculation
+            const currentPrice = prices[pos.asset_mint || pos.asset] || 0;
+            const pnlData = (0, pnlService_1.calculatePositionPnL)(pos, currentPrice);
             return {
                 id: pos.id,
                 asset: pos.asset,
@@ -56,6 +64,11 @@ router.get('/:wallet/active', async (req, res) => {
                     label: launchPhase.label,
                     countdownDisplay: launchPhase.countdownDisplay,
                 },
+                // P&L fields
+                priceAtOpen: pos.price_at_open ? Number(pos.price_at_open) : undefined,
+                currentPrice,
+                pnlUsd: pnlData?.unrealizedUsd,
+                pnlPct: pnlData?.unrealizedPct,
             };
         });
         res.json({
@@ -74,7 +87,7 @@ router.get('/:wallet/active', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
-// Get closed (historical) positions for a wallet
+// Get closed (historical) positions for a wallet with P&L data
 router.get('/:wallet/history', async (req, res) => {
     const { wallet } = req.params;
     try {
@@ -98,6 +111,10 @@ router.get('/:wallet/history', async (req, res) => {
             const totalSpEarned = Number(pos.xp_generated) > 0
                 ? Math.floor(Number(pos.xp_generated))
                 : Math.floor(xpPerWeek * Math.max(weeksHeld, 1));
+            // P&L for closed position (if prices are recorded)
+            const pnlData = pos.price_at_close
+                ? (0, pnlService_1.calculatePositionPnL)(pos, Number(pos.price_at_close))
+                : null;
             return {
                 id: pos.id,
                 asset: pos.asset,
@@ -109,6 +126,11 @@ router.get('/:wallet/history', async (req, res) => {
                 xpPerWeek,
                 totalSpEarned,
                 status: 'closed',
+                // P&L fields
+                priceAtOpen: pos.price_at_open ? Number(pos.price_at_open) : undefined,
+                priceAtClose: pos.price_at_close ? Number(pos.price_at_close) : undefined,
+                pnlUsd: pnlData?.realizedUsd,
+                pnlPct: pnlData?.realizedPct,
             };
         });
         res.json({ positions: enrichedHistory });

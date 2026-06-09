@@ -22,7 +22,7 @@ import type {
   LeaderboardEntry,
 } from './gamification';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://shift-airdrop-backend.onrender.com';
 
 // Generic fetch with 5-second timeout
 async function apiFetch<T>(path: string, timeout = 5000): Promise<T | null> {

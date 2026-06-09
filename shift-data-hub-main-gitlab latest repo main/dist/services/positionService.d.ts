@@ -41,6 +41,26 @@ export declare class PositionService {
      */
     filterPosition(positionId: string): Promise<void>;
     private formatDuration;
+    /**
+     * Capture entry price from blockchain transaction (when position opens).
+     * Extracts swap price via Helius API and stores in price_at_open.
+     */
+    capturePositionOpen(position: Position): Promise<boolean>;
+    /**
+     * Capture exit price when position closes.
+     * Extracts swap price and stores close_value_usd.
+     */
+    capturePositionClose(positionId: string, txSignatureClose: string, wallet: string, assetMint: string): Promise<boolean>;
+    /**
+     * Backfill entry prices for all positions without price_at_open.
+     * Uses Helius to extract swap prices from blockchain transactions.
+     * Returns { total, updated, failed } for audit.
+     */
+    backfillEntryPrices(): Promise<{
+        total: number;
+        updated: number;
+        failed: number;
+    }>;
 }
 export declare const positionService: PositionService;
 //# sourceMappingURL=positionService.d.ts.map

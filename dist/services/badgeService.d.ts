@@ -57,11 +57,66 @@ export declare class BadgeService {
      */
     checkGeopoliticalTrade(wallet: string): Promise<BadgeAward | null>;
     /**
+     * Badge: Diamond Hands 7d — any open position held for 7+ days.
+     */
+    checkDiamondHands7d(wallet: string): Promise<BadgeAward | null>;
+    /**
+     * Badge: Volume Veteran I — 5+ total trades (testnet: count-based).
+     */
+    checkVolumeVeteranI(wallet: string): Promise<BadgeAward | null>;
+    /**
+     * Badge: Volume Veteran II — 25+ total trades.
+     */
+    checkVolumeVeteranII(wallet: string): Promise<BadgeAward | null>;
+    /**
+     * Badge: Volume Veteran III — 100+ total trades.
+     */
+    checkVolumeVeteranIII(wallet: string): Promise<BadgeAward | null>;
+    /**
+     * Badge: Doubled Down — 2+ positions on the same asset.
+     */
+    checkDoubledDown(wallet: string): Promise<BadgeAward | null>;
+    /**
+     * Badge: Triple Down — 3+ positions on the same asset.
+     */
+    checkTripleDown(wallet: string): Promise<BadgeAward | null>;
+    /**
+     * Badge: Conviction Stack — 4+ positions on the same asset.
+     */
+    checkConvictionStack(wallet: string): Promise<BadgeAward | null>;
+    /**
+     * Badge: Pyramid Up — 5+ positions on the same asset.
+     */
+    checkPyramidUp(wallet: string): Promise<BadgeAward | null>;
+    /**
+     * Badge: Community Builder — referred 3+ users.
+     */
+    checkCommunityBuilder(wallet: string): Promise<BadgeAward | null>;
+    /**
+     * Badge: Referral King — referred 10+ users.
+     */
+    checkReferralKing(wallet: string): Promise<BadgeAward | null>;
+    /**
+     * Badge: Legend — 50,000+ total XP.
+     */
+    checkLegend(wallet: string): Promise<BadgeAward | null>;
+    /**
+     * Badge: The OG — active trader in the first 30 days of SHIFT launch.
+     * Launch date: May 26 2026. Window closes: June 25 2026.
+     * Pre-launch wallets (before May 26) also qualify — they're even more OG.
+     */
+    checkTheOG(wallet: string): Promise<BadgeAward | null>;
+    /**
+     * Badge: Multi-Earnings Holder — held same position through 3+ earnings events.
+     */
+    checkMultiEarningsHolder(wallet: string): Promise<BadgeAward | null>;
+    /**
      * Check if wallet already has a specific badge.
      */
     hasBadge(wallet: string, badgeName: BadgeName): Promise<boolean>;
+    private static readonly BADGE_XP;
     /**
-     * Award a badge to a wallet + queue immediate real-time SNAG sync.
+     * Award a badge to a wallet, grant rarity-based XP, and queue SNAG sync.
      */
     awardBadge(wallet: string, badgeName: BadgeName): Promise<void>;
     /**

@@ -10,6 +10,8 @@ import MultRing from '@/components/MultRing';
 import ProgressBar from '@/components/ProgressBar';
 import Icon from '@/components/Icon';
 import ConnectWalletModal from '@/components/ConnectWalletModal';
+import { PnLBadge } from '@/components/PnLBadge';
+import { PnLInfoTooltip } from '@/components/PnLInfoTooltip';
 import { useWallet } from '@/components/WalletContext';
 import { useToast } from '@/components/ToastContext';
 import { useLaunchConfig } from '@/hooks/useLaunchConfig';
@@ -239,7 +241,7 @@ export default function AirdropPage() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
+            gridTemplateColumns: dashboard?.totalPnLUsd ? 'repeat(5, 1fr)' : 'repeat(4, 1fr)',
             gap: 12,
             marginBottom: 24,
           }}
@@ -256,6 +258,19 @@ export default function AirdropPage() {
               {loading && <div className="skeleton" style={{ height: 4, marginTop: 8, width: '60%' }} />}
             </div>
           ))}
+          {/* P&L Summary Stat with Info Tooltip */}
+          {dashboard?.totalPnLUsd !== undefined && (
+            <div className="stat">
+              <div className="stat-label" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                Portfolio P&L
+                <PnLInfoTooltip variant="dashboard" showIcon={true} />
+              </div>
+              <div style={{ marginTop: 6 }}>
+                <PnLBadge pnlUsd={dashboard.totalPnLUsd} pnlPct={dashboard.totalPnLPct} size="md" />
+              </div>
+              {loading && <div className="skeleton" style={{ height: 4, marginTop: 8, width: '60%' }} />}
+            </div>
+          )}
         </div>
 
         {/* ── Main grid ── */}

@@ -32,18 +32,54 @@ export const config = {
   // SNAG Rule/Badge IDs (configured in SNAG dashboard)
   snagXpRuleId: process.env.SNAG_XP_RULE_ID || '',
   snagBadgeIds: {
-    first_trade: process.env.SNAG_FIRST_TRADE_BADGE_ID || '',
-    diamond_hands: process.env.SNAG_DIAMOND_HANDS_BADGE_ID || '',
-    earnings_reactor: process.env.SNAG_EARNINGS_REACTOR_BADGE_ID || '',
-    fomc_trader: process.env.SNAG_FOMC_TRADER_BADGE_ID || '',
-    shift_holder: process.env.SNAG_SHIFT_HOLDER_BADGE_ID || '',
-    fed_day_trade: process.env.SNAG_FED_DAY_TRADE_BADGE_ID || '',
-    cpi_bet: process.env.SNAG_CPI_BET_BADGE_ID || '',
-    news_reactor: process.env.SNAG_NEWS_REACTOR_BADGE_ID || '',
+    // Core position badges
+    first_trade:         process.env.SNAG_FIRST_TRADE_BADGE_ID || '',
+    diamond_hands_7d:    process.env.SNAG_DIAMOND_HANDS_7D_BADGE_ID || '',
+    diamond_hands:       process.env.SNAG_DIAMOND_HANDS_BADGE_ID || '',
+    long_hauler:         process.env.SNAG_LONG_HAULER_BADGE_ID || '',
+    the_believer:        process.env.SNAG_THE_BELIEVER_BADGE_ID || '',
+    // Volume badges
+    volume_veteran_i:    process.env.SNAG_VOLUME_VETERAN_I_BADGE_ID || '',
+    volume_veteran_ii:   process.env.SNAG_VOLUME_VETERAN_II_BADGE_ID || '',
+    volume_veteran_iii:  process.env.SNAG_VOLUME_VETERAN_III_BADGE_ID || '',
+    // Stacking badges
+    doubled_down:        process.env.SNAG_DOUBLED_DOWN_BADGE_ID || '',
+    triple_down:         process.env.SNAG_TRIPLE_DOWN_BADGE_ID || '',
+    conviction_stack:    process.env.SNAG_CONVICTION_STACK_BADGE_ID || '',
+    pyramid_up:          process.env.SNAG_PYRAMID_UP_BADGE_ID || '',
+    // Social badges
+    community_builder:   process.env.SNAG_COMMUNITY_BUILDER_BADGE_ID || '',
+    referral_king:       process.env.SNAG_REFERRAL_KING_BADGE_ID || '',
+    // XP badges
+    legend:              process.env.SNAG_LEGEND_BADGE_ID || '',
+    // OG badge
+    the_og:              process.env.SNAG_THE_OG_BADGE_ID || '',
+    // Earnings / event badges
+    earnings_reactor:    process.env.SNAG_EARNINGS_REACTOR_BADGE_ID || '',
+    multi_earnings_holder: process.env.SNAG_MULTI_EARNINGS_HOLDER_BADGE_ID || '',
+    fomc_trader:         process.env.SNAG_FOMC_TRADER_BADGE_ID || '',
+    fed_day_trade:       process.env.SNAG_FED_DAY_TRADE_BADGE_ID || '',
+    cpi_bet:             process.env.SNAG_CPI_BET_BADGE_ID || '',
+    news_reactor:        process.env.SNAG_NEWS_REACTOR_BADGE_ID || '',
     earnings_conviction: process.env.SNAG_EARNINGS_CONVICTION_BADGE_ID || '',
-    geopolitical_trade: process.env.SNAG_GEOPOLITICAL_TRADE_BADGE_ID || '',
-    long_hauler: process.env.SNAG_LONG_HAULER_BADGE_ID || '',
-    the_believer: process.env.SNAG_THE_BELIEVER_BADGE_ID || '',
+    geopolitical_trade:  process.env.SNAG_GEOPOLITICAL_TRADE_BADGE_ID || '',
+    // Blockchain badges
+    shift_holder:        process.env.SNAG_SHIFT_HOLDER_BADGE_ID || '',
+    // Future / market-data badges (no SNAG IDs yet)
+    dip_buyer:           process.env.SNAG_DIP_BUYER_BADGE_ID || '',
+    crash_buyer:         process.env.SNAG_CRASH_BUYER_BADGE_ID || '',
+    black_swan_buyer:    process.env.SNAG_BLACK_SWAN_BUYER_BADGE_ID || '',
+    breakout_buyer:      process.env.SNAG_BREAKOUT_BUYER_BADGE_ID || '',
+    top_caller:          process.env.SNAG_TOP_CALLER_BADGE_ID || '',
+    momentum_rider:      process.env.SNAG_MOMENTUM_RIDER_BADGE_ID || '',
+    new_high_holder:     process.env.SNAG_NEW_HIGH_HOLDER_BADGE_ID || '',
+    macro_bear:          process.env.SNAG_MACRO_BEAR_BADGE_ID || '',
+    iron_hands:          process.env.SNAG_IRON_HANDS_BADGE_ID || '',
+    squeeze_survivor:    process.env.SNAG_SQUEEZE_SURVIVOR_BADGE_ID || '',
+    earnings_short:      process.env.SNAG_EARNINGS_SHORT_BADGE_ID || '',
+    first_short:         process.env.SNAG_FIRST_SHORT_BADGE_ID || '',
+    whale_mode:          process.env.SNAG_WHALE_MODE_BADGE_ID || '',
+    streak_7d:           process.env.SNAG_STREAK_7D_BADGE_ID || '',
   } as const,
 
   // SNAG Social Task Rule IDs (for inbound webhook task mapping)
