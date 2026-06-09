@@ -18,11 +18,31 @@ export class BadgeService {
     const awards: BadgeAward[] = [];
 
     const checks = await Promise.all([
+      // ── Core position badges ──
       this.checkFirstTrade(wallet),
+      this.checkDiamondHands7d(wallet),
       this.checkDiamondHands(wallet),
       this.checkLongHauler(wallet),
       this.checkTheBeliever(wallet),
+      // ── Volume badges ──
+      this.checkVolumeVeteranI(wallet),
+      this.checkVolumeVeteranII(wallet),
+      this.checkVolumeVeteranIII(wallet),
+      // ── Stacking badges ──
+      this.checkDoubledDown(wallet),
+      this.checkTripleDown(wallet),
+      this.checkConvictionStack(wallet),
+      this.checkPyramidUp(wallet),
+      // ── Social badges ──
+      this.checkCommunityBuilder(wallet),
+      this.checkReferralKing(wallet),
+      // ── XP badges ──
+      this.checkLegend(wallet),
+      // ── OG badge ──
+      this.checkTheOG(wallet),
+      // ── Earnings badges ──
       this.checkEarningsReactor(wallet),
+      this.checkMultiEarningsHolder(wallet),
       this.checkFOMCTrader(wallet),
       // shift_holder is checked on wallet connect only (not in cron) to avoid
       // Helius RPC calls for every user every tick. See walletSyncService.
@@ -316,6 +336,225 @@ export class BadgeService {
         await this.awardBadge(wallet, 'geopolitical_trade');
         return { badge_name: 'geopolitical_trade', wallet };
       }
+    }
+    return null;
+  }
+
+  // ── New DB-computable badge checks ──
+
+  /**
+   * Badge: Diamond Hands 7d — any open position held for 7+ days.
+   */
+  async checkDiamondHands7d(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'diamond_hands_7d')) return null;
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const position = await queryOne(
+      `SELECT id FROM positions WHERE wallet = $1 AND status = 'open' AND opened_at <= $2 LIMIT 1`,
+      [wallet, sevenDaysAgo]
+    );
+    if (position) {
+      await this.awardBadge(wallet, 'diamond_hands_7d');
+      return { badge_name: 'diamond_hands_7d', wallet };
+    }
+    return null;
+  }
+
+  /**
+   * Badge: Volume Veteran I — 5+ total trades (testnet: count-based).
+   */
+  async checkVolumeVeteranI(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'volume_veteran_i')) return null;
+    const res = await queryOne<{ cnt: string }>(
+      `SELECT COUNT(*) as cnt FROM positions WHERE wallet = $1 AND status != 'filtered'`,
+      [wallet]
+    );
+    if (res && parseInt(res.cnt) >= 5) {
+      await this.awardBadge(wallet, 'volume_veteran_i');
+      return { badge_name: 'volume_veteran_i', wallet };
+    }
+    return null;
+  }
+
+  /**
+   * Badge: Volume Veteran II — 25+ total trades.
+   */
+  async checkVolumeVeteranII(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'volume_veteran_ii')) return null;
+    const res = await queryOne<{ cnt: string }>(
+      `SELECT COUNT(*) as cnt FROM positions WHERE wallet = $1 AND status != 'filtered'`,
+      [wallet]
+    );
+    if (res && parseInt(res.cnt) >= 25) {
+      await this.awardBadge(wallet, 'volume_veteran_ii');
+      return { badge_name: 'volume_veteran_ii', wallet };
+    }
+    return null;
+  }
+
+  /**
+   * Badge: Volume Veteran III — 100+ total trades.
+   */
+  async checkVolumeVeteranIII(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'volume_veteran_iii')) return null;
+    const res = await queryOne<{ cnt: string }>(
+      `SELECT COUNT(*) as cnt FROM positions WHERE wallet = $1 AND status != 'filtered'`,
+      [wallet]
+    );
+    if (res && parseInt(res.cnt) >= 100) {
+      await this.awardBadge(wallet, 'volume_veteran_iii');
+      return { badge_name: 'volume_veteran_iii', wallet };
+    }
+    return null;
+  }
+
+  /**
+   * Badge: Doubled Down — 2+ positions on the same asset.
+   */
+  async checkDoubledDown(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'doubled_down')) return null;
+    const res = await queryOne(
+      `SELECT asset FROM positions WHERE wallet = $1 AND status != 'filtered'
+       GROUP BY asset HAVING COUNT(*) >= 2 LIMIT 1`,
+      [wallet]
+    );
+    if (res) {
+      await this.awardBadge(wallet, 'doubled_down');
+      return { badge_name: 'doubled_down', wallet };
+    }
+    return null;
+  }
+
+  /**
+   * Badge: Triple Down — 3+ positions on the same asset.
+   */
+  async checkTripleDown(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'triple_down')) return null;
+    const res = await queryOne(
+      `SELECT asset FROM positions WHERE wallet = $1 AND status != 'filtered'
+       GROUP BY asset HAVING COUNT(*) >= 3 LIMIT 1`,
+      [wallet]
+    );
+    if (res) {
+      await this.awardBadge(wallet, 'triple_down');
+      return { badge_name: 'triple_down', wallet };
+    }
+    return null;
+  }
+
+  /**
+   * Badge: Conviction Stack — 4+ positions on the same asset.
+   */
+  async checkConvictionStack(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'conviction_stack')) return null;
+    const res = await queryOne(
+      `SELECT asset FROM positions WHERE wallet = $1 AND status != 'filtered'
+       GROUP BY asset HAVING COUNT(*) >= 4 LIMIT 1`,
+      [wallet]
+    );
+    if (res) {
+      await this.awardBadge(wallet, 'conviction_stack');
+      return { badge_name: 'conviction_stack', wallet };
+    }
+    return null;
+  }
+
+  /**
+   * Badge: Pyramid Up — 5+ positions on the same asset.
+   */
+  async checkPyramidUp(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'pyramid_up')) return null;
+    const res = await queryOne(
+      `SELECT asset FROM positions WHERE wallet = $1 AND status != 'filtered'
+       GROUP BY asset HAVING COUNT(*) >= 5 LIMIT 1`,
+      [wallet]
+    );
+    if (res) {
+      await this.awardBadge(wallet, 'pyramid_up');
+      return { badge_name: 'pyramid_up', wallet };
+    }
+    return null;
+  }
+
+  /**
+   * Badge: Community Builder — referred 3+ users.
+   */
+  async checkCommunityBuilder(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'community_builder')) return null;
+    const res = await queryOne<{ cnt: string }>(
+      `SELECT COUNT(*) as cnt FROM users WHERE referred_by_wallet = $1`,
+      [wallet]
+    );
+    if (res && parseInt(res.cnt) >= 3) {
+      await this.awardBadge(wallet, 'community_builder');
+      return { badge_name: 'community_builder', wallet };
+    }
+    return null;
+  }
+
+  /**
+   * Badge: Referral King — referred 10+ users.
+   */
+  async checkReferralKing(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'referral_king')) return null;
+    const res = await queryOne<{ cnt: string }>(
+      `SELECT COUNT(*) as cnt FROM users WHERE referred_by_wallet = $1`,
+      [wallet]
+    );
+    if (res && parseInt(res.cnt) >= 10) {
+      await this.awardBadge(wallet, 'referral_king');
+      return { badge_name: 'referral_king', wallet };
+    }
+    return null;
+  }
+
+  /**
+   * Badge: Legend — 50,000+ total XP.
+   */
+  async checkLegend(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'legend')) return null;
+    const res = await queryOne<{ total_xp: string }>(
+      `SELECT total_xp FROM users WHERE wallet = $1`,
+      [wallet]
+    );
+    if (res && parseFloat(res.total_xp) >= 50000) {
+      await this.awardBadge(wallet, 'legend');
+      return { badge_name: 'legend', wallet };
+    }
+    return null;
+  }
+
+  /**
+   * Badge: The OG — active trader in the first 30 days of SHIFT launch (May 19 - Jun 18, 2026).
+   */
+  async checkTheOG(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'the_og')) return null;
+    const launchStart = new Date('2026-05-19');
+    const launchEnd = new Date('2026-06-18');
+    const position = await queryOne(
+      `SELECT id FROM positions
+       WHERE wallet = $1 AND status != 'filtered'
+         AND opened_at >= $2 AND opened_at <= $3 LIMIT 1`,
+      [wallet, launchStart, launchEnd]
+    );
+    if (position) {
+      await this.awardBadge(wallet, 'the_og');
+      return { badge_name: 'the_og', wallet };
+    }
+    return null;
+  }
+
+  /**
+   * Badge: Multi-Earnings Holder — held same position through 3+ earnings events.
+   */
+  async checkMultiEarningsHolder(wallet: string): Promise<BadgeAward | null> {
+    if (await this.hasBadge(wallet, 'multi_earnings_holder')) return null;
+    const position = await queryOne(
+      `SELECT id FROM positions WHERE wallet = $1 AND earnings_count >= 3 LIMIT 1`,
+      [wallet]
+    );
+    if (position) {
+      await this.awardBadge(wallet, 'multi_earnings_holder');
+      return { badge_name: 'multi_earnings_holder', wallet };
     }
     return null;
   }
