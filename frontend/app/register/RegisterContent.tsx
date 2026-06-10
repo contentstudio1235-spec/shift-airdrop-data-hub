@@ -252,7 +252,7 @@ export default function RegisterContent() {
             Join thousands of traders competing for the SHIFT airdrop. Hold tokens on Jupiter, earn weighted Shift Points, climb the queue.
           </p>
           <div style={{ display: 'flex', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', marginBottom: 40 }}>
-            {[{ val: '2,847+', label: 'Registered', color: 'var(--mint)' }, { val: '3.0×', label: 'Launch Bonus', color: 'var(--mint)' }, { val: 'Q3 2026', label: 'TGE Target', color: 'var(--text)' }].map((s, i, a) => (
+            {[{ val: '2,847+', label: 'Registered', color: 'var(--mint)' }, { val: '1×', label: 'Base Multiplier', color: 'var(--mint)' }].map((s, i, a) => (
               <div key={i} style={{ padding: '16px 28px', borderRight: i < a.length - 1 ? '1px solid var(--border)' : 'none', textAlign: 'center' }}>
                 <div style={{ fontSize: 22, fontWeight: 700, fontFamily: 'var(--font-space)', color: s.color, lineHeight: 1 }}>{s.val}</div>
                 <div style={{ fontSize: 10, color: 'var(--text-mute)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 4 }}>{s.label}</div>
