@@ -5,6 +5,50 @@
 -- All statements are idempotent (safe to re-run).
 -- ============================================================
 
+-- ── 0. Self-heal: drop display-name rows that already have a snake_case twin ──
+-- The migration runner re-runs every deploy and migration 007 keeps
+-- re-inserting the display-name rows after we rename the originals. That
+-- leaves BOTH 'Doubled Down' and 'doubled_down' in the table, so the rename
+-- below would hit a duplicate-key on badge_definitions_pkey (badge_name).
+-- Delete the display-name duplicate whenever its snake_case twin exists, so
+-- the renames that follow only touch first-run rows and never collide.
+DELETE FROM badge_definitions d
+USING (VALUES
+  ('Doubled Down',          'doubled_down'),
+  ('Triple Down',           'triple_down'),
+  ('Pyramid Up',            'pyramid_up'),
+  ('Conviction Stack',      'conviction_stack'),
+  ('Dip Buyer',             'dip_buyer'),
+  ('Crash Buyer',           'crash_buyer'),
+  ('Black Swan Buyer',      'black_swan_buyer'),
+  ('Momentum Rider',        'momentum_rider'),
+  ('Breakout Buyer',        'breakout_buyer'),
+  ('New High Holder',       'new_high_holder'),
+  ('Earnings Conviction',   'earnings_conviction'),
+  ('Geopolitical Trade',    'geopolitical_trade'),
+  ('Fed Day Trade',         'fed_day_trade'),
+  ('CPI Bet',               'cpi_bet'),
+  ('News Reactor',          'news_reactor'),
+  ('Iron Hands',            'iron_hands'),
+  ('-10% Survivor',         'negative_10_survivor'),
+  ('-20% Survivor',         'negative_20_survivor'),
+  ('The Believer',          'the_believer'),
+  ('Diamond Hands',         'diamond_hands'),
+  ('Long-Hauler',           'long_hauler'),
+  ('Multi-Earnings Holder', 'multi_earnings_holder'),
+  ('Top Caller',            'top_caller'),
+  ('Earnings Short',        'earnings_short'),
+  ('Squeeze Survivor',      'squeeze_survivor'),
+  ('Macro Bear',            'macro_bear'),
+  ('First Short',           'first_short'),
+  ('Volume Veteran I',      'volume_veteran_i'),
+  ('Volume Veteran II',     'volume_veteran_ii'),
+  ('Volume Veteran III',    'volume_veteran_iii'),
+  ('The OG',                'the_og')
+) AS m(display_name, snake_name)
+WHERE d.badge_name = m.display_name
+  AND EXISTS (SELECT 1 FROM badge_definitions e WHERE e.badge_name = m.snake_name);
+
 -- ── 1. Rename display-name badge_names to snake_case ─────────────────
 -- These were inserted with display names as badge_name in migration 007.
 -- badgeService.ts awards snake_case names (the JOIN must match).

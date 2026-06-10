@@ -29,22 +29,22 @@ function getMigrations() {
  */
 async function executeMigration(migration) {
     console.log(`\n📝 Running migration: ${migration.name}`);
+    // Run the WHOLE file as a single script on one connection. We deliberately
+    // do NOT split on ';' — that naive split breaks on semicolons inside
+    // comments, single-quoted strings, and dollar-quoted bodies (DO $$ ... $$).
+    // Postgres' simple-query protocol parses the multi-statement script itself
+    // and runs it as one implicit transaction (atomic per migration file).
+    const client = await pool_1.pool.connect();
     try {
-        // Split by semicolon and execute each statement
-        const statements = migration.content
-            .split(';')
-            .map(stmt => stmt.trim())
-            .filter(stmt => stmt.length > 0);
-        for (const statement of statements) {
-            if (statement.length > 0) {
-                await (0, pool_1.execute)(statement);
-            }
-        }
+        await client.query(migration.content);
         console.log(`✅ Migration ${migration.name} completed successfully`);
     }
     catch (error) {
         console.error(`❌ Migration ${migration.name} failed:`, error.message);
         throw error;
+    }
+    finally {
+        client.release();
     }
 }
 /**
