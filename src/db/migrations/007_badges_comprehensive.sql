@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- Migration 007: Comprehensive Badge System (31 badges)
 -- Implements the SHIFT Badges Strategy with all categories
 -- All statements use IF NOT EXISTS â€” safe to re-run (idempotent)
