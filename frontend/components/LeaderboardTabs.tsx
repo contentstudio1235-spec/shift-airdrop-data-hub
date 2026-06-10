@@ -11,10 +11,11 @@ type SortType = 'final_points' | 'referral_count' | 'referred_volume' | 'referre
 interface LeaderboardEntry {
   rank: number;
   wallet: string;
-  score: number;
-  referredCount: number;
-  referredVolume: number;
-  referredHolding: number;
+  score?: number;
+  totalSp?: number;
+  referredCount?: number;
+  referredVolume?: number;
+  referredHolding?: number;
 }
 
 const TABS: { type: SortType; label: string; icon: string; description: string }[] = [
@@ -192,7 +193,7 @@ export default function LeaderboardTabs() {
                       fontWeight: '600',
                     }}
                   >
-                    {Math.floor(entry.score).toLocaleString()}
+                    {Math.floor(entry.totalSp ?? entry.score ?? 0).toLocaleString()}
                   </td>
                   <LeaderboardRowChips entry={entry} />
                 </tr>
