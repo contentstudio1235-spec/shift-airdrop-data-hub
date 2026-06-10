@@ -12,8 +12,7 @@ BEGIN;
 
 -- ── Index 1: referral_commissions - by referrer + month ──
 CREATE INDEX IF NOT EXISTS idx_referral_commissions_referrer_month
-ON referral_commissions(referrer_wallet, month_year, sp_awarded DESC)
-WHERE awarded_at >= (NOW() - INTERVAL '12 months');
+ON referral_commissions(referrer_wallet, month_year, sp_awarded DESC);
 
 -- ── Index 2: referral_commissions - by referred wallet ──
 CREATE INDEX IF NOT EXISTS idx_referral_commissions_referred
