@@ -146,8 +146,8 @@ export class ReferralCommissionService {
   }> {
     const result = await queryOne<any>(
       `SELECT
-         COUNT(DISTINCT referred_by_wallet) as referral_count,
-         SUM(COALESCE(position_size_usd, 0)) as total_volume,
+         COUNT(DISTINCT u.wallet) as referral_count,
+         COALESCE(SUM(p.position_size_usd), 0) as total_volume,
          0 as total_holding
        FROM users u
        LEFT JOIN positions p ON u.wallet = p.wallet AND p.status = 'open'
