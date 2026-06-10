@@ -148,10 +148,9 @@ export default function ReferredUsersTable({ wallet }: ReferredUsersTableProps) 
             {sortedReferred.map((user) => (
               <tr
                 key={user.wallet}
-                style={{
-                  borderBottom: '1px solid var(--border)',
-                  '&:hover': { background: 'var(--bg-3)' },
-                }}
+                style={{ borderBottom: '1px solid var(--border)' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-3)')}
+                onMouseLeave={e => (e.currentTarget.style.background = '')}
               >
                 <td style={{ padding: '12px', fontSize: '13px', fontFamily: 'var(--font-mono)' }}>
                   {formatAddr(user.wallet)}
