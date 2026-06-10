@@ -7,10 +7,14 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://shift-airdrop-backen
 
 interface ReferredUser {
   wallet: string;
-  status: 'active' | 'inactive';
-  positionsOpen: number;
-  totalVolume: number;
-  currentHolding: number;
+  // API returns isActive (boolean) + shiftHoldingUsd, openPositions
+  isActive?: boolean;
+  status?: 'active' | 'inactive';
+  openPositions?: number;
+  positionsOpen?: number;
+  shiftHoldingUsd?: number;
+  totalVolume?: number;
+  currentHolding?: number;
   totalXp: number;
   commissionTier: string;
   commissionEarned: number;
@@ -44,14 +48,21 @@ export default function ReferredUsersTable({ wallet }: ReferredUsersTableProps) 
   }, [wallet]);
 
   const sortedReferred = [...referred].sort((a, b) => {
-    if (sorting === 'xp') return b.totalXp - a.totalXp;
-    if (sorting === 'volume') return b.totalVolume - a.totalVolume;
-    if (sorting === 'holding') return b.currentHolding - a.currentHolding;
+    if (sorting === 'xp')      return (b.totalXp ?? 0) - (a.totalXp ?? 0);
+    if (sorting === 'volume')  return getVolume(b) - getVolume(a);
+    if (sorting === 'holding') return getHolding(b) - getHolding(a);
     return 0;
   });
 
   const formatAddr = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-  const formatUSD = (n: number) => `$${(n / 1000).toFixed(1)}K`;
+  const formatUSD = (n: number | undefined) => {
+    const val = Number(n ?? 0);
+    return val >= 1000 ? `$${(val / 1000).toFixed(1)}K` : `$${val.toFixed(2)}`;
+  };
+  // Normalise API field names — backend returns isActive/shiftHoldingUsd/openPositions
+  const getActive  = (u: ReferredUser) => u.isActive ?? u.status === 'active';
+  const getHolding = (u: ReferredUser) => u.shiftHoldingUsd ?? u.currentHolding ?? 0;
+  const getVolume  = (u: ReferredUser) => u.totalVolume ?? 0;
 
   if (loading) {
     return (
@@ -156,39 +167,28 @@ export default function ReferredUsersTable({ wallet }: ReferredUsersTableProps) 
                   {formatAddr(user.wallet)}
                 </td>
                 <td style={{ padding: '12px', textAlign: 'right', fontSize: '13px', fontWeight: 500 }}>
-                  {Math.floor(user.totalXp).toLocaleString()}
+                  {Math.floor(user.totalXp ?? 0).toLocaleString()}
                 </td>
                 <td style={{ padding: '12px', textAlign: 'right', fontSize: '13px', fontWeight: 500 }}>
-                  {formatUSD(user.totalVolume)}
+                  {formatUSD(getVolume(user))}
                 </td>
                 <td style={{ padding: '12px', textAlign: 'right', fontSize: '13px', fontWeight: 500 }}>
-                  {formatUSD(user.currentHolding)}
+                  {formatUSD(getHolding(user))}
                 </td>
-                <td
-                  style={{
-                    padding: '12px',
-                    textAlign: 'center',
-                    fontSize: '11px',
-                  }}
-                >
-                  <span
-                    style={{
-                      display: 'inline-block',
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      background: user.status === 'active' ? 'rgba(0, 208, 132, 0.1)' : 'rgba(200, 200, 200, 0.1)',
-                      color: user.status === 'active' ? '#00D084' : 'var(--text-dim)',
-                      fontWeight: 500,
-                    }}
-                  >
-                    {user.status === 'active' ? '🟢 Active' : '⚪ Inactive'}
+                <td style={{ padding: '12px', textAlign: 'center', fontSize: '11px' }}>
+                  <span style={{
+                    display: 'inline-block', padding: '4px 8px', borderRadius: '4px',
+                    background: getActive(user) ? 'rgba(0,208,132,0.1)' : 'rgba(200,200,200,0.1)',
+                    color: getActive(user) ? '#00D084' : 'var(--text-dim)', fontWeight: 500,
+                  }}>
+                    {getActive(user) ? '🟢 Active' : '⚪ Inactive'}
                   </span>
                 </td>
                 <td style={{ padding: '12px', textAlign: 'right', fontSize: '13px', fontWeight: 600, color: '#6B7DFF' }}>
-                  {Math.floor(user.commissionEarned)} SP
+                  {Math.floor(user.commissionEarned ?? 0)} SP
                 </td>
                 <td style={{ padding: '12px', textAlign: 'right', fontSize: '13px', fontWeight: 600, color: '#FF9F43' }}>
-                  {Math.floor(user.monthlyEarned)} / 500
+                  {Math.floor(user.monthlyEarned ?? 0)} / 500
                 </td>
               </tr>
             ))}
