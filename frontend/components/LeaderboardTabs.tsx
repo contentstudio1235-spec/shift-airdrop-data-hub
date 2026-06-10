@@ -14,6 +14,8 @@ interface LeaderboardEntry {
   score?: number;
   totalSp?: number;
   referredCount?: number;
+  preRegCount?: number;
+  season1Count?: number;
   referredVolume?: number;
   referredHolding?: number;
 }
@@ -147,13 +149,13 @@ export default function LeaderboardTabs() {
                   {currentTab?.label || 'Score'}
                 </th>
                 <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)' }}>
-                  Referred Count
+                  Total Refs
+                </th>
+                <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: 600, color: '#26C8B8' }}>
+                  Season 1
                 </th>
                 <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)' }}>
-                  Referred Volume
-                </th>
-                <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)' }}>
-                  Referred Holding
+                  Pre-Reg
                 </th>
               </tr>
             </thead>

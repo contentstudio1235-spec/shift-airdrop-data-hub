@@ -92,14 +92,20 @@ export interface BadgesResponse {
 export interface LeaderboardEntry {
   rank: number;
   wallet: string;
-  totalSp?: number;       // Combined score (positionSp + socialSp) — main display
-  positionSp?: number;    // From holding SHIFT positions
-  socialSp?: number;      // From SNAG tasks + referrals
-  totalXP: number;        // Legacy: same as positionSp
+  totalSp?: number;        // Combined score (positionSp + socialSp) — main display
+  positionSp?: number;     // From holding SHIFT positions
+  socialSp?: number;       // From SNAG tasks + referrals
+  totalXP: number;         // Legacy: same as positionSp
   multiplier: number;
   badgeCount: number;
   tier?: string;
   tierKey?: string;
+  // Referral breakdown
+  referredCount?: number;
+  preRegCount?: number;    // referred before 26 May 2026 15:00 UTC
+  season1Count?: number;   // referred on/after Season 1 launch
+  referredVolume?: number;
+  referredHolding?: number;
 }
 
 export interface LeaderboardResponse {

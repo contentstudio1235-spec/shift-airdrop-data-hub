@@ -1,3 +1,4 @@
+'use client';
 import type { LeaderboardEntry } from '@/lib/types';
 
 const TIER_MAP: Record<string, { label: string; key: string }> = {
@@ -99,6 +100,26 @@ export default function LeaderboardRow({ entry, mode = 'Points', isCurrentUser }
           >
             {shortAddr}
           </div>
+          {/* Pre-Reg / Season 1 referral chips */}
+          {((entry.preRegCount ?? 0) > 0 || (entry.season1Count ?? 0) > 0 || (entry.referredCount ?? 0) > 0) && (
+            <div style={{ display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap' }}>
+              {(entry.season1Count ?? 0) > 0 && (
+                <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: 'rgba(38,200,184,0.1)', color: 'var(--mint)', border: '1px solid rgba(38,200,184,0.2)', fontWeight: 700, letterSpacing: '0.03em' }}>
+                  S1: {entry.season1Count}
+                </span>
+              )}
+              {(entry.preRegCount ?? 0) > 0 && (
+                <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: 'rgba(255,255,255,0.05)', color: 'var(--text-mute)', border: '1px solid var(--border)', fontWeight: 700, letterSpacing: '0.03em' }}>
+                  Pre-Reg: {entry.preRegCount}
+                </span>
+              )}
+              {(entry.season1Count == null && entry.preRegCount == null && (entry.referredCount ?? 0) > 0) && (
+                <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: 'rgba(107,125,255,0.1)', color: '#6B7DFF', border: '1px solid rgba(107,125,255,0.2)', fontWeight: 700 }}>
+                  {entry.referredCount} refs
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
