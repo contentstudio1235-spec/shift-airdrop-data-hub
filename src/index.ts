@@ -33,6 +33,7 @@ import trackRoutes from './routes/track';
 import pulseRoutes from './routes/pulse';
 import utmRoutes from './routes/utm';
 import hubTrustRouter from './routes/hubTrust';
+import referralRoutes from './routes/referralRoutes';
 
 // Middleware
 import { utmCapture } from './middleware/utmCapture';
@@ -109,6 +110,7 @@ app.use('/api/track', trackRoutes);
 app.use('/api/pulse', pulseRoutes);
 app.use('/api/utm', utmRoutes);
 app.use('/api/hub-trust', hubTrustRouter);
+app.use('/api/referral', referralRoutes);
 
 // ── Data Hub Static Dashboard ──
 // Serves the SHIFT RWA Cross-Channel Data Hub frontend at /hub
