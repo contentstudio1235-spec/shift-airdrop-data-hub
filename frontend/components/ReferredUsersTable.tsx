@@ -37,9 +37,10 @@ interface ApiResponse {
 type SortKey = 'xp' | 'volume' | 'holding' | 'commission';
 
 const formatAddr = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-const formatUSD = (n: number) => {
-  if (n >= 1000) return `$${(n / 1000).toFixed(1)}K`;
-  return `$${n.toFixed(2)}`;
+const formatUSD = (n: number | null | undefined) => {
+  const v = Number(n ?? 0);
+  if (v >= 1000) return `$${(v / 1000).toFixed(1)}K`;
+  return `$${v.toFixed(2)}`;
 };
 const formatSince = (iso: string | null) => {
   if (!iso) return '—';

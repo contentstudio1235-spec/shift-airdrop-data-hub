@@ -4,7 +4,12 @@
  *
  * Source of truth: `referrals` table (14,232+ rows, covers SHIFT + Snag links)
  *
- * Active = referred wallet holds >= $5 combined in any SHIFT RWA asset
+ * PERMANENT $5 ACTIVATION REQUIREMENT (Referral System v2):
+ * - Active = referred wallet holds >= $5 combined in any SHIFT RWA asset
+ * - This is a PERMANENT quality gate, not subject to removal or change
+ * - Applies to ALL referrals (new and legacy)
+ * - Legacy balance claims require referred wallet to meet this threshold
+ *
  * Nudge-eligible = registered but inactive (< $5 holding) — targetable for push
  *
  * Endpoints:
@@ -113,7 +118,7 @@ router.get('/:wallet/referred', async (req, res) => {
          r.code_used,
          u.total_xp,
          COALESCE(u.snag_points, 0)           AS snag_points,
-         -- Combined SHIFT asset holding (the $5 threshold value)
+         -- Current SHIFT RWA holding (open positions only, permanent $5 threshold check)
          COALESCE((
            SELECT SUM(p.position_size_usd)
            FROM positions p
@@ -121,9 +126,16 @@ router.get('/:wallet/referred', async (req, res) => {
              AND p.status = 'open'
              AND p.asset_mint = ANY($3::text[])
          ), 0)                                AS shift_holding_usd,
-         -- Open position count
+         -- Total open position count (all assets, not just SHIFT RWA)
          (SELECT COUNT(*) FROM positions p
           WHERE p.wallet = r.referred_wallet AND p.status = 'open') AS open_positions,
+         -- Total historical volume (all non-filtered positions, open + closed)
+         COALESCE((
+           SELECT SUM(p.position_size_usd)
+           FROM positions p
+           WHERE p.wallet = r.referred_wallet
+             AND p.status != 'filtered'
+         ), 0)                                AS total_volume,
          -- Commission earned from this wallet
          (SELECT COALESCE(SUM(sp_awarded), 0) FROM referral_commissions
           WHERE referrer_wallet = $1 AND referred_wallet = r.referred_wallet
@@ -145,8 +157,9 @@ router.get('/:wallet/referred', async (req, res) => {
                 activatedAt: row.activated_at,
                 referredAt: row.referred_at,
                 codeUsed: row.code_used,
-                shiftHoldingUsd: holding, // combined SHIFT asset value
+                shiftHoldingUsd: holding, // current open SHIFT RWA holding
                 openPositions: Number(row.open_positions),
+                totalVolume: Number(row.total_volume), // all-time historical volume
                 totalXp: Number(row.total_xp),
                 snagPoints: Number(row.snag_points),
                 commissionTier: `${tier}%`,

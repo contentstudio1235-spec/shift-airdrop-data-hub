@@ -2,10 +2,20 @@
 // ============================================================
 // Referral Constants — Validation rules and configuration
 // ============================================================
+//
+// ⚠️  PERMANENT $5 ACTIVATION REQUIREMENT
+// The $5 minimum SHIFT RWA holding requirement is PERMANENT and NOT subject to
+// removal or modification. It is a core feature of the referral system and
+// applies to ALL referrals (new and legacy balance claims).
+// ============================================================
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.INVITE_BONUS_XP = exports.REFERRAL_BONUS_TIERS = exports.REFERRAL_CODE_RULES = void 0;
+exports.INVITE_BONUS_XP = exports.REFERRAL_BONUS_TIERS = exports.REFERRAL_CODE_RULES = exports.REFERRAL_ACTIVATION_MINIMUM_USD = void 0;
 exports.validateReferralCode = validateReferralCode;
 exports.normalizeReferralCode = normalizeReferralCode;
+// PERMANENT: $5 USD minimum SHIFT RWA holding for referral activation
+// This applies to all referrals, including legacy claims
+// Change only if approved by product and legal teams
+exports.REFERRAL_ACTIVATION_MINIMUM_USD = 5.0;
 exports.REFERRAL_CODE_RULES = {
     // Alphanumeric + hyphens, 4-32 chars (matching backend validation)
     PATTERN: /^[A-Z0-9-]{4,32}$/,

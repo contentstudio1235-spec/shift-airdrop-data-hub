@@ -1,3 +1,4 @@
+export declare const REFERRAL_ACTIVATION_MINIMUM_USD: 5;
 export declare const REFERRAL_CODE_RULES: {
     readonly PATTERN: RegExp;
     readonly MIN_LENGTH: 4;

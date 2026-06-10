@@ -1,6 +1,12 @@
 /**
  * Referral Commission Service
  *
+ * ⚠️  PERMANENT $5 ACTIVATION REQUIREMENT (Referral System v2):
+ * - ALL referrals must have referred wallet hold ≥$5 in SHIFT RWA assets
+ * - This is NOT temporary — it is a permanent quality gate
+ * - Applies to both new referrals and legacy balance claims
+ * - Legacy balance becomes claimable only after referred wallet meets $5 threshold
+ *
  * TWO separate referral reward streams:
  *
  * 1. POSITION REFERRAL SP (10%–15%)
@@ -10,6 +16,7 @@
  *      compute commission — so the referrer earns 10-15% ON TOP of the 2X
  *    - Stored in: users.referral_position_sp
  *    - Monthly cap: 500 SP per referrer/referred pair
+ *    - Only counts toward this cap if referred wallet is ACTIVE (≥$5)
  *
  * 2. SOCIAL REFERRAL SP — handled entirely by Snag on their end.
  *    When a referred user completes Snag social tasks, Snag automatically
@@ -46,6 +53,15 @@ export declare class ReferralCommissionService {
         pending: number;
         claimed: boolean;
     }>;
+    /**
+     * Claim legacy balance for a referrer.
+     *
+     * ⚠️  PERMANENT REQUIREMENT:
+     * - Legacy balance is only claimable if referred wallets have reached the $5
+     *   SHIFT RWA holding threshold (checked before this is even called)
+     * - This is a PERMANENT system feature, not subject to removal
+     * - Do NOT remove or modify this check without explicit approval
+     */
     claimLegacyBalance(referrerWallet: string): Promise<number>;
     calculateAndAwardCommission(referredWallet: string, _ignored: number): Promise<void>;
     getTierForWallet(referredWallet: string): Promise<number>;

@@ -3,7 +3,12 @@
  *
  * Source of truth: `referrals` table (14,232+ rows, covers SHIFT + Snag links)
  *
- * Active = referred wallet holds >= $5 combined in any SHIFT RWA asset
+ * PERMANENT $5 ACTIVATION REQUIREMENT (Referral System v2):
+ * - Active = referred wallet holds >= $5 combined in any SHIFT RWA asset
+ * - This is a PERMANENT quality gate, not subject to removal or change
+ * - Applies to ALL referrals (new and legacy)
+ * - Legacy balance claims require referred wallet to meet this threshold
+ *
  * Nudge-eligible = registered but inactive (< $5 holding) — targetable for push
  *
  * Endpoints:

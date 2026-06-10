@@ -154,15 +154,18 @@ router.get('/:wallet/referred', async (req: Request, res: Response) => {
              AND p.status = 'open'
              AND p.asset_mint = ANY($3::text[])
          ), 0)                                AS shift_holding_usd,
-         -- Total open position count (all assets, not just SHIFT RWA)
+         -- Total open SHIFT RWA position count (same 6 mints as $5 threshold)
          (SELECT COUNT(*) FROM positions p
-          WHERE p.wallet = r.referred_wallet AND p.status = 'open') AS open_positions,
-         -- Total historical volume (all non-filtered positions, open + closed)
+          WHERE p.wallet = r.referred_wallet
+            AND p.status = 'open'
+            AND p.asset_mint = ANY($3::text[])) AS open_positions,
+         -- Total historical SHIFT RWA volume (open + closed, same 6 mints)
          COALESCE((
            SELECT SUM(p.position_size_usd)
            FROM positions p
            WHERE p.wallet = r.referred_wallet
              AND p.status != 'filtered'
+             AND p.asset_mint = ANY($3::text[])
          ), 0)                                AS total_volume,
          -- Commission earned from this wallet
          (SELECT COALESCE(SUM(sp_awarded), 0) FROM referral_commissions
