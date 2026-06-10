@@ -7,7 +7,7 @@
 
 -- ── 1. Rename display-name badge_names to snake_case ─────────────────
 -- These were inserted with display names as badge_name in migration 007.
--- badgeService.ts awards snake_case names; the JOIN must match.
+-- badgeService.ts awards snake_case names (the JOIN must match).
 
 UPDATE badge_definitions SET badge_name = 'doubled_down'       WHERE badge_name = 'Doubled Down';
 UPDATE badge_definitions SET badge_name = 'triple_down'        WHERE badge_name = 'Triple Down';
