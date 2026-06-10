@@ -12,17 +12,23 @@ ADD COLUMN IF NOT EXISTS extracted_at TIMESTAMP;
 CREATE INDEX IF NOT EXISTS idx_positions_extracted ON positions(wallet, extracted_at);
 
 -- Log entry for backfill audit
-INSERT INTO admin_logs (action, entity_type, details, performed_at)
+-- admin_logs uses: action, resource_type, resource_id, new_value, admin_wallet, created_at
+INSERT INTO admin_logs (admin_wallet, action, resource_type, resource_id, new_value, created_at)
 SELECT
+  'system',
   'schema_migration',
   'positions',
+  '019_pnl_fields',
   jsonb_build_object(
-    'migration', '017_pnl_fields',
+    'migration', '019_pnl_fields',
     'added_columns', ARRAY['price_at_close', 'close_value_usd', 'extracted_at'],
     'reason', 'Enable blockchain-backed P&L calculations'
   ),
   NOW()
-WHERE NOT EXISTS (SELECT 1 FROM admin_logs WHERE action = 'schema_migration' AND entity_type = 'positions');
+WHERE NOT EXISTS (
+  SELECT 1 FROM admin_logs
+  WHERE action = 'schema_migration' AND resource_id = '019_pnl_fields'
+);
 
 -- Verification query
 -- Run this to confirm columns exist:
