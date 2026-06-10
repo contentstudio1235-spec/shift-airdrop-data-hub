@@ -1,191 +1,307 @@
 /**
  * Referral API Routes
+ *
+ * Source of truth: `referrals` table (14,232+ rows, covers SHIFT + Snag links)
+ *
+ * Active = referred wallet holds >= $5 combined in any SHIFT RWA asset
+ * Nudge-eligible = registered but inactive (< $5 holding) — targetable for push
+ *
  * Endpoints:
- *   GET  /api/referral/:wallet                  - Get referral dashboard
- *   GET  /api/referral/:wallet/referred         - Get list of referred wallets
- *   POST /api/referral/:wallet/claim-legacy     - Claim pending legacy balance
- *   GET  /api/leaderboard?sort=<type>&limit=<n>- Get leaderboard by sort type
+ *   GET  /api/referral/:wallet              - Dashboard (stats + SP breakdown)
+ *   GET  /api/referral/:wallet/referred     - Full list of referred wallets
+ *   GET  /api/referral/:wallet/nudge        - Only inactive referred wallets (for nudge)
+ *   POST /api/referral/:wallet/claim-legacy - Claim legacy pending SP
+ *   GET  /api/referral/leaderboard          - Leaderboard sorted by various metrics
  */
 
 import { Router, Request, Response } from 'express';
 import { referralCommissionService } from '../services/referralCommissionService';
-import { userPointsService } from '../services/userPointsService';
 import { leaderboardCacheService } from '../services/leaderboardCacheService';
 import { queryOne, query } from '../db/pool';
 
 const router = Router();
 
-// ── GET /api/referral/:wallet ──────────────────────────────
-// Returns referral dashboard: stats, pending balance, referred users summary
+// ── SHIFT RWA asset mints (used for $5 active threshold) ──────────────────
+const SHIFT_ASSET_MINTS = [
+  '6afjZE5Qv9WF5K1adBgTxtWyenJ7ZerH6BVAzmoSHFT', // TSL2L
+  'bNPXng6hSVas7LWiNQyvpGcPYtY1ZmFY6WP49ymSHFT', // TSL1S
+  'Hyhxfb6riaqCV333GynmnCXCEQK3goTznFj7k4dSHFT', // SOX3L
+  '7GoxZQ7gCh1mg1b3AUqd7cyPqiUp4y2NRxM9A5zSHFT', // SOX3S
+  '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT', // SPX3L
+  '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT', // SPX3S
+];
+const MINT_PLACEHOLDERS = SHIFT_ASSET_MINTS.map((_, i) => `$${i + 1}`).join(',');
+
+// ── GET /api/referral/:wallet ──────────────────────────────────────────────
 router.get('/:wallet', async (req: Request, res: Response) => {
   const wallet = String(req.params.wallet);
+  if (req.path === '/leaderboard') return (req as any).next();
 
   try {
-    // Get referral stats
-    const stats = await referralCommissionService.getReferralStats(wallet);
+    // ── Referral counts from referrals table (source of truth) ──
+    const counts = await queryOne<{
+      total: number;
+      active: number;
+      inactive: number;
+      from_shift: number;
+      from_snag: number;
+    }>(
+      `SELECT
+         COUNT(*)                                        AS total,
+         COUNT(*) FILTER (WHERE is_active = true)        AS active,
+         COUNT(*) FILTER (WHERE is_active = false)       AS inactive,
+         COUNT(*) FILTER (WHERE referral_source = 'shift') AS from_shift,
+         COUNT(*) FILTER (WHERE referral_source = 'snag')  AS from_snag
+       FROM referrals
+       WHERE referrer_wallet = $1`,
+      [wallet]
+    );
 
-    // Get pending legacy balance
-    const legacy = await referralCommissionService.getPendingBalance(wallet);
+    // ── SP earned breakdown ──
+    const commission = await referralCommissionService.getTotalCommissionEarned(wallet);
 
-    // Get total commission earned — split by type
-    const totalEarned = await referralCommissionService.getTotalCommissionEarned(wallet);
-
-    // Monthly cap progress (applies to position referral SP only)
+    // Monthly cap progress (position referral only)
     const monthYear = new Date().toISOString().slice(0, 7);
-    const monthCapResult = await queryOne<{ total: number }>(
-      `SELECT COALESCE(SUM(total_awarded), 0) as total FROM referral_monthly_caps
+    const monthCapRow = await queryOne<{ total: number }>(
+      `SELECT COALESCE(SUM(total_awarded), 0) AS total
+       FROM referral_monthly_caps
        WHERE referrer_wallet = $1 AND month_year = $2`,
       [wallet, monthYear]
     );
-    const monthlyEarned = monthCapResult?.total ?? 0;
+    const monthlyEarned = Number(monthCapRow?.total ?? 0);
+
+    // Legacy balance
+    const legacy = await referralCommissionService.getPendingBalance(wallet);
+
+    // Referrer's own referral links
+    const links = await queryOne<{
+      referral_code: string;
+      snag_default_referral_link: string;
+      snag_custom_referral_code: string;
+    }>(
+      `SELECT referral_code, snag_default_referral_link, snag_custom_referral_code
+       FROM users WHERE wallet = $1`,
+      [wallet]
+    );
 
     res.json({
       wallet,
-      stats,
+      referrals: {
+        total:     Number(counts?.total     ?? 0),
+        active:    Number(counts?.active    ?? 0),   // holds >= $5 SHIFT assets
+        inactive:  Number(counts?.inactive  ?? 0),   // registered but < $5
+        fromShift: Number(counts?.from_shift ?? 0),  // came via SHIFT website
+        fromSnag:  Number(counts?.from_snag  ?? 0),  // came via Snag loyalty link
+      },
+      links: {
+        shiftReferralCode:  links?.referral_code ?? null,
+        snagDefaultLink:    links?.snag_default_referral_link ?? null,
+        snagCustomCode:     links?.snag_custom_referral_code ?? null,
+      },
+      // Position referral SP (10–15% of referred wallets' position XP)
+      // Social referral SP is handled by Snag directly → shows in snag_points
+      commission: {
+        positionReferralSp: commission.position,
+        positionTierRate: '10–15%',
+        positionMultiplier: '1.0x',
+        monthlyProgress: {
+          earned:     monthlyEarned,
+          cap:        500,
+          percentage: Math.min((monthlyEarned / 500) * 100, 100),
+        },
+        // Note: Social referral SP from Snag tasks flows directly into
+        // the user's snag_points via Snag's own referral reward system.
+        socialReferralNote: 'Handled by Snag — appears in your Social SP total',
+      },
       legacy: {
         pending: legacy.pending,
         claimed: legacy.claimed,
       },
-      commission: {
-        // Position referral: 10-15% of referred wallets' Position SP (on top of 2X)
-        positionReferralSp: totalEarned.position,
-        positionReferralMultiplier: '1.0x',
-        positionMonthlyProgress: {
-          earned: monthlyEarned,
-          cap: 500,
-          percentage: Math.min((monthlyEarned / 500) * 100, 100),
-        },
-        // Social referral: flat 5% of referred wallets' Social SP (0.5x modifier)
-        socialReferralSp: totalEarned.social,
-        socialReferralMultiplier: '0.5x',
-        socialReferralRate: '5%',
-        // Combined totals
-        totalEarned: totalEarned.total,
-      },
     });
-  } catch (error) {
-    console.error('[API] Referral dashboard error:', error);
+  } catch (err) {
+    console.error('[API] Referral dashboard error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// ── GET /api/referral/:wallet/referred ──────────────────────
-// Returns list of all referred wallets with their stats and commission tier
+// ── GET /api/referral/:wallet/referred ────────────────────────────────────
+// Full list: every referred wallet with holding value, source, active status
 router.get('/:wallet/referred', async (req: Request, res: Response) => {
   const wallet = String(req.params.wallet);
+  const monthYear = new Date().toISOString().slice(0, 7);
 
   try {
-    const monthYear = new Date().toISOString().slice(0, 7);
-    const referredRows = await query<any>(
+    const rows = await query<any>(
       `SELECT
-         u.wallet,
+         r.referred_wallet                    AS wallet,
+         r.referral_source                    AS source,
+         r.is_active,
+         r.activated_at,
+         r.referred_at,
+         r.code_used,
          u.total_xp,
-         u.referral_commission_sp,
-         (SELECT COUNT(*) FROM positions WHERE wallet = u.wallet AND status = 'open') as open_positions,
-         (SELECT SUM(position_size_usd) FROM positions WHERE wallet = u.wallet AND status != 'filtered') as total_volume,
-         (SELECT SUM(position_size_usd) FROM positions WHERE wallet = u.wallet AND status = 'open') as current_holding,
-         (SELECT SUM(sp_awarded) FROM referral_commissions WHERE referrer_wallet = $1 AND referred_wallet = u.wallet) as commission_earned,
-         (SELECT SUM(total_awarded) FROM referral_monthly_caps WHERE referrer_wallet = $1 AND referred_wallet = u.wallet AND month_year = $2) as month_earned
-       FROM users u
-       WHERE u.referred_by_wallet = $1
-       ORDER BY u.total_xp DESC`,
-      [wallet, monthYear]
+         COALESCE(u.snag_points, 0)           AS snag_points,
+         -- Combined SHIFT asset holding (the $5 threshold value)
+         COALESCE((
+           SELECT SUM(p.position_size_usd)
+           FROM positions p
+           WHERE p.wallet = r.referred_wallet
+             AND p.status = 'open'
+             AND p.asset_mint = ANY($3::text[])
+         ), 0)                                AS shift_holding_usd,
+         -- Open position count
+         (SELECT COUNT(*) FROM positions p
+          WHERE p.wallet = r.referred_wallet AND p.status = 'open') AS open_positions,
+         -- Commission earned from this wallet
+         (SELECT COALESCE(SUM(sp_awarded), 0) FROM referral_commissions
+          WHERE referrer_wallet = $1 AND referred_wallet = r.referred_wallet
+            AND commission_type = 'position')  AS commission_earned,
+         (SELECT COALESCE(SUM(total_awarded), 0) FROM referral_monthly_caps
+          WHERE referrer_wallet = $1 AND referred_wallet = r.referred_wallet
+            AND month_year = $2)               AS month_earned
+       FROM referrals r
+       JOIN users u ON u.wallet = r.referred_wallet
+       WHERE r.referrer_wallet = $1
+       ORDER BY r.is_active DESC, u.total_xp DESC`,
+      [wallet, monthYear, SHIFT_ASSET_MINTS]
     );
 
-    // Determine tier for each referred wallet
-    const referred = await Promise.all(
-      referredRows.map(async (row) => {
-        const tier = await referralCommissionService.getTierForWallet(row.wallet);
-        return {
-          wallet: row.wallet,
-          status: row.open_positions > 0 ? 'active' : 'inactive',
-          positionsOpen: row.open_positions,
-          totalVolume: parseFloat(row.total_volume || 0),
-          currentHolding: parseFloat(row.current_holding || 0),
-          totalXp: parseFloat(row.total_xp),
-          commissionTier: `${tier}%`,
-          commissionEarned: parseFloat(row.commission_earned || 0),
-          monthlyEarned: parseFloat(row.month_earned || 0),
-        };
-      })
-    );
+    const referred = await Promise.all(rows.map(async (row: any) => {
+      const tier = await referralCommissionService.getPositionTierRate(row.wallet);
+      const holding = Number(row.shift_holding_usd);
+      return {
+        wallet:          row.wallet,
+        source:          row.source,           // 'shift' | 'snag'
+        isActive:        row.is_active,        // holds >= $5 SHIFT assets
+        activatedAt:     row.activated_at,
+        referredAt:      row.referred_at,
+        codeUsed:        row.code_used,
+        shiftHoldingUsd: holding,              // combined SHIFT asset value
+        openPositions:   Number(row.open_positions),
+        totalXp:         Number(row.total_xp),
+        snagPoints:      Number(row.snag_points),
+        commissionTier:  `${tier}%`,
+        commissionEarned: Number(row.commission_earned),
+        monthlyEarned:   Number(row.month_earned),
+        // Nudge eligibility: registered but hasn't met the $5 threshold yet
+        nudgeEligible:   !row.is_active,
+        nudgeReason:     !row.is_active
+          ? (holding > 0
+            ? `Holds $${holding.toFixed(2)} — needs $${(5 - holding).toFixed(2)} more to activate`
+            : 'No SHIFT assets held yet')
+          : null,
+      };
+    }));
 
     res.json({
       wallet,
-      referredCount: referred.length,
+      total:         referred.length,
+      activeCount:   referred.filter(r => r.isActive).length,
+      inactiveCount: referred.filter(r => !r.isActive).length,
+      nudgeCount:    referred.filter(r => r.nudgeEligible).length,
+      fromShift:     referred.filter(r => r.source === 'shift').length,
+      fromSnag:      referred.filter(r => r.source === 'snag').length,
       referred,
     });
-  } catch (error) {
-    console.error('[API] Referred users error:', error);
+  } catch (err) {
+    console.error('[API] Referred users error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// ── POST /api/referral/:wallet/claim-legacy ────────────────
-// Claims pending legacy balance and adds to total XP
-router.post('/:wallet/claim-legacy', async (req: Request, res: Response) => {
+// ── GET /api/referral/:wallet/nudge ───────────────────────────────────────
+// Only inactive referrals — optimised payload for nudge/notification system
+router.get('/:wallet/nudge', async (req: Request, res: Response) => {
   const wallet = String(req.params.wallet);
 
   try {
-    const claimedAmount = await referralCommissionService.claimLegacyBalance(wallet);
+    const rows = await query<any>(
+      `SELECT
+         r.referred_wallet AS wallet,
+         r.referral_source AS source,
+         r.referred_at,
+         COALESCE((
+           SELECT SUM(p.position_size_usd)
+           FROM positions p
+           WHERE p.wallet = r.referred_wallet
+             AND p.status = 'open'
+             AND p.asset_mint = ANY($2::text[])
+         ), 0) AS shift_holding_usd
+       FROM referrals r
+       WHERE r.referrer_wallet = $1
+         AND r.is_active = false
+       ORDER BY shift_holding_usd DESC`,
+      [wallet, SHIFT_ASSET_MINTS]
+    );
+
+    const nudgeList = rows.map((row: any) => {
+      const holding = Number(row.shift_holding_usd);
+      return {
+        wallet:       row.wallet,
+        source:       row.source,
+        referredAt:   row.referred_at,
+        holdingUsd:   holding,
+        needed:       Math.max(0, 5 - holding),
+        hasAnyAssets: holding > 0,
+        message:      holding > 0
+          ? `Almost there! Hold $${(5 - holding).toFixed(2)} more in SHIFT assets to activate`
+          : 'Buy any SHIFT RWA asset ($5 minimum) to start earning referral rewards',
+      };
+    });
 
     res.json({
-      success: true,
-      claimedAmount,
-      message: `Claimed ${claimedAmount} Position SP. Your leaderboard rank is updating.`,
+      wallet,
+      nudgeCount: nudgeList.length,
+      list:       nudgeList,
     });
-  } catch (error: any) {
-    console.error('[API] Claim legacy error:', error);
-    res.status(400).json({ error: error.message || 'Failed to claim balance' });
+  } catch (err) {
+    console.error('[API] Nudge list error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// ── GET /api/leaderboard ──────────────────────────────────
-// Get leaderboard with 4 sort options
-router.get('/', async (req: Request, res: Response) => {
-  const sortParam = typeof req.query.sort === 'string' ? req.query.sort : 'final_points';
-  const limitParam = typeof req.query.limit === 'string' ? req.query.limit : '100';
-  const limitNum = Math.min(parseInt(limitParam) || 100, 500);
+// ── POST /api/referral/:wallet/claim-legacy ───────────────────────────────
+router.post('/:wallet/claim-legacy', async (req: Request, res: Response) => {
+  const wallet = String(req.params.wallet);
+  try {
+    const amount = await referralCommissionService.claimLegacyBalance(wallet);
+    res.json({ success: true, claimedAmount: amount });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Failed to claim balance' });
+  }
+});
+
+// ── GET /api/referral/leaderboard ─────────────────────────────────────────
+router.get('/leaderboard', async (req: Request, res: Response) => {
+  const sort  = typeof req.query.sort  === 'string' ? req.query.sort  : 'final_points';
+  const limit = Math.min(parseInt(typeof req.query.limit === 'string' ? req.query.limit : '100') || 100, 500);
 
   try {
     let leaderboard;
-
-    switch (sortParam) {
-      case 'referral_count':
-        leaderboard = await leaderboardCacheService.getTopByReferralCount(limitNum);
-        break;
-      case 'referred_volume':
-        leaderboard = await leaderboardCacheService.getTopByReferredVolume(limitNum);
-        break;
-      case 'referred_holding':
-        leaderboard = await leaderboardCacheService.getTopByReferredHolding(limitNum);
-        break;
-      case 'final_points':
-      default:
-        leaderboard = await leaderboardCacheService.getTopByFinalPoints(limitNum);
+    switch (sort) {
+      case 'referral_count':   leaderboard = await leaderboardCacheService.getTopByReferralCount(limit);   break;
+      case 'referred_volume':  leaderboard = await leaderboardCacheService.getTopByReferredVolume(limit);  break;
+      case 'referred_holding': leaderboard = await leaderboardCacheService.getTopByReferredHolding(limit); break;
+      default:                 leaderboard = await leaderboardCacheService.getTopByFinalPoints(limit);
     }
 
-    // Enrich with referral stats for each user
-    const enriched = await Promise.all(
-      leaderboard.map(async (entry) => {
-        const stats = await referralCommissionService.getReferralStats(entry.wallet);
-        return {
-          ...entry,
-          referredCount: stats.referralCount,
-          referredVolume: stats.totalVolume,
-          referredHolding: stats.totalHolding,
-        };
-      })
-    );
+    // Enrich with referral stats from referrals table
+    const enriched = await Promise.all(leaderboard.map(async (entry) => {
+      const stats = await queryOne<{ total: number; active: number }>(
+        `SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE is_active) AS active
+         FROM referrals WHERE referrer_wallet = $1`,
+        [entry.wallet]
+      );
+      return {
+        ...entry,
+        referredTotal:  Number(stats?.total  ?? 0),
+        referredActive: Number(stats?.active ?? 0),
+      };
+    }));
 
-    res.json({
-      sort: sortParam,
-      limit: limitNum,
-      count: enriched.length,
-      leaderboard: enriched,
-    });
-  } catch (error) {
-    console.error('[API] Leaderboard error:', error);
+    res.json({ sort, limit, count: enriched.length, leaderboard: enriched });
+  } catch (err) {
+    console.error('[API] Leaderboard error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

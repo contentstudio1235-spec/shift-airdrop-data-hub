@@ -11,17 +11,14 @@
  *    - Stored in: users.referral_position_sp
  *    - Monthly cap: 500 SP per referrer/referred pair
  *
- * 2. SOCIAL REFERRAL SP (5%)
- *    - Triggered when a referred wallet earns Social SP from Snag tasks (snag_points)
- *    - Rate: always flat 5%
- *    - Stored in: users.referral_social_sp
- *    - Applies 0.5X modifier when used in final leaderboard score
- *    - No monthly cap (social tasks are bounded by available tasks)
+ * 2. SOCIAL REFERRAL SP — handled entirely by Snag on their end.
+ *    When a referred user completes Snag social tasks, Snag automatically
+ *    credits the referrer. Those credits flow into snag_points via the
+ *    normal Snag sync. We do NOT calculate or store social referral SP here.
  *
  * Final leaderboard score formula (computed in userPointsService):
  *   Final = (Position SP × 2.0) + (Social SP × 1.0)
  *         + (Referral Position SP × 1.0)   ← on top of 2X already in Position SP
- *         + (Referral Social SP × 0.5)     ← 0.5X modifier
  */
 
 import { queryOne, execute, query } from '../db/pool';
@@ -34,8 +31,7 @@ export class ReferralCommissionService {
     { maxXp: Infinity, rate: 15.0 },
   ];
 
-  private static readonly SOCIAL_RATE    = 5.0;    // flat 5% of referred's social SP
-  private static readonly MONTHLY_CAP_SP = 500;    // applies to position referral only
+  private static readonly MONTHLY_CAP_SP = 500;
 
   // ────────────────────────────────────────────────────────────────────────────
   // POSITION REFERRAL: called when referred wallet's total_xp changes
@@ -94,97 +90,51 @@ export class ReferralCommissionService {
   }
 
   // ────────────────────────────────────────────────────────────────────────────
-  // SOCIAL REFERRAL: called when referred wallet's snag_points changes
-  // ────────────────────────────────────────────────────────────────────────────
-  async awardSocialReferralCommission(referredWallet: string, newSocialSpEarned: number): Promise<void> {
-    if (newSocialSpEarned <= 0) return;
-
-    const referrer = await this.getReferrerWallet(referredWallet);
-    if (!referrer) return;
-
-    const toAward = (newSocialSpEarned * ReferralCommissionService.SOCIAL_RATE) / 100;
-    if (toAward <= 0) return;
-
-    const monthYear = this.currentMonthYear();
-
-    // Record commission
-    await execute(
-      `INSERT INTO referral_commissions
-         (referrer_wallet, referred_wallet, commission_type, commission_rate, sp_awarded, source_sp, month_year)
-       VALUES ($1, $2, 'social', $3, $4, $5, $6)`,
-      [referrer, referredWallet, ReferralCommissionService.SOCIAL_RATE, toAward, newSocialSpEarned, monthYear]
-    );
-
-    // Add to referrer's social referral bucket (0.5X applied later in scoring)
-    await execute(
-      `UPDATE users SET referral_social_sp = referral_social_sp + $1, updated_at = NOW()
-       WHERE wallet = $2`,
-      [toAward, referrer]
-    );
-
-    console.log(`[Referral] Social: +${toAward.toFixed(2)} SP → ${referrer.slice(0,8)} (from ${referredWallet.slice(0,8)}, 5%)`);
-  }
-
-  // ────────────────────────────────────────────────────────────────────────────
-  // CRON ENTRY POINT: diff-based — compare current vs last recorded SP
+  // CRON ENTRY POINT: diff-based — compare current vs last recorded total_xp
+  // Social referral SP is handled by Snag on their end; it flows into
+  // snag_points via the normal Snag sync. We only process position referrals.
   // ────────────────────────────────────────────────────────────────────────────
   async processAllPendingCommissions(): Promise<{ position: number; social: number }> {
     let positionCount = 0;
-    let socialCount = 0;
 
-    // Find referred wallets whose SP changed since last commission check
+    // Find referred wallets whose position XP changed since last commission check
     const earners = await query<{
       wallet: string;
       total_xp: number;
-      snag_points: number;
       last_commission_xp: number;
-      last_commission_social: number;
     }>(
       `SELECT
          u.wallet,
          u.total_xp,
-         COALESCE(u.snag_points, 0) as snag_points,
-         COALESCE(u.last_commission_xp, 0) as last_commission_xp,
-         COALESCE(u.last_commission_social, 0) as last_commission_social
+         COALESCE(u.last_commission_xp, 0) as last_commission_xp
        FROM users u
        WHERE u.referred_by_wallet IS NOT NULL
-         AND (
-           u.total_xp > COALESCE(u.last_commission_xp, 0)
-           OR u.snag_points > COALESCE(u.last_commission_social, 0)
-         )
+         AND u.total_xp > COALESCE(u.last_commission_xp, 0)
        LIMIT 2000`
     );
 
     for (const row of earners) {
       try {
         const newPositionSp = Number(row.total_xp) - Number(row.last_commission_xp);
-        const newSocialSp   = Number(row.snag_points) - Number(row.last_commission_social);
 
         if (newPositionSp > 0) {
           await this.awardPositionReferralCommission(row.wallet, newPositionSp);
           positionCount++;
         }
 
-        if (newSocialSp > 0) {
-          await this.awardSocialReferralCommission(row.wallet, newSocialSp);
-          socialCount++;
-        }
-
-        // Update watermark so we don't double-award
         await execute(
           `UPDATE users
-           SET last_commission_xp     = GREATEST(COALESCE(last_commission_xp, 0),    $1),
-               last_commission_social = GREATEST(COALESCE(last_commission_social, 0), $2)
-           WHERE wallet = $3`,
-          [row.total_xp, row.snag_points, row.wallet]
+           SET last_commission_xp = GREATEST(COALESCE(last_commission_xp, 0), $1)
+           WHERE wallet = $2`,
+          [row.total_xp, row.wallet]
         );
       } catch (err) {
         console.error(`[Referral] Commission processing failed for ${row.wallet}:`, err);
       }
     }
 
-    console.log(`[Referral] Cron: position commissions=${positionCount}, social commissions=${socialCount}`);
-    return { position: positionCount, social: socialCount };
+    console.log(`[Referral] Cron: position commissions=${positionCount}`);
+    return { position: positionCount, social: 0 };
   }
 
   // ────────────────────────────────────────────────────────────────────────────

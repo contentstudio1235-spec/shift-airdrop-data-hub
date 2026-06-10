@@ -278,15 +278,15 @@ export class SnagWebhookHandler {
         [referrerWallet, referredWallet, customCode || 'default']
       );
 
-      // Update main referrals table if it exists
+      // Upsert into referrals table; source = 'snag' (came via Snag loyalty link)
       await execute(
-        `INSERT INTO referrals (referrer_wallet, referred_wallet, referral_code, snag_synced_at)
-         VALUES ($1, $2, $3, NOW())
-         ON CONFLICT (referrer_wallet, referred_wallet) DO UPDATE SET snag_synced_at = NOW()`,
+        `INSERT INTO referrals
+           (referrer_wallet, referred_wallet, referral_source, code_used, snag_synced_at)
+         VALUES ($1, $2, 'snag', $3, NOW())
+         ON CONFLICT (referrer_wallet, referred_wallet)
+         DO UPDATE SET referral_source = 'snag', snag_synced_at = NOW()`,
         [referrerWallet, referredWallet, customCode || 'default']
-      ).catch(() => {
-        // Table may not have all columns, continue anyway
-      });
+      ).catch(() => {});
 
       console.log(
         `[SnagWebhook] ✅ Referral: ${referrerWallet.slice(0, 8)}... → ${referredWallet.slice(0, 8)}... ` +

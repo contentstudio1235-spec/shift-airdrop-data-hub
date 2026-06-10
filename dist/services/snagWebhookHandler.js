@@ -235,12 +235,12 @@ class SnagWebhookHandler {
             await (0, pool_1.execute)(`INSERT INTO snag_referral_events (referrer_wallet, referred_wallet, referral_code_used, processed_at)
          VALUES ($1, $2, $3, NOW())
          ON CONFLICT (referrer_wallet, referred_wallet) DO NOTHING`, [referrerWallet, referredWallet, customCode || 'default']);
-            // Update main referrals table if it exists
-            await (0, pool_1.execute)(`INSERT INTO referrals (referrer_wallet, referred_wallet, referral_code, snag_synced_at)
-         VALUES ($1, $2, $3, NOW())
-         ON CONFLICT (referrer_wallet, referred_wallet) DO UPDATE SET snag_synced_at = NOW()`, [referrerWallet, referredWallet, customCode || 'default']).catch(() => {
-                // Table may not have all columns, continue anyway
-            });
+            // Upsert into referrals table; source = 'snag' (came via Snag loyalty link)
+            await (0, pool_1.execute)(`INSERT INTO referrals
+           (referrer_wallet, referred_wallet, referral_source, code_used, snag_synced_at)
+         VALUES ($1, $2, 'snag', $3, NOW())
+         ON CONFLICT (referrer_wallet, referred_wallet)
+         DO UPDATE SET referral_source = 'snag', snag_synced_at = NOW()`, [referrerWallet, referredWallet, customCode || 'default']).catch(() => { });
             console.log(`[SnagWebhook] ✅ Referral: ${referrerWallet.slice(0, 8)}... → ${referredWallet.slice(0, 8)}... ` +
                 `(code: ${customCode || 'default'})`);
         }

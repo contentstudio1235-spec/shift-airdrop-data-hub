@@ -61,6 +61,23 @@ export declare class SnagSyncService {
     getUserRank(wallet: string): Promise<number | null>;
     getUserPoints(wallet: string): Promise<number>;
     /**
+     * Pull referred-user events from Snag and upsert them into the referrals table
+     * with referral_source = 'snag'. These are users who registered via a Snag
+     * loyalty referral link rather than a SHIFT website referral code.
+     *
+     * Snag referral events live in /api/loyalty/referrals (pagination via cursor).
+     * We upsert by (referrer_wallet, referred_wallet) so the method is idempotent.
+     */
+    syncReferralsFromSnag(): Promise<{
+        inserted: number;
+        updated: number;
+    }>;
+    /**
+     * Refresh is_active on ALL referrals based on current $5 SHIFT asset holding.
+     * Run after XP sync so position_size_usd values are fresh.
+     */
+    refreshReferralActiveStatus(): Promise<void>;
+    /**
      * Fetch user's referral links from SNAG (default + custom).
      */
     getUserReferralLinks(wallet: string): Promise<{

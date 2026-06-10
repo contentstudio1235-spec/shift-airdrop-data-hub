@@ -100,10 +100,10 @@ async function registerWithReferral(wallet, refCode) {
                     bonusMultiplier = codeInfo.multiplierBonus;
                     bonusType = codeInfo.multiplierType;
                     referrerDisplayName = codeInfo.displayName;
-                    // Insert referral record
+                    // Insert referral record (source = 'shift' — user came via SHIFT website ref link)
                     await client.query(`INSERT INTO referrals
-               (referred_wallet, referrer_wallet, code_used, is_kol_referral, bonus_multiplier, bonus_type, bonus_applied)
-             VALUES ($1, $2, $3, $4, $5, $6, false)
+               (referred_wallet, referrer_wallet, code_used, referral_source, is_kol_referral, bonus_multiplier, bonus_type, bonus_applied)
+             VALUES ($1, $2, $3, 'shift', $4, $5, $6, false)
              ON CONFLICT (referred_wallet) DO NOTHING`, [wallet, codeInfo.referrerWallet, codeInfo.code, codeInfo.isKol, bonusMultiplier, bonusType]);
                     // Update user to record who referred them
                     await client.query(`UPDATE users SET

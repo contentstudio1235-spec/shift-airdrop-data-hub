@@ -102,6 +102,10 @@ class SnagSyncService {
             }
             // 6. Sync multiplier changes to SNAG
             await this.syncMultipliers();
+            // 7. Pull Snag-sourced referrals and upsert into referrals table
+            await this.syncReferralsFromSnag();
+            // 8. Refresh is_active status for all referrals
+            await this.refreshReferralActiveStatus();
             console.log('[SnagSync] ✅ Full sync complete');
         }
         catch (error) {
@@ -573,6 +577,117 @@ class SnagSyncService {
             console.error('[SnagSync] Failed to fetch user points from SNAG:', error);
         }
         return 0;
+    }
+    // ── Snag Referral Sync ──
+    /**
+     * Pull referred-user events from Snag and upsert them into the referrals table
+     * with referral_source = 'snag'. These are users who registered via a Snag
+     * loyalty referral link rather than a SHIFT website referral code.
+     *
+     * Snag referral events live in /api/loyalty/referrals (pagination via cursor).
+     * We upsert by (referrer_wallet, referred_wallet) so the method is idempotent.
+     */
+    async syncReferralsFromSnag() {
+        if (!config_1.config.snagApiKey || !config_1.config.snagWebsiteId) {
+            console.log('[SnagSync] Referral sync skipped: SNAG not configured');
+            return { inserted: 0, updated: 0 };
+        }
+        let inserted = 0;
+        let updated = 0;
+        let cursor;
+        try {
+            do {
+                const params = {
+                    websiteId: config_1.config.snagWebsiteId,
+                    limit: 100,
+                };
+                if (cursor)
+                    params.cursor = cursor;
+                const response = await this.client.get('/api/loyalty/referrals', { params });
+                const items = response.data?.data ?? [];
+                cursor = response.data?.nextCursor ?? undefined;
+                for (const item of items) {
+                    const referrerWallet = item.referrerWalletAddress || item.referrer?.walletAddress;
+                    const referredWallet = item.referredWalletAddress || item.referred?.walletAddress;
+                    if (!referrerWallet || !referredWallet)
+                        continue;
+                    // Ensure both wallets exist in users table (Snag users may not be in our DB yet)
+                    await (0, pool_1.execute)(`INSERT INTO users (wallet, created_at) VALUES ($1, NOW())
+             ON CONFLICT (wallet) DO NOTHING`, [referredWallet]);
+                    const result = await (0, pool_1.execute)(`INSERT INTO referrals
+               (referrer_wallet, referred_wallet, referral_source, referred_at, code_used)
+             VALUES ($1, $2, 'snag', $3, $4)
+             ON CONFLICT (referrer_wallet, referred_wallet)
+             DO UPDATE SET
+               referral_source = EXCLUDED.referral_source,
+               updated_at = NOW()
+             RETURNING (xmax = 0) AS was_inserted`, [
+                        referrerWallet,
+                        referredWallet,
+                        item.createdAt ? new Date(item.createdAt) : new Date(),
+                        item.referralCode ?? item.code ?? null,
+                    ]);
+                    const wasInserted = result?.rows?.[0]?.was_inserted;
+                    if (wasInserted)
+                        inserted++;
+                    else
+                        updated++;
+                    // Mirror referred_by_wallet on the users table for commission lookups
+                    await (0, pool_1.execute)(`UPDATE users SET referred_by_wallet = $1
+             WHERE wallet = $2 AND referred_by_wallet IS NULL`, [referrerWallet, referredWallet]);
+                }
+                this.recordSuccess();
+            } while (cursor);
+        }
+        catch (error) {
+            const errMsg = error?.response?.data ? JSON.stringify(error.response.data) : error.message;
+            console.warn(`[SnagSync] Referral sync partial/failed: ${errMsg}`);
+            // Not a hard failure — don't open circuit for this
+        }
+        if (inserted + updated > 0) {
+            console.log(`[SnagSync] Referral sync: +${inserted} new, ${updated} updated`);
+        }
+        return { inserted, updated };
+    }
+    /**
+     * Refresh is_active on ALL referrals based on current $5 SHIFT asset holding.
+     * Run after XP sync so position_size_usd values are fresh.
+     */
+    async refreshReferralActiveStatus() {
+        const SHIFT_ASSET_MINTS = [
+            '6afjZE5Qv9WF5K1adBgTxtWyenJ7ZerH6BVAzmoSHFT',
+            'bNPXng6hSVas7LWiNQyvpGcPYtY1ZmFY6WP49ymSHFT',
+            'Hyhxfb6riaqCV333GynmnCXCEQK3goTznFj7k4dSHFT',
+            '7GoxZQ7gCh1mg1b3AUqd7cyPqiUp4y2NRxM9A5zSHFT',
+            '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT',
+            '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT',
+        ];
+        // Activate referrals that now meet the $5 threshold
+        await (0, pool_1.execute)(`UPDATE referrals r
+       SET is_active = true,
+           activated_at = COALESCE(r.activated_at, NOW())
+       WHERE r.is_active = false
+         AND EXISTS (
+           SELECT 1 FROM positions p
+           WHERE p.wallet = r.referred_wallet
+             AND p.status = 'open'
+             AND p.asset_mint = ANY($1::text[])
+           GROUP BY p.wallet
+           HAVING SUM(p.position_size_usd) >= 5
+         )`, [SHIFT_ASSET_MINTS]);
+        // Deactivate referrals where wallet no longer holds $5+
+        await (0, pool_1.execute)(`UPDATE referrals r
+       SET is_active = false
+       WHERE r.is_active = true
+         AND NOT EXISTS (
+           SELECT 1 FROM positions p
+           WHERE p.wallet = r.referred_wallet
+             AND p.status = 'open'
+             AND p.asset_mint = ANY($1::text[])
+           GROUP BY p.wallet
+           HAVING SUM(p.position_size_usd) >= 5
+         )`, [SHIFT_ASSET_MINTS]);
+        console.log('[SnagSync] Referral active status refreshed');
     }
     // ── Referral Links ──
     /**
