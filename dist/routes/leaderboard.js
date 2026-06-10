@@ -41,7 +41,11 @@ router.get('/', async (req, res) => {
          GROUP BY u.wallet, u.total_xp, u.snag_points, s.last_synced_xp, u.claim_multiplier
        ),
        ref_counts AS (
-         SELECT referrer_wallet, COUNT(*) AS referred_count
+         SELECT
+           referrer_wallet,
+           COUNT(*)                                                               AS referred_count,
+           COUNT(*) FILTER (WHERE referred_at < '2026-05-26 15:00:00+00')        AS pre_reg_count,
+           COUNT(*) FILTER (WHERE referred_at >= '2026-05-26 15:00:00+00')       AS season1_count
          FROM referrals
          GROUP BY referrer_wallet
        ),
@@ -70,6 +74,8 @@ router.get('/', async (req, res) => {
          ru.badge_count,
          ru.combined_score,
          COALESCE(rc.referred_count,  0) AS referred_count,
+         COALESCE(rc.pre_reg_count,   0) AS pre_reg_count,
+         COALESCE(rc.season1_count,   0) AS season1_count,
          COALESCE(rv.referred_volume, 0) AS referred_volume,
          COALESCE(rh.referred_holding,0) AS referred_holding
        FROM ranked_users ru
@@ -94,6 +100,8 @@ router.get('/', async (req, res) => {
                 referredCount: Number(row.referred_count),
                 referredVolume: Number(row.referred_volume),
                 referredHolding: Number(row.referred_holding),
+                preRegCount: Number(row.pre_reg_count),
+                season1Count: Number(row.season1_count),
                 // Legacy fields kept for backward compat
                 totalXP: positionSp,
                 multiplier: Number(row.claim_multiplier),

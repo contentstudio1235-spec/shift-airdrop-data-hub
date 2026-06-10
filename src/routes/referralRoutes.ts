@@ -37,6 +37,10 @@ const SHIFT_ASSET_MINTS = [
 ];
 const MINT_PLACEHOLDERS = SHIFT_ASSET_MINTS.map((_, i) => `$${i + 1}`).join(',');
 
+// Season 1 launch: 26 May 2026 15:00 UTC
+// Referrals before this are "Pre-Registration", on/after are "Season 1"
+const SEASON1_LAUNCH = new Date('2026-05-26T15:00:00Z');
+
 // ── GET /api/referral/:wallet ──────────────────────────────────────────────
 router.get('/:wallet', async (req: Request, res: Response) => {
   const wallet = String(req.params.wallet);
@@ -50,13 +54,17 @@ router.get('/:wallet', async (req: Request, res: Response) => {
       inactive: number;
       from_shift: number;
       from_snag: number;
+      pre_reg_count: number;
+      season1_count: number;
     }>(
       `SELECT
-         COUNT(*)                                        AS total,
-         COUNT(*) FILTER (WHERE is_active = true)        AS active,
-         COUNT(*) FILTER (WHERE is_active = false)       AS inactive,
-         COUNT(*) FILTER (WHERE referral_source = 'shift') AS from_shift,
-         COUNT(*) FILTER (WHERE referral_source = 'snag')  AS from_snag
+         COUNT(*)                                                              AS total,
+         COUNT(*) FILTER (WHERE is_active = true)                             AS active,
+         COUNT(*) FILTER (WHERE is_active = false)                            AS inactive,
+         COUNT(*) FILTER (WHERE referral_source = 'shift')                    AS from_shift,
+         COUNT(*) FILTER (WHERE referral_source = 'snag')                     AS from_snag,
+         COUNT(*) FILTER (WHERE referred_at < '2026-05-26 15:00:00+00')       AS pre_reg_count,
+         COUNT(*) FILTER (WHERE referred_at >= '2026-05-26 15:00:00+00')      AS season1_count
        FROM referrals
        WHERE referrer_wallet = $1`,
       [wallet]
@@ -92,11 +100,13 @@ router.get('/:wallet', async (req: Request, res: Response) => {
     res.json({
       wallet,
       referrals: {
-        total:     Number(counts?.total     ?? 0),
-        active:    Number(counts?.active    ?? 0),   // holds >= $5 SHIFT assets
-        inactive:  Number(counts?.inactive  ?? 0),   // registered but < $5
-        fromShift: Number(counts?.from_shift ?? 0),  // came via SHIFT website
-        fromSnag:  Number(counts?.from_snag  ?? 0),  // came via Snag loyalty link
+        total:        Number(counts?.total        ?? 0),
+        active:       Number(counts?.active       ?? 0),   // holds >= $5 SHIFT assets
+        inactive:     Number(counts?.inactive     ?? 0),   // registered but < $5
+        fromShift:    Number(counts?.from_shift   ?? 0),   // came via SHIFT website
+        fromSnag:     Number(counts?.from_snag    ?? 0),   // came via Snag loyalty link
+        preRegCount:  Number(counts?.pre_reg_count ?? 0),  // before Season 1 launch
+        season1Count: Number(counts?.season1_count ?? 0),  // on/after Season 1 launch
       },
       links: {
         shiftReferralCode:  links?.referral_code ?? null,
@@ -184,10 +194,13 @@ router.get('/:wallet/referred', async (req: Request, res: Response) => {
     const referred = await Promise.all(rows.map(async (row: any) => {
       const tier = await referralCommissionService.getPositionTierRate(row.wallet);
       const holding = Number(row.shift_holding_usd);
+      const referredAt = row.referred_at ? new Date(row.referred_at) : null;
+      const isPreReg = referredAt ? referredAt < SEASON1_LAUNCH : false;
       return {
         wallet:          row.wallet,
         source:          row.source,           // 'shift' | 'snag'
         isActive:        row.is_active,        // holds >= $5 SHIFT assets
+        isPreReg,                              // referred before Season 1 launch (26 May 2026 15:00 UTC)
         activatedAt:     row.activated_at,
         referredAt:      row.referred_at,
         codeUsed:        row.code_used,
@@ -211,12 +224,14 @@ router.get('/:wallet/referred', async (req: Request, res: Response) => {
 
     res.json({
       wallet,
-      total:         referred.length,
-      activeCount:   referred.filter(r => r.isActive).length,
-      inactiveCount: referred.filter(r => !r.isActive).length,
-      nudgeCount:    referred.filter(r => r.nudgeEligible).length,
-      fromShift:     referred.filter(r => r.source === 'shift').length,
-      fromSnag:      referred.filter(r => r.source === 'snag').length,
+      total:          referred.length,
+      activeCount:    referred.filter(r => r.isActive).length,
+      inactiveCount:  referred.filter(r => !r.isActive).length,
+      nudgeCount:     referred.filter(r => r.nudgeEligible).length,
+      fromShift:      referred.filter(r => r.source === 'shift').length,
+      fromSnag:       referred.filter(r => r.source === 'snag').length,
+      preRegCount:    referred.filter(r => r.isPreReg).length,
+      season1Count:   referred.filter(r => !r.isPreReg).length,
       referred,
     });
   } catch (err) {

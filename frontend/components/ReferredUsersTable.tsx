@@ -5,15 +5,19 @@ import Icon from './Icon';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://shift-airdrop-backend.onrender.com';
 
+// Season 1 launch: 26 May 2026 15:00 UTC
+const SEASON1_LAUNCH = new Date('2026-05-26T15:00:00Z');
+
 interface ReferredUser {
   wallet: string;
   source: 'shift' | 'snag' | 'unknown';
   isActive: boolean;
+  isPreReg: boolean;             // referred before Season 1 launch
   activatedAt: string | null;
   referredAt: string | null;
-  shiftHoldingUsd: number;   // current open SHIFT RWA holding
-  openPositions: number;     // total open position count
-  totalVolume: number;       // all-time historical volume
+  shiftHoldingUsd: number;
+  openPositions: number;
+  totalVolume: number;
   totalXp: number;
   snagPoints: number;
   commissionTier: string;
@@ -31,10 +35,13 @@ interface ApiResponse {
   nudgeCount: number;
   fromShift: number;
   fromSnag: number;
+  preRegCount: number;
+  season1Count: number;
   referred: ReferredUser[];
 }
 
 type SortKey = 'xp' | 'volume' | 'holding' | 'commission';
+type FilterKey = 'all' | 'season1' | 'prereg';
 
 const formatAddr = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 const formatUSD = (n: number | null | undefined) => {
@@ -48,11 +55,19 @@ const formatSince = (iso: string | null) => {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
 };
 
+// Determine isPreReg from referredAt if the backend field is missing (old data)
+const getIsPreReg = (user: ReferredUser): boolean => {
+  if (user.isPreReg !== undefined) return user.isPreReg;
+  if (!user.referredAt) return false;
+  return new Date(user.referredAt) < SEASON1_LAUNCH;
+};
+
 export default function ReferredUsersTable({ wallet }: { wallet: string }) {
   const [data, setData]         = useState<ApiResponse | null>(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
   const [sorting, setSorting]   = useState<SortKey>('xp');
+  const [filter, setFilter]     = useState<FilterKey>('all');
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -109,12 +124,36 @@ export default function ReferredUsersTable({ wallet }: { wallet: string }) {
     );
   }
 
-  const sorted = [...data.referred].sort((a, b) => {
+  // Derive pre-reg counts from actual data (fallback if API doesn't return counts yet)
+  const preRegCount  = data.preRegCount  ?? data.referred.filter(u => getIsPreReg(u)).length;
+  const season1Count = data.season1Count ?? data.referred.filter(u => !getIsPreReg(u)).length;
+
+  const filtered = data.referred.filter(u => {
+    if (filter === 'season1') return !getIsPreReg(u);
+    if (filter === 'prereg')  return getIsPreReg(u);
+    return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
     if (sorting === 'xp')         return b.totalXp - a.totalXp;
     if (sorting === 'volume')     return b.totalVolume - a.totalVolume;
     if (sorting === 'holding')    return b.shiftHoldingUsd - a.shiftHoldingUsd;
     if (sorting === 'commission') return b.commissionEarned - a.commissionEarned;
     return 0;
+  });
+
+  const filterBtnStyle = (key: FilterKey) => ({
+    padding: '4px 9px', fontSize: 10, fontWeight: 600, borderRadius: 5, cursor: 'pointer', border: '1px solid',
+    borderColor: filter === key ? 'rgba(38,200,184,0.4)' : 'var(--border)',
+    background:  filter === key ? 'var(--mint-soft)' : 'transparent',
+    color:       filter === key ? 'var(--mint)' : 'var(--text-mute)',
+  });
+
+  const sortBtnStyle = (key: SortKey) => ({
+    padding: '4px 8px', fontSize: 10, fontWeight: 600, borderRadius: 5, cursor: 'pointer', border: '1px solid',
+    borderColor: sorting === key ? 'rgba(247,162,59,0.4)' : 'var(--border)',
+    background:  sorting === key ? 'var(--amber-soft)' : 'transparent',
+    color:       sorting === key ? 'var(--amber)' : 'var(--text-mute)',
   });
 
   return (
@@ -133,29 +172,22 @@ export default function ReferredUsersTable({ wallet }: { wallet: string }) {
             <span style={{ margin: '0 5px', opacity: 0.4 }}>·</span>
             <span>{data.inactiveCount} pending</span>
             <span style={{ margin: '0 5px', opacity: 0.4 }}>·</span>
-            <span>{data.fromShift} shift / {data.fromSnag} snag</span>
+            <span style={{ color: 'var(--mint)' }}>{season1Count} S1</span>
+            <span style={{ margin: '0 5px', opacity: 0.4 }}>·</span>
+            <span style={{ color: 'var(--text-mute)' }}>{preRegCount} pre-reg</span>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {/* Filter tabs */}
+          <button style={filterBtnStyle('all')}     onClick={() => setFilter('all')}>All</button>
+          <button style={filterBtnStyle('season1')} onClick={() => setFilter('season1')}>Season 1</button>
+          <button style={filterBtnStyle('prereg')}  onClick={() => setFilter('prereg')}>Pre-Reg</button>
+          <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 2px' }} />
           {/* Sort buttons */}
-          {([
-            { key: 'xp',         label: 'XP'         },
-            { key: 'volume',     label: 'Volume'      },
-            { key: 'holding',    label: 'Holding'     },
-            { key: 'commission', label: 'Commission'  },
-          ] as { key: SortKey; label: string }[]).map(s => (
-            <button
-              key={s.key}
-              onClick={() => setSorting(s.key)}
-              style={{
-                padding: '4px 8px', fontSize: 10, fontWeight: 600, borderRadius: 5, cursor: 'pointer', border: '1px solid',
-                borderColor: sorting === s.key ? 'rgba(247,162,59,0.4)' : 'var(--border)',
-                background:  sorting === s.key ? 'var(--amber-soft)' : 'transparent',
-                color:       sorting === s.key ? 'var(--amber)' : 'var(--text-mute)',
-              }}
-            >
-              {s.label}
+          {(['xp', 'volume', 'holding', 'commission'] as SortKey[]).map(k => (
+            <button key={k} style={sortBtnStyle(k)} onClick={() => setSorting(k)}>
+              {k === 'xp' ? 'XP' : k === 'volume' ? 'Volume' : k === 'holding' ? 'Holding' : 'Commission'}
             </button>
           ))}
           <button onClick={fetchData} title="Refresh" style={{ padding: '4px 7px', fontSize: 11, borderRadius: 5, cursor: 'pointer', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-mute)', display: 'flex', alignItems: 'center' }}>
@@ -167,16 +199,18 @@ export default function ReferredUsersTable({ wallet }: { wallet: string }) {
       {lastFetch && (
         <div style={{ padding: '4px 16px 10px', fontSize: 10, color: 'var(--text-mute)' }}>
           Live data · last fetched {lastFetch.toLocaleTimeString()}
+          {filter !== 'all' && <span style={{ marginLeft: 8, color: 'var(--mint)' }}>· showing {sorted.length} of {data.total}</span>}
         </div>
       )}
 
       {/* Summary strip */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
         {[
-          { label: 'Total Referrals',  value: data.total.toString(),                                       color: 'var(--text)'   },
-          { label: 'Total Volume',     value: formatUSD(data.referred.reduce((s, u) => s + u.totalVolume, 0)),    color: 'var(--mint)'   },
-          { label: 'Total Holding',    value: formatUSD(data.referred.reduce((s, u) => s + u.shiftHoldingUsd, 0)), color: 'var(--green)'  },
-          { label: 'Open Positions',   value: data.referred.reduce((s, u) => s + u.openPositions, 0).toString(),  color: 'var(--amber)'  },
+          { label: filter === 'all' ? 'Total Referrals' : filter === 'season1' ? 'Season 1' : 'Pre-Reg',
+            value: sorted.length.toString(), color: 'var(--text)' },
+          { label: 'Total Volume',  value: formatUSD(sorted.reduce((s, u) => s + u.totalVolume, 0)),     color: 'var(--mint)'  },
+          { label: 'Total Holding', value: formatUSD(sorted.reduce((s, u) => s + u.shiftHoldingUsd, 0)), color: 'var(--green)' },
+          { label: 'Open Positions',value: sorted.reduce((s, u) => s + u.openPositions, 0).toString(),   color: 'var(--amber)' },
         ].map((s, i, arr) => (
           <div key={s.label} style={{ padding: '10px 14px', borderRight: i < arr.length - 1 ? '1px solid var(--border)' : 'none', textAlign: 'center' }}>
             <div style={{ fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-space)', color: s.color }}>{s.value}</div>
@@ -190,7 +224,7 @@ export default function ReferredUsersTable({ wallet }: { wallet: string }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
-              {['Wallet', 'Status', 'Holding', 'Open Pos', 'Total Vol', 'XP', 'Commission', 'Monthly', 'Since'].map(h => (
+              {['Wallet', 'Season', 'Status', 'Holding', 'Open Pos', 'Total Vol', 'XP', 'Commission', 'Monthly', 'Since'].map(h => (
                 <th key={h} style={{ padding: '8px 12px', textAlign: h === 'Wallet' || h === 'Since' ? 'left' : 'right', fontSize: 10, fontWeight: 600, color: 'var(--text-mute)', whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   {h}
                 </th>
@@ -198,83 +232,99 @@ export default function ReferredUsersTable({ wallet }: { wallet: string }) {
             </tr>
           </thead>
           <tbody>
-            {sorted.map((user) => (
-              <tr
-                key={user.wallet}
-                style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.1s' }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.025)')}
-                onMouseLeave={e => (e.currentTarget.style.background = '')}
-              >
-                {/* Wallet */}
-                <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 11, whiteSpace: 'nowrap' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {formatAddr(user.wallet)}
-                    {user.source === 'snag' && (
-                      <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: 'rgba(157,108,245,0.12)', color: 'var(--purple)', fontWeight: 600 }}>SNAG</span>
-                    )}
-                  </div>
-                </td>
-
-                {/* Status */}
-                <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                    padding: '3px 7px', borderRadius: 4, fontSize: 10, fontWeight: 600,
-                    background: user.isActive ? 'rgba(38,200,184,0.1)' : 'rgba(255,255,255,0.05)',
-                    color: user.isActive ? 'var(--mint)' : 'var(--text-mute)',
-                    border: `1px solid ${user.isActive ? 'rgba(38,200,184,0.25)' : 'var(--border)'}`,
-                  }}>
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: user.isActive ? 'var(--mint)' : 'var(--text-mute)', flexShrink: 0 }} />
-                    {user.isActive ? 'Active' : 'Pending'}
-                  </span>
-                </td>
-
-                {/* Current SHIFT holding */}
-                <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                  <span style={{ color: user.shiftHoldingUsd >= 5 ? 'var(--green)' : user.shiftHoldingUsd > 0 ? 'var(--amber)' : 'var(--text-mute)' }}>
-                    {formatUSD(user.shiftHoldingUsd)}
-                  </span>
-                  {!user.isActive && user.shiftHoldingUsd > 0 && user.shiftHoldingUsd < 5 && (
-                    <div style={{ fontSize: 9, color: 'var(--amber)', marginTop: 1 }}>
-                      +{formatUSD(5 - user.shiftHoldingUsd)} needed
+            {sorted.map((user) => {
+              const preReg = getIsPreReg(user);
+              return (
+                <tr
+                  key={user.wallet}
+                  style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.1s' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.025)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = '')}
+                >
+                  {/* Wallet */}
+                  <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 11, whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {formatAddr(user.wallet)}
+                      {user.source === 'snag' && (
+                        <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: 'rgba(157,108,245,0.12)', color: 'var(--purple)', fontWeight: 600 }}>SNAG</span>
+                      )}
                     </div>
-                  )}
-                </td>
+                  </td>
 
-                {/* Open positions count */}
-                <td style={{ padding: '10px 12px', textAlign: 'right', color: user.openPositions > 0 ? 'var(--text)' : 'var(--text-mute)' }}>
-                  {user.openPositions}
-                </td>
+                  {/* Season badge */}
+                  <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {preReg ? (
+                      <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 3, background: 'rgba(255,255,255,0.06)', color: 'var(--text-mute)', border: '1px solid var(--border)', fontWeight: 600 }}>
+                        PRE-REG
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 3, background: 'rgba(38,200,184,0.1)', color: 'var(--mint)', border: '1px solid rgba(38,200,184,0.2)', fontWeight: 600 }}>
+                        SEASON 1
+                      </span>
+                    )}
+                  </td>
 
-                {/* Total historical volume */}
-                <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-                  {formatUSD(user.totalVolume)}
-                </td>
+                  {/* Status */}
+                  <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      padding: '3px 7px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                      background: user.isActive ? 'rgba(38,200,184,0.1)' : 'rgba(255,255,255,0.05)',
+                      color: user.isActive ? 'var(--mint)' : 'var(--text-mute)',
+                      border: `1px solid ${user.isActive ? 'rgba(38,200,184,0.25)' : 'var(--border)'}`,
+                    }}>
+                      <span style={{ width: 5, height: 5, borderRadius: '50%', background: user.isActive ? 'var(--mint)' : 'var(--text-mute)', flexShrink: 0 }} />
+                      {user.isActive ? 'Active' : 'Pending'}
+                    </span>
+                  </td>
 
-                {/* Position XP */}
-                <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--mint)', fontWeight: 600 }}>
-                  {Math.floor(user.totalXp).toLocaleString()}
-                </td>
+                  {/* Current SHIFT holding */}
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                    <span style={{ color: user.shiftHoldingUsd >= 5 ? 'var(--green)' : user.shiftHoldingUsd > 0 ? 'var(--amber)' : 'var(--text-mute)' }}>
+                      {formatUSD(user.shiftHoldingUsd)}
+                    </span>
+                    {!user.isActive && user.shiftHoldingUsd > 0 && user.shiftHoldingUsd < 5 && (
+                      <div style={{ fontSize: 9, color: 'var(--amber)', marginTop: 1 }}>
+                        +{formatUSD(5 - user.shiftHoldingUsd)} needed
+                      </div>
+                    )}
+                  </td>
 
-                {/* Total commission earned */}
-                <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--amber)', fontWeight: 600 }}>
-                  {Math.floor(user.commissionEarned).toLocaleString()} SP
-                </td>
+                  {/* Open positions count */}
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: user.openPositions > 0 ? 'var(--text)' : 'var(--text-mute)' }}>
+                    {user.openPositions}
+                  </td>
 
-                {/* Monthly cap progress */}
-                <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: user.monthlyEarned >= 500 ? 'var(--text-mute)' : 'var(--text-dim)' }}>
-                    {Math.floor(user.monthlyEarned)}
-                    <span style={{ opacity: 0.45 }}>/500</span>
-                  </span>
-                </td>
+                  {/* Total historical volume */}
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                    {formatUSD(user.totalVolume)}
+                  </td>
 
-                {/* Referred since */}
-                <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-mute)', whiteSpace: 'nowrap' }}>
-                  {formatSince(user.referredAt)}
-                </td>
-              </tr>
-            ))}
+                  {/* Position XP */}
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--mint)', fontWeight: 600 }}>
+                    {Math.floor(user.totalXp).toLocaleString()}
+                  </td>
+
+                  {/* Total commission earned */}
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--amber)', fontWeight: 600 }}>
+                    {Math.floor(user.commissionEarned).toLocaleString()} SP
+                  </td>
+
+                  {/* Monthly cap progress */}
+                  <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: user.monthlyEarned >= 500 ? 'var(--text-mute)' : 'var(--text-dim)' }}>
+                      {Math.floor(user.monthlyEarned)}
+                      <span style={{ opacity: 0.45 }}>/500</span>
+                    </span>
+                  </td>
+
+                  {/* Referred since */}
+                  <td style={{ padding: '10px 12px', fontSize: 11, color: 'var(--text-mute)', whiteSpace: 'nowrap' }}>
+                    {formatSince(user.referredAt)}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
