@@ -33,10 +33,9 @@ CREATE INDEX IF NOT EXISTS idx_positions_no_entry_price
 
 -- ── Backfill last_price_update for existing open positions ──
 UPDATE positions
-SET last_price_update = updated_at
+SET last_price_update = NOW()
 WHERE status = 'open'
-  AND last_price_update IS NULL
-  AND updated_at IS NOT NULL;
+  AND last_price_update IS NULL;
 
 COMMENT ON COLUMN positions.entry_price       IS 'Token price (USD) at the moment the position was opened';
 COMMENT ON COLUMN positions.current_price     IS 'Latest token price (USD) — updated every 5 min by price cron';

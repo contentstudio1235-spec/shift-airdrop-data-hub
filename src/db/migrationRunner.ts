@@ -14,13 +14,10 @@ interface Migration {
   content: string;
 }
 
-/**
- * Read all migration files from the migrations directory.
- */
 function getMigrations(): Migration[] {
   const files = fs.readdirSync(MIGRATIONS_DIR)
     .filter(f => f.endsWith('.sql'))
-    .sort(); // Execute in order: 001, 002, 003, etc.
+    .sort();
 
   return files.map(file => ({
     name: file,
@@ -29,17 +26,42 @@ function getMigrations(): Migration[] {
   }));
 }
 
-/**
- * Execute a single migration.
- */
+// Create the tracking table if it doesn't exist, return the set of already-applied filenames.
+async function ensureTrackingTable(): Promise<Set<string>> {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        filename   VARCHAR(255) PRIMARY KEY,
+        applied_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    const { rows } = await client.query('SELECT filename FROM schema_migrations');
+    return new Set(rows.map((r: { filename: string }) => r.filename));
+  } finally {
+    client.release();
+  }
+}
+
+async function markApplied(filename: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      'INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING',
+      [filename]
+    );
+  } finally {
+    client.release();
+  }
+}
+
 async function executeMigration(migration: Migration): Promise<void> {
   console.log(`\n📝 Running migration: ${migration.name}`);
 
   // Run the WHOLE file as a single script on one connection. We deliberately
   // do NOT split on ';' — that naive split breaks on semicolons inside
   // comments, single-quoted strings, and dollar-quoted bodies (DO $$ ... $$).
-  // Postgres' simple-query protocol parses the multi-statement script itself
-  // and runs it as one implicit transaction (atomic per migration file).
+  // Postgres' simple-query protocol parses the multi-statement script itself.
   const client = await pool.connect();
   try {
     await client.query(migration.content);
@@ -52,16 +74,12 @@ async function executeMigration(migration: Migration): Promise<void> {
   }
 }
 
-/**
- * Run all pending migrations.
- */
 export async function runMigrations(): Promise<void> {
   console.log('\n═══════════════════════════════════════════════════════════');
   console.log('🗄️  Database Migration Runner');
   console.log('═══════════════════════════════════════════════════════════\n');
 
   try {
-    // Ensure migrations directory exists
     if (!fs.existsSync(MIGRATIONS_DIR)) {
       console.error(`❌ Migrations directory not found: ${MIGRATIONS_DIR}`);
       process.exit(1);
@@ -74,13 +92,29 @@ export async function runMigrations(): Promise<void> {
       return;
     }
 
-    console.log(`Found ${migrations.length} migration(s):\n`);
-    migrations.forEach(m => console.log(`  • ${m.name}`));
+    const applied = await ensureTrackingTable();
+
+    const pending = migrations.filter(m => !applied.has(m.name));
+    const skipped = migrations.length - pending.length;
+
+    console.log(`Found ${migrations.length} migration(s) — ${skipped} already applied, ${pending.length} pending:\n`);
+    migrations.forEach(m => {
+      const status = applied.has(m.name) ? '  ✓' : '  •';
+      console.log(`${status} ${m.name}`);
+    });
     console.log('\n');
 
-    // Execute each migration
-    for (const migration of migrations) {
+    if (pending.length === 0) {
+      console.log('ℹ️  All migrations already applied — nothing to do');
+      console.log('\n═══════════════════════════════════════════════════════════');
+      console.log('✅ Migrations up to date');
+      console.log('═══════════════════════════════════════════════════════════\n');
+      return;
+    }
+
+    for (const migration of pending) {
       await executeMigration(migration);
+      await markApplied(migration.name);
     }
 
     console.log('\n═══════════════════════════════════════════════════════════');
@@ -94,9 +128,6 @@ export async function runMigrations(): Promise<void> {
   }
 }
 
-/**
- * CLI entry point for running migrations manually.
- */
 async function main(): Promise<void> {
   try {
     await runMigrations();
@@ -107,7 +138,6 @@ async function main(): Promise<void> {
   }
 }
 
-// Run if called directly
 if (require.main === module) {
   main();
 }
