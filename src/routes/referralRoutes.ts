@@ -27,17 +27,17 @@ router.get('/:wallet', async (req: Request, res: Response) => {
     // Get pending legacy balance
     const legacy = await referralCommissionService.getPendingBalance(wallet);
 
-    // Get total commission earned (live)
+    // Get total commission earned — split by type
     const totalEarned = await referralCommissionService.getTotalCommissionEarned(wallet);
 
-    // Get current month cap usage
-    const monthYear = new Date().toISOString().slice(0, 7); // YYYY-MM
+    // Monthly cap progress (applies to position referral SP only)
+    const monthYear = new Date().toISOString().slice(0, 7);
     const monthCapResult = await queryOne<{ total: number }>(
       `SELECT COALESCE(SUM(total_awarded), 0) as total FROM referral_monthly_caps
        WHERE referrer_wallet = $1 AND month_year = $2`,
       [wallet, monthYear]
     );
-    const monthCap = monthCapResult || { total: 0 };
+    const monthlyEarned = monthCapResult?.total ?? 0;
 
     res.json({
       wallet,
@@ -47,12 +47,20 @@ router.get('/:wallet', async (req: Request, res: Response) => {
         claimed: legacy.claimed,
       },
       commission: {
-        totalEarned,
-        monthlyProgress: {
-          earned: monthCap?.total ?? 0,
+        // Position referral: 10-15% of referred wallets' Position SP (on top of 2X)
+        positionReferralSp: totalEarned.position,
+        positionReferralMultiplier: '1.0x',
+        positionMonthlyProgress: {
+          earned: monthlyEarned,
           cap: 500,
-          percentage: ((monthCap?.total ?? 0) / 500) * 100,
+          percentage: Math.min((monthlyEarned / 500) * 100, 100),
         },
+        // Social referral: flat 5% of referred wallets' Social SP (0.5x modifier)
+        socialReferralSp: totalEarned.social,
+        socialReferralMultiplier: '0.5x',
+        socialReferralRate: '5%',
+        // Combined totals
+        totalEarned: totalEarned.total,
       },
     });
   } catch (error) {

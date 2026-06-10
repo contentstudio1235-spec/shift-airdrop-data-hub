@@ -42,27 +42,9 @@ export class ReferralCronJobs {
   // ── Job 1: Calculate and award commissions ──────────────
   private static async calculateCommissions(): Promise<void> {
     try {
-      console.log('[Cron] Starting commission calculation...');
-
-      // Get all wallets that earned SP since last cron
-      const recentEarners = await query<{ wallet: string; total_xp: number }>(
-        `SELECT wallet, total_xp FROM users
-         WHERE total_xp > 0
-         AND last_updated > NOW() - INTERVAL '30 minutes'
-         LIMIT 1000`
-      );
-
-      let awarded = 0;
-      for (const row of recentEarners) {
-        try {
-          await referralCommissionService.calculateAndAwardCommission(row.wallet, 0);
-          awarded++;
-        } catch (err) {
-          console.error(`[Cron] Commission calculation failed for ${row.wallet}:`, err);
-        }
-      }
-
-      console.log(`[Cron] Commission calculation complete: processed ${recentEarners.length} wallets, awarded ${awarded}`);
+      console.log('[Cron] Starting referral commission calculation...');
+      const result = await referralCommissionService.processAllPendingCommissions();
+      console.log(`[Cron] Commission calculation complete: position=${result.position}, social=${result.social}`);
     } catch (error) {
       console.error('[Cron] Commission calculation error:', error);
     }
