@@ -8,6 +8,7 @@ import { AdapterProvider } from '@/components/AdapterProvider';
 import { ToastProvider } from '@/components/ToastContext';
 import NavBar from '@/components/NavBar';
 import { LandingTracker } from '@/components/LandingTracker';
+import WhatsNewReferralModal from '@/components/WhatsNewReferralModal';
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
@@ -79,6 +80,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ToastProvider>
             <NavBar />
             <LandingTracker />
+            <WhatsNewReferralModal />
             <main>{children}</main>
             <Analytics />
           </ToastProvider>

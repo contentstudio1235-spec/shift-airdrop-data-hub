@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { label: 'Loyalty', href: '/loyalty', soon: false, external: false },
   { label: 'Referral', href: '/referral', soon: false, external: false },
   { label: 'Leaderboard', href: '/leaderboard', soon: false, external: false },
+  { label: 'FAQ', href: '/faq', soon: false, external: false },
   { label: 'Equities Score', href: '/equities', soon: true, external: false },
   { label: 'Certificates', href: '/certificates', soon: true, external: false },
 ];
