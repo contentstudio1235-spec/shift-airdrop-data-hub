@@ -19,8 +19,8 @@ router.get('/', async (req, res) => {
     const orderBy = {
         final_points: 'combined_score DESC',
         referral_count: 'referred_count DESC, combined_score DESC',
-        referred_volume: 'referred_volume DESC, combined_score DESC',
-        referred_holding: 'referred_holding DESC, combined_score DESC',
+        season1_refs: 'season1_count DESC, combined_score DESC',
+        prereg_refs: 'pre_reg_count DESC, combined_score DESC',
     };
     try {
         const rows = await (0, pool_1.query)(`WITH ranked_users AS (

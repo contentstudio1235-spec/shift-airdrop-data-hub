@@ -13,7 +13,7 @@ const SHIFT_MINTS = [
   '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT',
 ];
 
-type SortType = 'final_points' | 'referral_count' | 'referred_volume' | 'referred_holding';
+type SortType = 'final_points' | 'referral_count' | 'season1_refs' | 'prereg_refs';
 
 // Get global leaderboard with referral enrichment
 router.get('/', async (req, res) => {
@@ -21,10 +21,10 @@ router.get('/', async (req, res) => {
   const sort   = (req.query.sort as SortType) || 'final_points';
 
   const orderBy: Record<SortType, string> = {
-    final_points:     'combined_score DESC',
-    referral_count:   'referred_count DESC, combined_score DESC',
-    referred_volume:  'referred_volume DESC, combined_score DESC',
-    referred_holding: 'referred_holding DESC, combined_score DESC',
+    final_points:   'combined_score DESC',
+    referral_count: 'referred_count DESC, combined_score DESC',
+    season1_refs:   'season1_count DESC, combined_score DESC',
+    prereg_refs:    'pre_reg_count DESC, combined_score DESC',
   };
 
   try {

@@ -6,7 +6,7 @@ import LeaderboardRowChips from './LeaderboardRowChips';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://shift-airdrop-backend.onrender.com';
 
-type SortType = 'final_points' | 'referral_count' | 'referred_volume' | 'referred_holding';
+type SortType = 'final_points' | 'referral_count' | 'season1_refs' | 'prereg_refs';
 
 interface LeaderboardEntry {
   rank: number;
@@ -20,30 +20,32 @@ interface LeaderboardEntry {
   referredHolding?: number;
 }
 
-const TABS: { type: SortType; label: string; icon: string; description: string }[] = [
+const TABS: { type: SortType; label: string; icon: string; description: string; color?: string }[] = [
   {
     type: 'final_points',
-    label: 'Final Points',
+    label: 'Final SP',
     icon: 'award',
     description: '(Position×2.0) + (Social×1.0) + (Referral×1.0)',
   },
   {
     type: 'referral_count',
-    label: 'Referral Count',
+    label: 'Total Refs',
     icon: 'users',
-    description: 'Number of referred users',
+    description: 'All referrals (Season 1 + Pre-Reg)',
   },
   {
-    type: 'referred_volume',
-    label: 'Referred Volume',
-    icon: 'trending-up',
-    description: 'Total trading volume of referred users',
+    type: 'season1_refs',
+    label: 'Season 1 Refs',
+    icon: 'star',
+    description: 'Referrals made on/after 26 May 2026 — count toward Season 1 Final SP',
+    color: 'var(--mint)',
   },
   {
-    type: 'referred_holding',
-    label: 'Referred Holding',
-    icon: 'briefcase',
-    description: 'Current holdings of referred users',
+    type: 'prereg_refs',
+    label: 'Pre-Reg Refs',
+    icon: 'clock',
+    description: 'Referrals made before Season 1 launch (26 May 2026 15:00 UTC)',
+    color: 'var(--text-mute)',
   },
 ];
 
@@ -83,27 +85,34 @@ export default function LeaderboardTabs() {
             gap: '12px',
           }}
         >
-          {TABS.map((tab) => (
-            <button
-              key={tab.type}
-              onClick={() => setActiveTab(tab.type)}
-              style={{
-                padding: '16px',
-                borderRadius: '8px',
-                border: `2px solid ${activeTab === tab.type ? 'var(--text-primary)' : 'var(--border)'}`,
-                background: activeTab === tab.type ? 'var(--bg-3)' : 'transparent',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all 0.2s',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                <Icon name={tab.icon} size={16} />
-                <span style={{ fontWeight: 600 }}>{tab.label}</span>
-              </div>
-              <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{tab.description}</p>
-            </button>
-          ))}
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.type;
+            const accent = tab.color ?? 'var(--amber)';
+            return (
+              <button
+                key={tab.type}
+                onClick={() => setActiveTab(tab.type)}
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: '8px',
+                  border: `2px solid ${isActive ? accent : 'var(--border)'}`,
+                  background: isActive ? `${accent}10` : 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <Icon name={tab.icon} size={14} color={isActive ? accent : 'var(--text-mute)'} />
+                  <span style={{ fontWeight: 700, fontSize: '13px', color: isActive ? accent : 'var(--text)' }}>{tab.label}</span>
+                  {tab.type === 'season1_refs' && (
+                    <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 3, background: 'rgba(38,200,184,0.15)', color: 'var(--mint)', fontWeight: 700, marginLeft: 2 }}>S1</span>
+                  )}
+                </div>
+                <p style={{ fontSize: '11px', color: 'var(--text-dim)', lineHeight: 1.4 }}>{tab.description}</p>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -145,8 +154,8 @@ export default function LeaderboardTabs() {
                 <th style={{ padding: '12px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)' }}>
                   Wallet
                 </th>
-                <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)' }}>
-                  {currentTab?.label || 'Score'}
+                <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: 600, color: currentTab?.color ?? 'var(--text-dim)' }}>
+                  {currentTab?.label || 'Final SP'}
                 </th>
                 <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)' }}>
                   Total Refs
@@ -154,7 +163,7 @@ export default function LeaderboardTabs() {
                 <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: 600, color: '#26C8B8' }}>
                   Season 1
                 </th>
-                <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: 600, color: 'var(--text-dim)' }}>
+                <th style={{ padding: '12px', textAlign: 'right', fontSize: '12px', fontWeight: 600, color: 'var(--text-mute)' }}>
                   Pre-Reg
                 </th>
               </tr>
