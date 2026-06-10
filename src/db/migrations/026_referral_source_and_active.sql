@@ -1,9 +1,15 @@
 -- ============================================================
 -- Migration 026: Referral source tracking + active status
 -- ============================================================
+-- ⚠️  PERMANENT $5 ACTIVATION REQUIREMENT:
+--     The $5 USD minimum holding is a PERMANENT system feature.
+--     It is NOT subject to removal or time-limited changes.
+--     Any modifications require explicit approval.
+-- ============================================================
+--
 -- 1. referrals.referral_source   — 'shift' | 'snag' | 'unknown'
 --    All existing records default to 'shift' (came via SHIFT website reg)
--- 2. referrals.is_active         — true if referred wallet holds >= $5
+-- 2. referrals.is_active         — true if referred wallet holds >= $5 (PERMANENT)
 --    in any combination of the 6 SHIFT RWA assets
 -- 3. referrals.activated_at      — when they first crossed the $5 threshold
 -- 4. users.referral_source       — mirrors where this user's own referral

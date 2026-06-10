@@ -100,7 +100,7 @@ const FAQ_ITEMS: FAQItem[] = [
         q: 'What does "activation" mean?',
         a: (
           <>
-            A referral becomes <strong>active when the referred wallet holds ≥$5 in SHIFT RWA assets.</strong> Only active referrals generate commission for you. This prevents farming and ensures quality trading engagement.
+            A referral becomes <strong>active when the referred wallet holds ≥$5 in SHIFT RWA assets.</strong> Only active referrals generate commission for you. This is a <strong>permanent requirement</strong> that prevents farming and ensures quality trading engagement.
           </>
         ),
       },

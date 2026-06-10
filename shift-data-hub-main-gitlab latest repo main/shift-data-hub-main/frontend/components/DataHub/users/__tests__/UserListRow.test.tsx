@@ -1,0 +1,171 @@
+import { describe, it, expect, vi } from 'vitest';
+import { render } from '@testing-library/react';
+import { UserListRow } from '../UserListRow';
+import type { ProfileSummary } from '@/hooks/useUsersList';
+
+const BASE_ROW: ProfileSummary = {
+  profileId: 'prof-001',
+  primaryWallet: 'Ab3fXYZ12345678901234567890123456789012345',
+  displayName: 'TestUser',
+  firstSeenAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), // 30d ago
+  lastSeenAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2h ago
+  firstUtmSource: 'twitter',
+  stitchedPct: 75,
+  lifetimeVolumeUSD: 1250.5,
+  holdingsValueUSD: 450,
+  holdings: 3,
+  hasX: true,
+  hasDiscord: false,
+};
+
+describe('UserListRow', () => {
+  it('renders fill TwitterLogo (X linked) when hasX=true', () => {
+    const { container } = render(
+      <UserListRow
+        row={BASE_ROW}
+        isSelected={false}
+        onClick={vi.fn()}
+        style={{}}
+      />
+    );
+    const xBadge = container.querySelector('[aria-label="X linked"]');
+    expect(xBadge).toBeTruthy();
+    // fill weight renders with aria-label "X linked"
+    expect(xBadge?.getAttribute('aria-label')).toBe('X linked');
+  });
+
+  it('renders regular TwitterLogo (X not linked) when hasX=false', () => {
+    const { container } = render(
+      <UserListRow
+        row={{ ...BASE_ROW, hasX: false }}
+        isSelected={false}
+        onClick={vi.fn()}
+        style={{}}
+      />
+    );
+    const xBadge = container.querySelector('[aria-label="X not linked"]');
+    expect(xBadge).toBeTruthy();
+    expect(xBadge?.getAttribute('aria-label')).toBe('X not linked');
+  });
+
+  it('Telegram badge is always "Telegram not linked" regardless of row data', () => {
+    // hasX + hasDiscord both true — TG must still show not-linked
+    const { container } = render(
+      <UserListRow
+        row={{ ...BASE_ROW, hasX: true, hasDiscord: true }}
+        isSelected={false}
+        onClick={vi.fn()}
+        style={{}}
+      />
+    );
+    const tgBadge = container.querySelector('[aria-label="Telegram not linked"]');
+    expect(tgBadge).toBeTruthy();
+    // Confirm there is no "Telegram linked" badge
+    expect(container.querySelector('[aria-label="Telegram linked"]')).toBeNull();
+  });
+
+  it('selected state applies 2px accent left border via inline style', () => {
+    const { container } = render(
+      <UserListRow
+        row={BASE_ROW}
+        isSelected={true}
+        onClick={vi.fn()}
+        style={{}}
+      />
+    );
+    const row = container.firstChild as HTMLElement;
+    // JSDOM normalizes #00c896 → rgb(0, 200, 150)
+    expect(row.style.borderLeft).toContain('2px solid');
+    expect(row.style.borderLeft).toMatch(/rgb\(0,\s*200,\s*150\)/);
+  });
+
+  it('renders wallet address in truncated form (8+6 chars)', () => {
+    const { container } = render(
+      <UserListRow
+        row={BASE_ROW}
+        isSelected={false}
+        onClick={vi.fn()}
+        style={{}}
+      />
+    );
+    // fmtWallet(w, 8, 6) truncates with ASCII ellipsis
+    expect(container.textContent).toContain('...');
+    // Should show 8 prefix chars: "Ab3fXYZ1"
+    expect(container.textContent).toContain('Ab3fXYZ1');
+  });
+
+  it('renders dim dash for displayName when null', () => {
+    const { container } = render(
+      <UserListRow
+        row={{ ...BASE_ROW, displayName: null }}
+        isSelected={false}
+        onClick={vi.fn()}
+        style={{}}
+      />
+    );
+    expect(container.textContent).toContain('—');
+  });
+
+  it('Discord badge shows linked state when hasDiscord=true', () => {
+    const { container } = render(
+      <UserListRow
+        row={{ ...BASE_ROW, hasDiscord: true }}
+        isSelected={false}
+        onClick={vi.fn()}
+        style={{}}
+      />
+    );
+    const discordBadge = container.querySelector('[aria-label="Discord linked"]');
+    expect(discordBadge).toBeTruthy();
+  });
+
+  it('renders firstSeenAt cell with relative time format', () => {
+    const firstSeenAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { container } = render(
+      <UserListRow
+        row={{ ...BASE_ROW, firstSeenAt }}
+        isSelected={false}
+        onClick={vi.fn()}
+        style={{}}
+      />
+    );
+    // 30 days ago → "1mo ago" (fmtRelativeTime)
+    expect(container.textContent).toContain('mo ago');
+  });
+
+  it('renders holdings count with accent fontWeight 800 when holdings > 0', () => {
+    const { container } = render(
+      <UserListRow
+        row={{ ...BASE_ROW, holdings: 5 }}
+        isSelected={false}
+        onClick={vi.fn()}
+        style={{}}
+      />
+    );
+    // Holdings value "5" should appear
+    expect(container.textContent).toContain('5');
+    // Find the span containing "5" (holdings cell is the 6th grid cell)
+    const spans = Array.from(container.querySelectorAll('span'));
+    const holdingsSpan = spans.find(s => s.textContent?.trim() === '5');
+    expect(holdingsSpan).toBeTruthy();
+    expect(holdingsSpan?.style.fontWeight).toBe('800');
+  });
+
+  it('renders holdings cell with "0" in textFaint when holdings is 0', () => {
+    const { container } = render(
+      <UserListRow
+        row={{ ...BASE_ROW, holdings: 0 }}
+        isSelected={false}
+        onClick={vi.fn()}
+        style={{}}
+      />
+    );
+    expect(container.textContent).toContain('0');
+    // Per Code Reviewer N3 fix: design doc spec line 70 says textFaint for 0 holdings.
+    // TOKENS.textFaint = '#3a7060' → rgb(58, 112, 96) in JSDOM
+    const spans = Array.from(container.querySelectorAll('span'));
+    const holdingsSpan = spans.find(s => s.textContent?.trim() === '0' && s.style.textAlign === 'right' && s.style.fontVariantNumeric === 'tabular-nums');
+    expect(holdingsSpan).toBeTruthy();
+    expect(holdingsSpan?.style.color).toMatch(/rgb\(58,\s*112,\s*96\)/);
+  });
+});

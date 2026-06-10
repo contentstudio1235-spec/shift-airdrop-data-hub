@@ -1,0 +1,267 @@
+/* ============================================================
+   Admin Panel — Shared Styles
+   Dark SHIFT theme matching the main airdrop UI
+   ============================================================ */
+
+.adminPage {
+  min-height: 100vh;
+  background: #0a0a0a;
+  color: #e0e0e0;
+  padding: 32px;
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+
+/* ── Header ── */
+.adminHeader {
+  margin-bottom: 32px;
+  border-bottom: 1px solid #1e1e1e;
+  padding-bottom: 20px;
+}
+
+.adminHeader h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 6px;
+}
+
+.adminHeader p {
+  color: #888;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+/* ── Metrics Grid ── */
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.metricCard {
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+}
+
+.metricCard h3 {
+  font-size: 0.8rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 10px;
+}
+
+/* ── Tables ── */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.table th,
+.table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid #1e1e1e;
+}
+
+.table th {
+  color: #888;
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  background: #111;
+}
+
+.table tr:hover td {
+  background: #111;
+}
+
+/* ── Search Section ── */
+.searchSection {
+  margin-bottom: 24px;
+}
+
+.searchSection form {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.searchSection input {
+  flex: 1;
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #e0e0e0;
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.searchSection input:focus {
+  border-color: #00c896;
+}
+
+.searchSection button {
+  background: #00c896;
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.searchSection button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── User Panel ── */
+.userPanel {
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+/* ── Auth Gate ── */
+.authGate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 16px;
+}
+
+.authGate h2 {
+  font-size: 1.2rem;
+  color: #888;
+}
+
+.authGate input {
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #e0e0e0;
+  padding: 12px 16px;
+  font-size: 1rem;
+  width: 320px;
+  outline: none;
+}
+
+.authGate button {
+  background: #00c896;
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 28px;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+/* ── Buttons ── */
+.btnPrimary {
+  background: #00c896;
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btnSecondary {
+  background: transparent;
+  color: #888;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btnDanger {
+  background: transparent;
+  color: #e63946;
+  border: 1px solid #e63946;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+/* ── Status Badges ── */
+.badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.badgeSuccess {
+  background: rgba(0, 200, 150, 0.15);
+  color: #00c896;
+}
+
+.badgeWarning {
+  background: rgba(255, 180, 0, 0.15);
+  color: #ffb400;
+}
+
+.badgeDanger {
+  background: rgba(230, 57, 70, 0.15);
+  color: #e63946;
+}
+
+/* ── Section titles ── */
+.sectionTitle {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 16px;
+}
+
+/* ── Admin Navigation Grid ── */
+.adminNavGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 40px;
+}
+
+.navButton {
+  background: linear-gradient(135deg, #00c896 0%, #00a876 100%);
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  padding: 16px 12px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 200, 150, 0.2);
+}
+
+.navButton:hover {
+  background: linear-gradient(135deg, #00d9a3 0%, #00b88a 100%);
+  box-shadow: 0 4px 12px rgba(0, 200, 150, 0.4);
+  transform: translateY(-2px);
+}
+
+.navButton:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 200, 150, 0.2);
+}

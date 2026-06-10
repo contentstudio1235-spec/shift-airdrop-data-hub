@@ -22,7 +22,7 @@ const TABS: { type: SortType; label: string; icon: string; description: string }
     type: 'final_points',
     label: 'Final Points',
     icon: 'award',
-    description: '(Position×2.0) + (Social×1.0) + (Referral×0.5)',
+    description: '(Position×2.0) + (Social×1.0) + (Referral×1.0)',
   },
   {
     type: 'referral_count',

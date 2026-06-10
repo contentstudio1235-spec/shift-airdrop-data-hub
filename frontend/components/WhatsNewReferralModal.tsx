@@ -95,8 +95,8 @@ export default function WhatsNewReferralModal() {
             },
             {
               icon: 'shield-check',
-              title: '✅ Real Traders Only',
-              desc: 'Your referrals need to hold at least $5 in SHIFT assets to count. This keeps everyone honest and rewards you for bringing in real traders.',
+              title: '✅ Real Traders Only (Permanent)',
+              desc: 'Your referrals need to hold at least $5 in SHIFT assets to count. This permanent quality gate keeps everyone honest and rewards you for bringing in genuine traders.',
               color: 'var(--green)',
             },
             {

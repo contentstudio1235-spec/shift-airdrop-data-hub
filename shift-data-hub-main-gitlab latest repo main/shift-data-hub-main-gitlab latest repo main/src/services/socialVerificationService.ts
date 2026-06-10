@@ -1,0 +1,335 @@
+// ============================================================
+// Social Verification Service
+// Verifies Discord, Twitter, Telegram membership/follows
+// via their own OAuth — completely invisible to the user.
+// After verification, records in our DB + notifies SNAG.
+// ============================================================
+
+import crypto from 'crypto';
+import axios from 'axios';
+import { config } from '../config';
+import { execute } from '../db/pool';
+import { snagSyncService } from './snagSyncService';
+
+// Badges awarded for social task completion
+const SOCIAL_BADGES: Record<string, string> = {
+  discord:   'Discord Member',
+  x_follow:  'X Follower',
+  telegram:  'Telegram Member',
+};
+
+// Points awarded per social task
+const SOCIAL_POINTS: Record<string, number> = {
+  discord:   150,
+  x_follow:  100,
+  telegram:  100,
+  wallet:    200,
+  first_trade: 300,
+};
+
+export class SocialVerificationService {
+
+  // ── State token (stateless PKCE + wallet binding) ──────────────────────────
+
+  /**
+   * Create a signed state token for OAuth flows.
+   * Encodes wallet, task, timestamp, optional PKCE code_verifier.
+   * Token is validated on callback — protects against CSRF and forgery.
+   */
+  createStateToken(wallet: string, task: string, codeVerifier?: string): string {
+    const secret = config.snagWebhookSecret || config.snagApiKey || 'shift-dev-secret';
+    const ts = Date.now().toString();
+    const cv = codeVerifier || '';
+    const payload = `${wallet}|${task}|${ts}|${cv}`;
+    const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 24);
+    return Buffer.from(JSON.stringify({ wallet, task, ts, cv, sig })).toString('base64url');
+  }
+
+  /**
+   * Parse and verify a state token.
+   * Returns null if invalid, expired (>15min), or tampered.
+   */
+  parseStateToken(state: string): { wallet: string; task: string; codeVerifier?: string } | null {
+    try {
+      const { wallet, task, ts, cv, sig } = JSON.parse(Buffer.from(state, 'base64url').toString());
+      const secret = config.snagWebhookSecret || config.snagApiKey || 'shift-dev-secret';
+      const payload = `${wallet}|${task}|${ts}|${cv || ''}`;
+      const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 24);
+      if (sig !== expected) return null;
+      if (Date.now() - parseInt(ts) > 15 * 60 * 1000) return null; // 15min expiry
+      return { wallet, task, codeVerifier: cv || undefined };
+    } catch {
+      return null;
+    }
+  }
+
+  // ── Discord ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Build the Discord OAuth2 authorization URL.
+   * Scopes: identify + guilds (to check guild membership without bot permissions)
+   */
+  getDiscordAuthUrl(wallet: string): string {
+    const state = this.createStateToken(wallet, 'discord');
+    const callbackUrl = `${config.backendUrl}/api/auth/discord/callback`;
+    const params = new URLSearchParams({
+      client_id:     config.discordClientId,
+      redirect_uri:  callbackUrl,
+      response_type: 'code',
+      scope:         'identify guilds',
+      state,
+      prompt:        'consent',
+    });
+    return `https://discord.com/api/oauth2/authorize?${params}`;
+  }
+
+  /**
+   * Exchange Discord OAuth code for a token, then verify guild membership.
+   * Returns the wallet address + whether they're in the SHIFT guild.
+   */
+  async handleDiscordCallback(code: string, state: string): Promise<{
+    wallet: string;
+    inGuild: boolean;
+    discordUsername?: string;
+  }> {
+    const parsed = this.parseStateToken(state);
+    if (!parsed) throw new Error('Invalid or expired state token');
+    const { wallet } = parsed;
+
+    const callbackUrl = `${config.backendUrl}/api/auth/discord/callback`;
+
+    // Exchange code → access token
+    const tokenRes = await axios.post<{ access_token: string; token_type: string }>(
+      'https://discord.com/api/oauth2/token',
+      new URLSearchParams({
+        client_id:     config.discordClientId,
+        client_secret: config.discordClientSecret,
+        grant_type:    'authorization_code',
+        code,
+        redirect_uri:  callbackUrl,
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+
+    const accessToken = tokenRes.data.access_token;
+
+    // Get user identity
+    const [meRes, guildsRes] = await Promise.all([
+      axios.get<{ id: string; username: string; discriminator: string }>(
+        'https://discord.com/api/users/@me',
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      ),
+      axios.get<Array<{ id: string; name: string }>>(
+        'https://discord.com/api/users/@me/guilds',
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      ),
+    ]);
+
+    const discordUsername = meRes.data.discriminator === '0'
+      ? meRes.data.username
+      : `${meRes.data.username}#${meRes.data.discriminator}`;
+
+    const inGuild = config.discordGuildId
+      ? guildsRes.data.some(g => g.id === config.discordGuildId)
+      : true; // If no guild ID configured, accept any Discord auth
+
+    return { wallet, inGuild, discordUsername };
+  }
+
+  // ── Twitter / X ─────────────────────────────────────────────────────────────
+
+  /**
+   * Build the Twitter OAuth2 (PKCE) authorization URL.
+   * Scopes: tweet.read users.read follows.read
+   * PKCE code_verifier is embedded in the state token (stateless).
+   */
+  getTwitterAuthUrl(wallet: string): { url: string } {
+    const codeVerifier = crypto.randomBytes(48).toString('base64url');
+    const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+    const state = this.createStateToken(wallet, 'x_follow', codeVerifier);
+
+    const callbackUrl = `${config.backendUrl}/api/auth/twitter/callback`;
+    const params = new URLSearchParams({
+      response_type:          'code',
+      client_id:              config.twitterClientId,
+      redirect_uri:           callbackUrl,
+      scope:                  'tweet.read users.read follows.read offline.access',
+      state,
+      code_challenge:         codeChallenge,
+      code_challenge_method:  'S256',
+    });
+    return { url: `https://twitter.com/i/oauth2/authorize?${params}` };
+  }
+
+  /**
+   * Exchange Twitter code for token, then verify follow status.
+   */
+  async handleTwitterCallback(code: string, state: string): Promise<{
+    wallet: string;
+    isFollowing: boolean;
+    twitterUsername?: string;
+  }> {
+    const parsed = this.parseStateToken(state);
+    if (!parsed) throw new Error('Invalid or expired state token');
+    const { wallet, codeVerifier } = parsed;
+    if (!codeVerifier) throw new Error('Missing PKCE code_verifier in state');
+
+    const callbackUrl = `${config.backendUrl}/api/auth/twitter/callback`;
+
+    // Exchange code → access token (PKCE)
+    const tokenRes = await axios.post<{ access_token: string }>(
+      'https://api.twitter.com/2/oauth2/token',
+      new URLSearchParams({
+        code,
+        grant_type:    'authorization_code',
+        client_id:     config.twitterClientId,
+        redirect_uri:  callbackUrl,
+        code_verifier: codeVerifier,
+      }),
+      {
+        auth:    { username: config.twitterClientId, password: config.twitterClientSecret },
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }
+    );
+
+    const accessToken = tokenRes.data.access_token;
+
+    // Get authenticated user's ID
+    const meRes = await axios.get<{ data: { id: string; username: string } }>(
+      'https://api.twitter.com/2/users/me',
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+
+    const userId = meRes.data.data.id;
+    const twitterUsername = meRes.data.data.username;
+
+    let isFollowing = false;
+    if (config.twitterAccountId) {
+      // Check if this user follows @ShiftRWA
+      // Paginate up to 1000 following to find @ShiftRWA
+      let paginationToken: string | undefined;
+      outer:
+      for (let page = 0; page < 10; page++) {
+        const params: Record<string, string> = { max_results: '1000' };
+        if (paginationToken) params.pagination_token = paginationToken;
+
+        const followRes = await axios.get<{
+          data?: Array<{ id: string }>;
+          meta?: { next_token?: string };
+        }>(
+          `https://api.twitter.com/2/users/${userId}/following`,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            params,
+          }
+        );
+
+        if (followRes.data.data?.some(u => u.id === config.twitterAccountId)) {
+          isFollowing = true;
+          break outer;
+        }
+        if (!followRes.data.meta?.next_token) break;
+        paginationToken = followRes.data.meta.next_token;
+      }
+    } else {
+      // If no account ID configured, accept any Twitter auth as "followed"
+      isFollowing = true;
+    }
+
+    return { wallet, isFollowing, twitterUsername };
+  }
+
+  // ── Telegram ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Verify Telegram Login Widget data.
+   * The widget sends user data + HMAC signed with our bot token.
+   * We verify the signature and then check group membership via Bot API.
+   */
+  async handleTelegramLogin(data: Record<string, string>, wallet: string): Promise<{
+    isValid: boolean;
+    isMember: boolean;
+    telegramUsername?: string;
+  }> {
+    if (!config.telegramBotToken) {
+      // No bot configured — accept any Telegram login
+      return { isValid: true, isMember: true, telegramUsername: data.username };
+    }
+
+    // Verify HMAC-SHA256 signature from Telegram
+    const { hash, ...fields } = data;
+    const dataCheckString = Object.keys(fields)
+      .sort()
+      .map(k => `${k}=${fields[k]}`)
+      .join('\n');
+
+    const secretKey = crypto.createHash('sha256').update(config.telegramBotToken).digest();
+    const expectedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+
+    const isValid = hash === expectedHash;
+    if (!isValid) return { isValid: false, isMember: false };
+
+    // Check auth_date is not too old (5 minutes)
+    const authAge = Date.now() / 1000 - parseInt(fields.auth_date || '0');
+    if (authAge > 300) return { isValid: false, isMember: false };
+
+    let isMember = false;
+    if (config.telegramChannelId && fields.id) {
+      try {
+        const res = await axios.get(
+          `https://api.telegram.org/bot${config.telegramBotToken}/getChatMember`,
+          { params: { chat_id: config.telegramChannelId, user_id: fields.id } }
+        );
+        const status = res.data.result?.status;
+        isMember = ['member', 'administrator', 'creator', 'restricted'].includes(status);
+      } catch {
+        // Bot may not be in the channel yet — accept login as completion
+        isMember = true;
+      }
+    } else {
+      isMember = true;
+    }
+
+    return { isValid, isMember, telegramUsername: fields.username };
+  }
+
+  // ── Core: Record + Award ─────────────────────────────────────────────────────
+
+  /**
+   * Record a verified social task completion:
+   * 1. Write to snag_completed_tasks (our DB)
+   * 2. Call SNAG's loyalty rule completion API (SNAG as backend)
+   * 3. Award social badge in our DB
+   */
+  async awardVerifiedTask(wallet: string, taskId: string): Promise<void> {
+    // 1. Record in our DB
+    await execute(
+      `INSERT INTO snag_completed_tasks (wallet, task_id, completed_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (wallet, task_id) DO NOTHING`,
+      [wallet, taskId]
+    );
+
+    // 2. Push to SNAG as external rule completion
+    const ruleId = config.snagSocialRuleIds[taskId as keyof typeof config.snagSocialRuleIds];
+    if (ruleId) {
+      await snagSyncService.awardSocialRule(wallet, ruleId, SOCIAL_POINTS[taskId] ?? 100);
+    }
+
+    // 3. Award social badge
+    const badgeName = SOCIAL_BADGES[taskId];
+    if (badgeName) {
+      await execute(
+        `INSERT INTO badges (wallet, badge_name, earned_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (wallet, badge_name) DO NOTHING`,
+        [wallet, badgeName]
+      );
+      console.log(`[SocialVerify] 🏆 Badge "${badgeName}" awarded to ${wallet.slice(0, 8)}...`);
+    }
+
+    console.log(`[SocialVerify] ✅ Task "${taskId}" verified & recorded for ${wallet.slice(0, 8)}...`);
+  }
+}
+
+export const socialVerificationService = new SocialVerificationService();

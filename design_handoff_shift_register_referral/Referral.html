@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Referral Dashboard — SHIFT Airdrop</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <style>
+    :root {
+      --mint:        #26C8B8; --mint-dark: #1E9E92; --mint-soft: rgba(38,200,184,0.12);
+      --brand-grad:  linear-gradient(135deg, #26C8B8 0%, #07638C 100%);
+      --bg:          #021C24; --bg-2: #052a32; --bg-3: #073640;
+      --panel:       rgba(255,255,255,0.03); --panel-2: rgba(255,255,255,0.055);
+      --border:      rgba(255,255,255,0.08); --border-s: rgba(255,255,255,0.14);
+      --text:        #EDEEEE; --text-dim: #8ba6a4; --text-mute: #5a7472;
+      --amber:       #f7a23b; --amber-soft: rgba(247,162,59,0.12);
+      --purple:      #9d6cf5; --purple-soft: rgba(157,108,245,0.12);
+      --green:       #38d39f; --blue: #5da4ff; --red: #ef5466;
+      --font-space:  'Space Grotesk', sans-serif;
+      --font-inter:  'Inter', sans-serif;
+      --font-mono:   'JetBrains Mono', monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; color-scheme: dark; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-inter); font-size: 14px; line-height: 1.5; margin: 0; -webkit-font-smoothing: antialiased; min-height: 100vh; }
+    h1,h2,h3,h4 { font-family: var(--font-space); font-weight: 700; margin: 0; line-height: 1.2; }
+    a { color: inherit; text-decoration: none; } button { cursor: pointer; border: none; background: none; font-family: inherit; } input { font-family: inherit; } p { margin: 0; }
+    ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--border-s); border-radius: 999px; }
+
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes shimmer { 0% { background-position: -800px 0; } 100% { background-position: 800px 0; } }
+    @keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    @keyframes glowFloat { 0%,100% { transform: translate(-50%,-50%) scale(1); opacity: 0.6; } 50% { transform: translate(-50%,-50%) scale(1.15); opacity: 1; } }
+
+    .skeleton { background: linear-gradient(90deg, var(--panel) 25%, var(--panel-2) 50%, var(--panel) 75%); background-size: 800px 100%; animation: shimmer 1.4s ease infinite; border-radius: 8px; }
+    .page { max-width: 1200px; margin: 0 auto; padding: 32px 28px; }
+
+    @media (max-width: 900px) { .page { padding: 16px; } .hide-900 { display: none !important; } .grid-4-col { grid-template-columns: repeat(2,1fr) !important; } }
+    @media (max-width: 640px) { .page { padding: 12px; } .main-grid { grid-template-columns: 1fr !important; } .stat-grid { grid-template-columns: repeat(2,1fr) !important; } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="register-comps.jsx"></script>
+  <script type="text/babel" src="referral-app.jsx"></script>
+</body>
+</html>

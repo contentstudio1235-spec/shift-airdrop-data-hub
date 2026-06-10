@@ -16,8 +16,8 @@ Your referral rewards now count MORE toward your Final SP. They're weighted the 
 💰 **Better Rewards for Good Referrals**
 Earn 10–15% commission on your referred traders' earnings. The stronger they perform, the more you earn. It's a win-win for everyone!
 
-✅ **Real Traders Only**
-Your referrals need to hold at least $5 in SHIFT assets to count. This keeps the system honest and rewards you for bringing in genuine traders.
+✅ **Real Traders Only** (Permanent Quality Gate)
+Your referrals need to hold at least $5 in SHIFT assets to count. This permanent requirement keeps the system honest and rewards you for bringing in genuine traders.
 
 🎁 **Claim Your Legacy Rewards**
 If you referred people before, great news! Once they reach $5, you can claim your pending rewards from those old referrals. Check your Referral Dashboard!

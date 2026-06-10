@@ -1,0 +1,889 @@
+- generic [ref=e1]:
+  - banner [ref=e2]:
+    - link "SHIFT airdrop" [ref=e3] [cursor=pointer]:
+      - /url: /register
+      - img "SHIFT" [ref=e4]
+      - generic [ref=e5]: airdrop
+    - navigation [ref=e6]:
+      - link "Register" [ref=e7] [cursor=pointer]:
+        - /url: /register
+      - link "Trade" [ref=e8] [cursor=pointer]:
+        - /url: https://app.shiftrwa.xyz
+      - link "Airdrop" [ref=e9] [cursor=pointer]:
+        - /url: /airdrop
+      - link "Loyalty" [ref=e10] [cursor=pointer]:
+        - /url: /loyalty
+      - link "Leaderboard" [ref=e11] [cursor=pointer]:
+        - /url: /leaderboard
+      - generic [ref=e12]:
+        - text: Equities Score
+        - generic [ref=e13]: SOON
+      - generic [ref=e14]:
+        - text: Certificates
+        - generic [ref=e15]: SOON
+    - generic [ref=e16]:
+      - generic [ref=e17]: LIVE
+      - button "Notifications" [ref=e19] [cursor=pointer]:
+        - img [ref=e20]
+      - button "Settings" [ref=e22] [cursor=pointer]:
+        - img [ref=e23]
+      - button "Connect Wallet" [ref=e25] [cursor=pointer]:
+        - img [ref=e26]
+        - text: Connect Wallet
+  - main [ref=e28]:
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - generic [ref=e32]: SHIFT RWA — Data Hub
+          - generic [ref=e33]: Funnel & Attribution Platform
+        - generic [ref=e34]:
+          - navigation [ref=e35]:
+            - button "Pulse" [ref=e36] [cursor=pointer]:
+              - img [ref=e37]
+              - generic [ref=e39]: Pulse
+            - button "Funnels" [ref=e40] [cursor=pointer]:
+              - img [ref=e41]
+              - generic [ref=e43]: Funnels
+            - button "Source Attribution" [active] [ref=e44] [cursor=pointer]:
+              - img [ref=e45]
+              - generic [ref=e47]: Source Attribution
+            - button "Trader Cohorts" [ref=e48] [cursor=pointer]:
+              - img [ref=e49]
+              - generic [ref=e51]: Trader Cohorts
+            - button "Users" [ref=e52] [cursor=pointer]:
+              - img [ref=e53]
+              - generic [ref=e55]: Users
+          - button "Engineering" [ref=e57] [cursor=pointer]:
+            - img [ref=e58]
+            - generic [ref=e60]: Engineering
+      - generic [ref=e62]:
+        - generic [ref=e63]: Filters
+        - generic [ref=e64]:
+          - textbox "From date" [ref=e65]
+          - generic [ref=e66]: →
+          - textbox "To date" [ref=e67]
+        - combobox "Source channel" [ref=e68] [cursor=pointer]:
+          - option "All sources" [selected]
+          - option "direct"
+          - option "twitter"
+          - option "discord"
+          - option "telegram"
+          - option "reddit"
+          - option "kol"
+          - option "email"
+        - combobox "Asset" [ref=e69] [cursor=pointer]:
+          - option "All assets" [selected]
+          - option "TSL2L"
+          - option "TSL1S"
+          - option "SOX3L"
+          - option "SOX3S"
+          - option "SPX3L"
+          - option "SPX3S"
+        - button "Reset (2)" [ref=e71] [cursor=pointer]
+      - main [ref=e72]:
+        - generic [ref=e1349]:
+          - generic [ref=e1350]:
+            - generic [ref=e1351]:
+              - generic [ref=e1352]: Source Attribution
+              - generic [ref=e1353]: UTM-first attribution. Stitching activated Sprint 2.3 (2026-06-03) — UTM coverage grows daily as new traffic lands.
+            - generic [ref=e1354]: updated 11:01:25 PM
+            - button "Refresh" [ref=e1355] [cursor=pointer]:
+              - img [ref=e1356]
+              - text: Refresh
+          - generic [ref=e1358]:
+            - generic [ref=e1359]:
+              - generic [ref=e1360]:
+                - img [ref=e1362]
+                - generic [ref=e1364]: Best ROI Source · 30d
+              - generic [ref=e1365]:
+                - generic "Direct" [ref=e1366]
+                - generic "412 holders / 5,848 users (7.0% conv)" [ref=e1367]
+            - generic [ref=e1368]:
+              - generic [ref=e1369]:
+                - img [ref=e1371]
+                - generic [ref=e1373]: Top KOL · 7d
+              - generic [ref=e1374]:
+                - generic "DYENZ3" [ref=e1375]
+                - generic "18 users · $1.2K volume" [ref=e1376]
+            - generic "% of profiles with any attribution signal (UTM tag or referral source)" [ref=e1377]:
+              - generic [ref=e1378]:
+                - img [ref=e1380]
+                - generic [ref=e1382]: Attribution Signal
+              - generic [ref=e1383]:
+                - generic [ref=e1384]: 66.0%
+                - generic [ref=e1385]: 11,329 stitched / 17,177 total
+          - generic [ref=e1386]:
+            - generic [ref=e1387]:
+              - generic [ref=e1388]:
+                - img [ref=e1389]
+                - text: Channels
+              - generic [ref=e1391]: Profiles by first-touch source
+              - generic [ref=e1392]:
+                - generic [ref=e1393]:
+                  - generic "snag_referrals" [ref=e1394]: Snag Referrals
+                  - generic [ref=e1397]: 11,328
+                  - generic "Total volume USD" [ref=e1398]: $4.1K
+                - generic [ref=e1399]:
+                  - generic "direct" [ref=e1400]: Direct
+                  - generic [ref=e1403]: 5,848
+                  - generic "Total volume USD" [ref=e1404]: $23.2K
+                - generic [ref=e1405]:
+                  - generic "trust_ios_browser" [ref=e1406]
+                  - generic [ref=e1409]: "1"
+                  - generic "Total volume USD" [ref=e1410]: —
+            - generic [ref=e1411]:
+              - generic [ref=e1412]:
+                - img [ref=e1413]
+                - text: Top Campaigns
+              - generic [ref=e1415]: By first_utm_campaign
+              - generic [ref=e1416]:
+                - img [ref=e1417]
+                - generic [ref=e1419]: No tagged campaigns yet. Tag links with ?utm_campaign=... to start tracking.
+            - generic [ref=e1420]:
+              - generic [ref=e1421]:
+                - img [ref=e1422]
+                - text: Coverage
+              - generic [ref=e1424]: "% of profiles with any attribution signal"
+              - generic [ref=e1425]:
+                - generic [ref=e1426]:
+                  - img [ref=e1427]
+                  - generic [ref=e1430]:
+                    - generic [ref=e1431]: 0.0%
+                    - generic [ref=e1432]: UTM
+                - generic [ref=e1433]:
+                  - generic [ref=e1435]:
+                    - generic [ref=e1436]: With UTM
+                    - generic [ref=e1437]: 1 · 0.0%
+                  - generic [ref=e1440]:
+                    - generic [ref=e1441]: Referral only
+                    - generic [ref=e1442]: 11,328 · 65.9%
+                  - generic [ref=e1446]:
+                    - generic [ref=e1447]: No signal
+                    - generic [ref=e1448]: 5,848 · 34.0%
+                  - generic [ref=e1452]:
+                    - generic [ref=e1453]: Total
+                    - generic [ref=e1454]: 17,177
+                  - generic [ref=e1455]:
+                    - generic [ref=e1456]: Any signal
+                    - generic [ref=e1457]: 66.0%
+          - generic [ref=e1458]:
+            - generic [ref=e1459]:
+              - img [ref=e1460]
+              - heading "Whale Origins" [level=3] [ref=e1462]
+              - generic [ref=e1463]:
+                - generic [ref=e1464]: "4"
+                - generic [ref=e1465]: whales attributed
+            - generic [ref=e1466]: Source → cohort → outcome. Width ∝ user count.
+            - img "Whale origin flow diagram showing 4 whales from 3 sources" [ref=e1468]:
+              - generic [ref=e1469]: SOURCE
+              - generic [ref=e1470]: COHORT
+              - generic [ref=e1471]: OUTCOME
+              - generic [ref=e1472]:
+                - 'generic "direct → dolphin: 409 users (7%)"'
+                - generic [ref=e1473]: 7%
+              - generic [ref=e1474]:
+                - 'generic "trust_ios_browser → fish: 1 users (100%)" [ref=e1475]'
+                - generic [ref=e1476]: 100%
+              - generic [ref=e1477]:
+                - 'generic "direct → fish: 5,436 users (93%)" [ref=e1478]'
+                - generic [ref=e1479]: 93%
+              - generic:
+                - 'generic "snag_referrals → whale: 1 users (0%)"'
+              - 'generic "direct → whale: 3 users (0%)" [ref=e1481]'
+              - 'generic "snag_referrals → dolphin: 72 users (1%)" [ref=e1483]'
+              - generic [ref=e1484]:
+                - 'generic "snag_referrals → fish: 11,255 users (99%)" [ref=e1485]'
+                - generic [ref=e1486]: 99%
+              - 'generic "dolphin → churned: 4 users (1%)" [ref=e1488]'
+              - generic [ref=e1489]:
+                - 'generic "fish → active: 16,437 users (98%)" [ref=e1490]'
+                - generic [ref=e1491]: 98%
+              - generic [ref=e1492]:
+                - 'generic "dolphin → active: 477 users (99%)" [ref=e1493]'
+                - generic [ref=e1494]: 99%
+              - 'generic "fish → churned: 255 users (2%)" [ref=e1496]'
+              - generic [ref=e1497]:
+                - 'generic "whale → active: 4 users (100%)" [ref=e1498]'
+                - generic [ref=e1499]: 100%
+              - generic [ref=e1500]:
+                - 'generic "direct: 5,848 users" [ref=e1501]'
+                - generic [ref=e1502]: DIRECT
+                - generic [ref=e1503]: 5,848
+              - generic [ref=e1504]:
+                - 'generic "trust_ios_browser: 1 users" [ref=e1505]'
+                - generic [ref=e1506]: TRUST_IOS_BROWSER
+                - generic [ref=e1507]: "1"
+              - generic [ref=e1508]:
+                - 'generic "snag_referrals: 11,328 users" [ref=e1509]'
+                - generic [ref=e1510]: SNAG_REFERRALS
+                - generic [ref=e1511]: 11,328
+              - generic [ref=e1512]:
+                - 'generic "dolphin: 481 users" [ref=e1513]'
+                - generic [ref=e1514]: DOLPHIN
+                - generic [ref=e1515]: "481"
+              - generic [ref=e1516]:
+                - 'generic "fish: 16,692 users" [ref=e1517]'
+                - generic [ref=e1518]: FISH
+                - generic [ref=e1519]: 16,692
+              - generic [ref=e1520]:
+                - 'generic "whale: 4 users" [ref=e1521]'
+                - generic [ref=e1522]: WHALE
+                - generic [ref=e1523]: "4"
+              - generic [ref=e1524]:
+                - 'generic "churned: 259 users" [ref=e1525]'
+                - generic [ref=e1526]: CHURNED
+                - generic [ref=e1527]: "259"
+              - generic [ref=e1528]:
+                - 'generic "active: 16,918 users" [ref=e1529]'
+                - generic [ref=e1530]: ACTIVE
+                - generic [ref=e1531]: 16,918
+          - generic [ref=e1532]:
+            - generic [ref=e1533]:
+              - generic [ref=e1534]:
+                - img [ref=e1535]
+                - heading "KOL Leaderboard" [level=3] [ref=e1537]
+              - generic [ref=e1538]: Referrers with 5+ referred users · click row to drill into filtered Users
+              - generic "KOL leaderboard table" [ref=e1539]:
+                - table [ref=e1540]:
+                  - rowgroup [ref=e1547]:
+                    - row "Expand row REFERRER USERS (LIFETIME) RATE Drill down" [ref=e1548]:
+                      - columnheader "Expand row" [ref=e1549]
+                      - columnheader "REFERRER" [ref=e1550]
+                      - columnheader "USERS (LIFETIME)" [ref=e1551]:
+                        - button "USERS (LIFETIME)" [ref=e1552] [cursor=pointer]:
+                          - text: USERS (LIFETIME)
+                          - img [ref=e1553]
+                      - columnheader "RATE" [ref=e1555]:
+                        - button "RATE" [ref=e1556] [cursor=pointer]
+                      - columnheader "Drill down" [ref=e1557]
+                  - rowgroup [ref=e1558]:
+                    - button "Drill into AXEHEQ (snag_referrals)" [ref=e1559] [cursor=pointer]:
+                      - cell "Expand AXEHEQ details" [ref=e1560]:
+                        - button "Expand AXEHEQ details" [ref=e1561]:
+                          - img [ref=e1562]
+                      - cell "AXEHEQ Snag" [ref=e1564]:
+                        - generic [ref=e1565]: AXEHEQ
+                        - generic [ref=e1566]: Snag
+                      - cell "583" [ref=e1567]
+                      - cell "1.7%" [ref=e1568]:
+                        - generic [ref=e1569]: 1.7%
+                      - cell [ref=e1570]:
+                        - img [ref=e1571]
+                    - button "Drill into HOZJHX (snag_referrals)" [ref=e1573] [cursor=pointer]:
+                      - cell "Expand HOZJHX details" [ref=e1574]:
+                        - button "Expand HOZJHX details" [ref=e1575]:
+                          - img [ref=e1576]
+                      - cell "HOZJHX Snag" [ref=e1578]:
+                        - generic [ref=e1579]: HOZJHX
+                        - generic [ref=e1580]: Snag
+                      - cell "368" [ref=e1581]
+                      - cell "0.0%" [ref=e1582]:
+                        - generic [ref=e1583]: 0.0%
+                      - cell [ref=e1584]:
+                        - img [ref=e1585]
+                    - button "Drill into GXOIXH (snag_referrals)" [ref=e1587] [cursor=pointer]:
+                      - cell "Expand GXOIXH details" [ref=e1588]:
+                        - button "Expand GXOIXH details" [ref=e1589]:
+                          - img [ref=e1590]
+                      - cell "GXOIXH Snag" [ref=e1592]:
+                        - generic [ref=e1593]: GXOIXH
+                        - generic [ref=e1594]: Snag
+                      - cell "361" [ref=e1595]
+                      - cell "0.0%" [ref=e1596]:
+                        - generic [ref=e1597]: 0.0%
+                      - cell [ref=e1598]:
+                        - img [ref=e1599]
+                    - button "Drill into 6ZAGO3 (snag_referrals)" [ref=e1601] [cursor=pointer]:
+                      - cell "Expand 6ZAGO3 details" [ref=e1602]:
+                        - button "Expand 6ZAGO3 details" [ref=e1603]:
+                          - img [ref=e1604]
+                      - cell "6ZAGO3 Snag" [ref=e1606]:
+                        - generic [ref=e1607]: 6ZAGO3
+                        - generic [ref=e1608]: Snag
+                      - cell "349" [ref=e1609]
+                      - cell "0.0%" [ref=e1610]:
+                        - generic [ref=e1611]: 0.0%
+                      - cell [ref=e1612]:
+                        - img [ref=e1613]
+                    - button "Drill into HHHICN (snag_referrals)" [ref=e1615] [cursor=pointer]:
+                      - cell "Expand HHHICN details" [ref=e1616]:
+                        - button "Expand HHHICN details" [ref=e1617]:
+                          - img [ref=e1618]
+                      - cell "HHHICN Snag" [ref=e1620]:
+                        - generic [ref=e1621]: HHHICN
+                        - generic [ref=e1622]: Snag
+                      - cell "336" [ref=e1623]
+                      - cell "0.0%" [ref=e1624]:
+                        - generic [ref=e1625]: 0.0%
+                      - cell [ref=e1626]:
+                        - img [ref=e1627]
+                    - button "Drill into 9QJ8ZU (snag_referrals)" [ref=e1629] [cursor=pointer]:
+                      - cell "Expand 9QJ8ZU details" [ref=e1630]:
+                        - button "Expand 9QJ8ZU details" [ref=e1631]:
+                          - img [ref=e1632]
+                      - cell "9QJ8ZU Snag" [ref=e1634]:
+                        - generic [ref=e1635]: 9QJ8ZU
+                        - generic [ref=e1636]: Snag
+                      - cell "327" [ref=e1637]
+                      - cell "0.0%" [ref=e1638]:
+                        - generic [ref=e1639]: 0.0%
+                      - cell [ref=e1640]:
+                        - img [ref=e1641]
+                    - button "Drill into NN5XCA (snag_referrals)" [ref=e1643] [cursor=pointer]:
+                      - cell "Expand NN5XCA details" [ref=e1644]:
+                        - button "Expand NN5XCA details" [ref=e1645]:
+                          - img [ref=e1646]
+                      - cell "NN5XCA Snag" [ref=e1648]:
+                        - generic [ref=e1649]: NN5XCA
+                        - generic [ref=e1650]: Snag
+                      - cell "326" [ref=e1651]
+                      - cell "0.0%" [ref=e1652]:
+                        - generic [ref=e1653]: 0.0%
+                      - cell [ref=e1654]:
+                        - img [ref=e1655]
+                    - button "Drill into E4DPYD (snag_referrals)" [ref=e1657] [cursor=pointer]:
+                      - cell "Expand E4DPYD details" [ref=e1658]:
+                        - button "Expand E4DPYD details" [ref=e1659]:
+                          - img [ref=e1660]
+                      - cell "E4DPYD Snag" [ref=e1662]:
+                        - generic [ref=e1663]: E4DPYD
+                        - generic [ref=e1664]: Snag
+                      - cell "317" [ref=e1665]
+                      - cell "0.0%" [ref=e1666]:
+                        - generic [ref=e1667]: 0.0%
+                      - cell [ref=e1668]:
+                        - img [ref=e1669]
+                    - button "Drill into F2QEZK (snag_referrals)" [ref=e1671] [cursor=pointer]:
+                      - cell "Expand F2QEZK details" [ref=e1672]:
+                        - button "Expand F2QEZK details" [ref=e1673]:
+                          - img [ref=e1674]
+                      - cell "F2QEZK Snag" [ref=e1676]:
+                        - generic [ref=e1677]: F2QEZK
+                        - generic [ref=e1678]: Snag
+                      - cell "316" [ref=e1679]
+                      - cell "0.0%" [ref=e1680]:
+                        - generic [ref=e1681]: 0.0%
+                      - cell [ref=e1682]:
+                        - img [ref=e1683]
+                    - button "Drill into 7SQEZD (snag_referrals)" [ref=e1685] [cursor=pointer]:
+                      - cell "Expand 7SQEZD details" [ref=e1686]:
+                        - button "Expand 7SQEZD details" [ref=e1687]:
+                          - img [ref=e1688]
+                      - cell "7SQEZD Snag" [ref=e1690]:
+                        - generic [ref=e1691]: 7SQEZD
+                        - generic [ref=e1692]: Snag
+                      - cell "315" [ref=e1693]
+                      - cell "0.0%" [ref=e1694]:
+                        - generic [ref=e1695]: 0.0%
+                      - cell [ref=e1696]:
+                        - img [ref=e1697]
+                    - button "Drill into 5VQDHE (snag_referrals)" [ref=e1699] [cursor=pointer]:
+                      - cell "Expand 5VQDHE details" [ref=e1700]:
+                        - button "Expand 5VQDHE details" [ref=e1701]:
+                          - img [ref=e1702]
+                      - cell "5VQDHE Snag" [ref=e1704]:
+                        - generic [ref=e1705]: 5VQDHE
+                        - generic [ref=e1706]: Snag
+                      - cell "314" [ref=e1707]
+                      - cell "0.0%" [ref=e1708]:
+                        - generic [ref=e1709]: 0.0%
+                      - cell [ref=e1710]:
+                        - img [ref=e1711]
+                    - button "Drill into 3LYMON (snag_referrals)" [ref=e1713] [cursor=pointer]:
+                      - cell "Expand 3LYMON details" [ref=e1714]:
+                        - button "Expand 3LYMON details" [ref=e1715]:
+                          - img [ref=e1716]
+                      - cell "3LYMON Snag" [ref=e1718]:
+                        - generic [ref=e1719]: 3LYMON
+                        - generic [ref=e1720]: Snag
+                      - cell "250" [ref=e1721]
+                      - cell "0.8%" [ref=e1722]:
+                        - generic [ref=e1723]: 0.8%
+                      - cell [ref=e1724]:
+                        - img [ref=e1725]
+                    - button "Drill into 7MDGJX (snag_referrals)" [ref=e1727] [cursor=pointer]:
+                      - cell "Expand 7MDGJX details" [ref=e1728]:
+                        - button "Expand 7MDGJX details" [ref=e1729]:
+                          - img [ref=e1730]
+                      - cell "7MDGJX Snag" [ref=e1732]:
+                        - generic [ref=e1733]: 7MDGJX
+                        - generic [ref=e1734]: Snag
+                      - cell "128" [ref=e1735]
+                      - cell "0.8%" [ref=e1736]:
+                        - generic [ref=e1737]: 0.8%
+                      - cell [ref=e1738]:
+                        - img [ref=e1739]
+                    - button "Drill into BIBKGU (snag_referrals)" [ref=e1741] [cursor=pointer]:
+                      - cell "Expand BIBKGU details" [ref=e1742]:
+                        - button "Expand BIBKGU details" [ref=e1743]:
+                          - img [ref=e1744]
+                      - cell "BIBKGU Snag" [ref=e1746]:
+                        - generic [ref=e1747]: BIBKGU
+                        - generic [ref=e1748]: Snag
+                      - cell "80" [ref=e1749]
+                      - cell "1.3%" [ref=e1750]:
+                        - generic [ref=e1751]: 1.3%
+                      - cell [ref=e1752]:
+                        - img [ref=e1753]
+                    - button "Drill into BVGOBA (snag_referrals)" [ref=e1755] [cursor=pointer]:
+                      - cell "Expand BVGOBA details" [ref=e1756]:
+                        - button "Expand BVGOBA details" [ref=e1757]:
+                          - img [ref=e1758]
+                      - cell "BVGOBA Snag" [ref=e1760]:
+                        - generic [ref=e1761]: BVGOBA
+                        - generic [ref=e1762]: Snag
+                      - cell "63" [ref=e1763]
+                      - cell "7.9%" [ref=e1764]:
+                        - generic [ref=e1765]: 7.9%
+                      - cell [ref=e1766]:
+                        - img [ref=e1767]
+                    - button "Drill into 9EPAFG (snag_referrals)" [ref=e1769] [cursor=pointer]:
+                      - cell "Expand 9EPAFG details" [ref=e1770]:
+                        - button "Expand 9EPAFG details" [ref=e1771]:
+                          - img [ref=e1772]
+                      - cell "9EPAFG Snag" [ref=e1774]:
+                        - generic [ref=e1775]: 9EPAFG
+                        - generic [ref=e1776]: Snag
+                      - cell "29" [ref=e1777]
+                      - cell "3.5%" [ref=e1778]:
+                        - generic [ref=e1779]: 3.5%
+                      - cell [ref=e1780]:
+                        - img [ref=e1781]
+                    - button "Drill into CWZDBP (snag_referrals)" [ref=e1783] [cursor=pointer]:
+                      - cell "Expand CWZDBP details" [ref=e1784]:
+                        - button "Expand CWZDBP details" [ref=e1785]:
+                          - img [ref=e1786]
+                      - cell "CWZDBP Snag" [ref=e1788]:
+                        - generic [ref=e1789]: CWZDBP
+                        - generic [ref=e1790]: Snag
+                      - cell "29" [ref=e1791]
+                      - cell "0.0%" [ref=e1792]:
+                        - generic [ref=e1793]: 0.0%
+                      - cell [ref=e1794]:
+                        - img [ref=e1795]
+                    - button "Drill into DZC7DZ (snag_referrals)" [ref=e1797] [cursor=pointer]:
+                      - cell "Expand DZC7DZ details" [ref=e1798]:
+                        - button "Expand DZC7DZ details" [ref=e1799]:
+                          - img [ref=e1800]
+                      - cell "DZC7DZ Snag" [ref=e1802]:
+                        - generic [ref=e1803]: DZC7DZ
+                        - generic [ref=e1804]: Snag
+                      - cell "26" [ref=e1805]
+                      - cell "15.4%" [ref=e1806]:
+                        - generic [ref=e1807]: 15.4%
+                      - cell [ref=e1808]:
+                        - img [ref=e1809]
+                    - button "Drill into EEMWEG (snag_referrals)" [ref=e1811] [cursor=pointer]:
+                      - cell "Expand EEMWEG details" [ref=e1812]:
+                        - button "Expand EEMWEG details" [ref=e1813]:
+                          - img [ref=e1814]
+                      - cell "EEMWEG Snag" [ref=e1816]:
+                        - generic [ref=e1817]: EEMWEG
+                        - generic [ref=e1818]: Snag
+                      - cell "25" [ref=e1819]
+                      - cell "0.0%" [ref=e1820]:
+                        - generic [ref=e1821]: 0.0%
+                      - cell [ref=e1822]:
+                        - img [ref=e1823]
+                    - button "Drill into ENE7PB (snag_referrals)" [ref=e1825] [cursor=pointer]:
+                      - cell "Expand ENE7PB details" [ref=e1826]:
+                        - button "Expand ENE7PB details" [ref=e1827]:
+                          - img [ref=e1828]
+                      - cell "ENE7PB Snag" [ref=e1830]:
+                        - generic [ref=e1831]: ENE7PB
+                        - generic [ref=e1832]: Snag
+                      - cell "24" [ref=e1833]
+                      - cell "0.0%" [ref=e1834]:
+                        - generic [ref=e1835]: 0.0%
+                      - cell [ref=e1836]:
+                        - img [ref=e1837]
+                    - button "Drill into 5GMMSV (snag_referrals)" [ref=e1839] [cursor=pointer]:
+                      - cell "Expand 5GMMSV details" [ref=e1840]:
+                        - button "Expand 5GMMSV details" [ref=e1841]:
+                          - img [ref=e1842]
+                      - cell "5GMMSV Snag" [ref=e1844]:
+                        - generic [ref=e1845]: 5GMMSV
+                        - generic [ref=e1846]: Snag
+                      - cell "20" [ref=e1847]
+                      - cell "0.0%" [ref=e1848]:
+                        - generic [ref=e1849]: 0.0%
+                      - cell [ref=e1850]:
+                        - img [ref=e1851]
+                    - button "Drill into Y1PAZY (snag_referrals)" [ref=e1853] [cursor=pointer]:
+                      - cell "Expand Y1PAZY details" [ref=e1854]:
+                        - button "Expand Y1PAZY details" [ref=e1855]:
+                          - img [ref=e1856]
+                      - cell "Y1PAZY Snag" [ref=e1858]:
+                        - generic [ref=e1859]: Y1PAZY
+                        - generic [ref=e1860]: Snag
+                      - cell "19" [ref=e1861]
+                      - cell "0.0%" [ref=e1862]:
+                        - generic [ref=e1863]: 0.0%
+                      - cell [ref=e1864]:
+                        - img [ref=e1865]
+                    - button "Drill into DYENZ3 (snag_referrals)" [ref=e1867] [cursor=pointer]:
+                      - cell "Expand DYENZ3 details" [ref=e1868]:
+                        - button "Expand DYENZ3 details" [ref=e1869]:
+                          - img [ref=e1870]
+                      - cell "DYENZ3 Snag" [ref=e1872]:
+                        - generic [ref=e1873]: DYENZ3
+                        - generic [ref=e1874]: Snag
+                      - cell "18" [ref=e1875]
+                      - cell "66.7%" [ref=e1876]:
+                        - generic [ref=e1877]: 66.7%
+                      - cell [ref=e1878]:
+                        - img [ref=e1879]
+                    - button "Drill into 2UUPSQ (snag_referrals)" [ref=e1881] [cursor=pointer]:
+                      - cell "Expand 2UUPSQ details" [ref=e1882]:
+                        - button "Expand 2UUPSQ details" [ref=e1883]:
+                          - img [ref=e1884]
+                      - cell "2UUPSQ Snag" [ref=e1886]:
+                        - generic [ref=e1887]: 2UUPSQ
+                        - generic [ref=e1888]: Snag
+                      - cell "15" [ref=e1889]
+                      - cell "6.7%" [ref=e1890]:
+                        - generic [ref=e1891]: 6.7%
+                      - cell [ref=e1892]:
+                        - img [ref=e1893]
+                    - button "Drill into 4PGMWF (snag_referrals)" [ref=e1895] [cursor=pointer]:
+                      - cell "Expand 4PGMWF details" [ref=e1896]:
+                        - button "Expand 4PGMWF details" [ref=e1897]:
+                          - img [ref=e1898]
+                      - cell "4PGMWF Snag" [ref=e1900]:
+                        - generic [ref=e1901]: 4PGMWF
+                        - generic [ref=e1902]: Snag
+                      - cell "15" [ref=e1903]
+                      - cell "0.0%" [ref=e1904]:
+                        - generic [ref=e1905]: 0.0%
+                      - cell [ref=e1906]:
+                        - img [ref=e1907]
+                    - button "Drill into 0X8ED3 (snag_referrals)" [ref=e1909] [cursor=pointer]:
+                      - cell "Expand 0X8ED3 details" [ref=e1910]:
+                        - button "Expand 0X8ED3 details" [ref=e1911]:
+                          - img [ref=e1912]
+                      - cell "0X8ED3 Snag" [ref=e1914]:
+                        - generic [ref=e1915]: "0X8ED3"
+                        - generic [ref=e1916]: Snag
+                      - cell "14" [ref=e1917]
+                      - cell "0.0%" [ref=e1918]:
+                        - generic [ref=e1919]: 0.0%
+                      - cell [ref=e1920]:
+                        - img [ref=e1921]
+                    - button "Drill into 6QRCGB (snag_referrals)" [ref=e1923] [cursor=pointer]:
+                      - cell "Expand 6QRCGB details" [ref=e1924]:
+                        - button "Expand 6QRCGB details" [ref=e1925]:
+                          - img [ref=e1926]
+                      - cell "6QRCGB Snag" [ref=e1928]:
+                        - generic [ref=e1929]: 6QRCGB
+                        - generic [ref=e1930]: Snag
+                      - cell "14" [ref=e1931]
+                      - cell "0.0%" [ref=e1932]:
+                        - generic [ref=e1933]: 0.0%
+                      - cell [ref=e1934]:
+                        - img [ref=e1935]
+                    - button "Drill into 6MCTDC (snag_referrals)" [ref=e1937] [cursor=pointer]:
+                      - cell "Expand 6MCTDC details" [ref=e1938]:
+                        - button "Expand 6MCTDC details" [ref=e1939]:
+                          - img [ref=e1940]
+                      - cell "6MCTDC Snag" [ref=e1942]:
+                        - generic [ref=e1943]: 6MCTDC
+                        - generic [ref=e1944]: Snag
+                      - cell "13" [ref=e1945]
+                      - cell "46.2%" [ref=e1946]:
+                        - generic [ref=e1947]: 46.2%
+                      - cell [ref=e1948]:
+                        - img [ref=e1949]
+                    - button "Drill into 3NMPVI (snag_referrals)" [ref=e1951] [cursor=pointer]:
+                      - cell "Expand 3NMPVI details" [ref=e1952]:
+                        - button "Expand 3NMPVI details" [ref=e1953]:
+                          - img [ref=e1954]
+                      - cell "3NMPVI Snag" [ref=e1956]:
+                        - generic [ref=e1957]: 3NMPVI
+                        - generic [ref=e1958]: Snag
+                      - cell "13" [ref=e1959]
+                      - cell "0.0%" [ref=e1960]:
+                        - generic [ref=e1961]: 0.0%
+                      - cell [ref=e1962]:
+                        - img [ref=e1963]
+                    - button "Drill into 7UG5LE (snag_referrals)" [ref=e1965] [cursor=pointer]:
+                      - cell "Expand 7UG5LE details" [ref=e1966]:
+                        - button "Expand 7UG5LE details" [ref=e1967]:
+                          - img [ref=e1968]
+                      - cell "7UG5LE Snag" [ref=e1970]:
+                        - generic [ref=e1971]: 7UG5LE
+                        - generic [ref=e1972]: Snag
+                      - cell "9" [ref=e1973]
+                      - cell "0.0%" [ref=e1974]:
+                        - generic [ref=e1975]: 0.0%
+                      - cell [ref=e1976]:
+                        - img [ref=e1977]
+                    - button "Drill into FHCXK9 (snag_referrals)" [ref=e1979] [cursor=pointer]:
+                      - cell "Expand FHCXK9 details" [ref=e1980]:
+                        - button "Expand FHCXK9 details" [ref=e1981]:
+                          - img [ref=e1982]
+                      - cell "FHCXK9 Snag" [ref=e1984]:
+                        - generic [ref=e1985]: FHCXK9
+                        - generic [ref=e1986]: Snag
+                      - cell "9" [ref=e1987]
+                      - cell "0.0%" [ref=e1988]:
+                        - generic [ref=e1989]: 0.0%
+                      - cell [ref=e1990]:
+                        - img [ref=e1991]
+                    - button "Drill into JAMTRD (snag_referrals)" [ref=e1993] [cursor=pointer]:
+                      - cell "Expand JAMTRD details" [ref=e1994]:
+                        - button "Expand JAMTRD details" [ref=e1995]:
+                          - img [ref=e1996]
+                      - cell "JAMTRD Snag" [ref=e1998]:
+                        - generic [ref=e1999]: JAMTRD
+                        - generic [ref=e2000]: Snag
+                      - cell "8" [ref=e2001]
+                      - cell "0.0%" [ref=e2002]:
+                        - generic [ref=e2003]: 0.0%
+                      - cell [ref=e2004]:
+                        - img [ref=e2005]
+                    - button "Drill into FWXS6J (snag_referrals)" [ref=e2007] [cursor=pointer]:
+                      - cell "Expand FWXS6J details" [ref=e2008]:
+                        - button "Expand FWXS6J details" [ref=e2009]:
+                          - img [ref=e2010]
+                      - cell "FWXS6J Snag" [ref=e2012]:
+                        - generic [ref=e2013]: FWXS6J
+                        - generic [ref=e2014]: Snag
+                      - cell "8" [ref=e2015]
+                      - cell "0.0%" [ref=e2016]:
+                        - generic [ref=e2017]: 0.0%
+                      - cell [ref=e2018]:
+                        - img [ref=e2019]
+                    - button "Drill into 8KWARH (snag_referrals)" [ref=e2021] [cursor=pointer]:
+                      - cell "Expand 8KWARH details" [ref=e2022]:
+                        - button "Expand 8KWARH details" [ref=e2023]:
+                          - img [ref=e2024]
+                      - cell "8KWARH Snag" [ref=e2026]:
+                        - generic [ref=e2027]: 8KWARH
+                        - generic [ref=e2028]: Snag
+                      - cell "7" [ref=e2029]
+                      - cell "0.0%" [ref=e2030]:
+                        - generic [ref=e2031]: 0.0%
+                      - cell [ref=e2032]:
+                        - img [ref=e2033]
+                    - button "Drill into 2SNTKU (snag_referrals)" [ref=e2035] [cursor=pointer]:
+                      - cell "Expand 2SNTKU details" [ref=e2036]:
+                        - button "Expand 2SNTKU details" [ref=e2037]:
+                          - img [ref=e2038]
+                      - cell "2SNTKU Snag" [ref=e2040]:
+                        - generic [ref=e2041]: 2SNTKU
+                        - generic [ref=e2042]: Snag
+                      - cell "6" [ref=e2043]
+                      - cell "50.0%" [ref=e2044]:
+                        - generic [ref=e2045]: 50.0%
+                      - cell [ref=e2046]:
+                        - img [ref=e2047]
+                    - button "Drill into JG76VE (snag_referrals)" [ref=e2049] [cursor=pointer]:
+                      - cell "Expand JG76VE details" [ref=e2050]:
+                        - button "Expand JG76VE details" [ref=e2051]:
+                          - img [ref=e2052]
+                      - cell "JG76VE Snag" [ref=e2054]:
+                        - generic [ref=e2055]: JG76VE
+                        - generic [ref=e2056]: Snag
+                      - cell "6" [ref=e2057]
+                      - cell "33.3%" [ref=e2058]:
+                        - generic [ref=e2059]: 33.3%
+                      - cell [ref=e2060]:
+                        - img [ref=e2061]
+                    - button "Drill into 7MSBQX (snag_referrals)" [ref=e2063] [cursor=pointer]:
+                      - cell "Expand 7MSBQX details" [ref=e2064]:
+                        - button "Expand 7MSBQX details" [ref=e2065]:
+                          - img [ref=e2066]
+                      - cell "7MSBQX Snag" [ref=e2068]:
+                        - generic [ref=e2069]: 7MSBQX
+                        - generic [ref=e2070]: Snag
+                      - cell "6" [ref=e2071]
+                      - cell "16.7%" [ref=e2072]:
+                        - generic [ref=e2073]: 16.7%
+                      - cell [ref=e2074]:
+                        - img [ref=e2075]
+                    - button "Drill into 0X4BEF (snag_referrals)" [ref=e2077] [cursor=pointer]:
+                      - cell "Expand 0X4BEF details" [ref=e2078]:
+                        - button "Expand 0X4BEF details" [ref=e2079]:
+                          - img [ref=e2080]
+                      - cell "0X4BEF Snag" [ref=e2082]:
+                        - generic [ref=e2083]: "0X4BEF"
+                        - generic [ref=e2084]: Snag
+                      - cell "6" [ref=e2085]
+                      - cell "16.7%" [ref=e2086]:
+                        - generic [ref=e2087]: 16.7%
+                      - cell [ref=e2088]:
+                        - img [ref=e2089]
+                    - button "Drill into 8RI4PV (snag_referrals)" [ref=e2091] [cursor=pointer]:
+                      - cell "Expand 8RI4PV details" [ref=e2092]:
+                        - button "Expand 8RI4PV details" [ref=e2093]:
+                          - img [ref=e2094]
+                      - cell "8RI4PV Snag" [ref=e2096]:
+                        - generic [ref=e2097]: 8RI4PV
+                        - generic [ref=e2098]: Snag
+                      - cell "6" [ref=e2099]
+                      - cell "0.0%" [ref=e2100]:
+                        - generic [ref=e2101]: 0.0%
+                      - cell [ref=e2102]:
+                        - img [ref=e2103]
+                    - button "Drill into 0X2A28 (snag_referrals)" [ref=e2105] [cursor=pointer]:
+                      - cell "Expand 0X2A28 details" [ref=e2106]:
+                        - button "Expand 0X2A28 details" [ref=e2107]:
+                          - img [ref=e2108]
+                      - cell "0X2A28 Snag" [ref=e2110]:
+                        - generic [ref=e2111]: "0X2A28"
+                        - generic [ref=e2112]: Snag
+                      - cell "6" [ref=e2113]
+                      - cell "0.0%" [ref=e2114]:
+                        - generic [ref=e2115]: 0.0%
+                      - cell [ref=e2116]:
+                        - img [ref=e2117]
+                    - button "Drill into E8HVUA (snag_referrals)" [ref=e2119] [cursor=pointer]:
+                      - cell "Expand E8HVUA details" [ref=e2120]:
+                        - button "Expand E8HVUA details" [ref=e2121]:
+                          - img [ref=e2122]
+                      - cell "E8HVUA Snag" [ref=e2124]:
+                        - generic [ref=e2125]: E8HVUA
+                        - generic [ref=e2126]: Snag
+                      - cell "5" [ref=e2127]
+                      - cell "80.0%" [ref=e2128]:
+                        - generic [ref=e2129]: 80.0%
+                      - cell [ref=e2130]:
+                        - img [ref=e2131]
+                    - button "Drill into HYKMGZ (snag_referrals)" [ref=e2133] [cursor=pointer]:
+                      - cell "Expand HYKMGZ details" [ref=e2134]:
+                        - button "Expand HYKMGZ details" [ref=e2135]:
+                          - img [ref=e2136]
+                      - cell "HYKMGZ Snag" [ref=e2138]:
+                        - generic [ref=e2139]: HYKMGZ
+                        - generic [ref=e2140]: Snag
+                      - cell "5" [ref=e2141]
+                      - cell "40.0%" [ref=e2142]:
+                        - generic [ref=e2143]: 40.0%
+                      - cell [ref=e2144]:
+                        - img [ref=e2145]
+                    - button "Drill into 7Z72YW (snag_referrals)" [ref=e2147] [cursor=pointer]:
+                      - cell "Expand 7Z72YW details" [ref=e2148]:
+                        - button "Expand 7Z72YW details" [ref=e2149]:
+                          - img [ref=e2150]
+                      - cell "7Z72YW Snag" [ref=e2152]:
+                        - generic [ref=e2153]: 7Z72YW
+                        - generic [ref=e2154]: Snag
+                      - cell "5" [ref=e2155]
+                      - cell "0.0%" [ref=e2156]:
+                        - generic [ref=e2157]: 0.0%
+                      - cell [ref=e2158]:
+                        - img [ref=e2159]
+                    - button "Drill into 3QGL9X (snag_referrals)" [ref=e2161] [cursor=pointer]:
+                      - cell "Expand 3QGL9X details" [ref=e2162]:
+                        - button "Expand 3QGL9X details" [ref=e2163]:
+                          - img [ref=e2164]
+                      - cell "3QGL9X Snag" [ref=e2166]:
+                        - generic [ref=e2167]: 3QGL9X
+                        - generic [ref=e2168]: Snag
+                      - cell "5" [ref=e2169]
+                      - cell "0.0%" [ref=e2170]:
+                        - generic [ref=e2171]: 0.0%
+                      - cell [ref=e2172]:
+                        - img [ref=e2173]
+                    - button "Drill into FPXD6R (snag_referrals)" [ref=e2175] [cursor=pointer]:
+                      - cell "Expand FPXD6R details" [ref=e2176]:
+                        - button "Expand FPXD6R details" [ref=e2177]:
+                          - img [ref=e2178]
+                      - cell "FPXD6R Snag" [ref=e2180]:
+                        - generic [ref=e2181]: FPXD6R
+                        - generic [ref=e2182]: Snag
+                      - cell "5" [ref=e2183]
+                      - cell "0.0%" [ref=e2184]:
+                        - generic [ref=e2185]: 0.0%
+                      - cell [ref=e2186]:
+                        - img [ref=e2187]
+                    - button "Drill into 9O7AJN (snag_referrals)" [ref=e2189] [cursor=pointer]:
+                      - cell "Expand 9O7AJN details" [ref=e2190]:
+                        - button "Expand 9O7AJN details" [ref=e2191]:
+                          - img [ref=e2192]
+                      - cell "9O7AJN Snag" [ref=e2194]:
+                        - generic [ref=e2195]: 9O7AJN
+                        - generic [ref=e2196]: Snag
+                      - cell "5" [ref=e2197]
+                      - cell "0.0%" [ref=e2198]:
+                        - generic [ref=e2199]: 0.0%
+                      - cell [ref=e2200]:
+                        - img [ref=e2201]
+                    - button "Drill into A3JELG (snag_referrals)" [ref=e2203] [cursor=pointer]:
+                      - cell "Expand A3JELG details" [ref=e2204]:
+                        - button "Expand A3JELG details" [ref=e2205]:
+                          - img [ref=e2206]
+                      - cell "A3JELG Snag" [ref=e2208]:
+                        - generic [ref=e2209]: A3JELG
+                        - generic [ref=e2210]: Snag
+                      - cell "5" [ref=e2211]
+                      - cell "0.0%" [ref=e2212]:
+                        - generic [ref=e2213]: 0.0%
+                      - cell [ref=e2214]:
+                        - img [ref=e2215]
+                    - button "Drill into BQHD1J (snag_referrals)" [ref=e2217] [cursor=pointer]:
+                      - cell "Expand BQHD1J details" [ref=e2218]:
+                        - button "Expand BQHD1J details" [ref=e2219]:
+                          - img [ref=e2220]
+                      - cell "BQHD1J Snag" [ref=e2222]:
+                        - generic [ref=e2223]: BQHD1J
+                        - generic [ref=e2224]: Snag
+                      - cell "5" [ref=e2225]
+                      - cell "0.0%" [ref=e2226]:
+                        - generic [ref=e2227]: 0.0%
+                      - cell [ref=e2228]:
+                        - img [ref=e2229]
+                    - button "Drill into GMVN7J (snag_referrals)" [ref=e2231] [cursor=pointer]:
+                      - cell "Expand GMVN7J details" [ref=e2232]:
+                        - button "Expand GMVN7J details" [ref=e2233]:
+                          - img [ref=e2234]
+                      - cell "GMVN7J Snag" [ref=e2236]:
+                        - generic [ref=e2237]: GMVN7J
+                        - generic [ref=e2238]: Snag
+                      - cell "5" [ref=e2239]
+                      - cell "0.0%" [ref=e2240]:
+                        - generic [ref=e2241]: 0.0%
+                      - cell [ref=e2242]:
+                        - img [ref=e2243]
+                    - button "Drill into 3EG9C6 (snag_referrals)" [ref=e2245] [cursor=pointer]:
+                      - cell "Expand 3EG9C6 details" [ref=e2246]:
+                        - button "Expand 3EG9C6 details" [ref=e2247]:
+                          - img [ref=e2248]
+                      - cell "3EG9C6 Snag" [ref=e2250]:
+                        - generic [ref=e2251]: 3EG9C6
+                        - generic [ref=e2252]: Snag
+                      - cell "5" [ref=e2253]
+                      - cell "0.0%" [ref=e2254]:
+                        - generic [ref=e2255]: 0.0%
+                      - cell [ref=e2256]:
+                        - img [ref=e2257]
+            - generic [ref=e2259]:
+              - generic [ref=e2260]:
+                - img [ref=e2261]
+                - heading "Whale Watch" [level=3] [ref=e2263]
+                - generic [ref=e2264]:
+                  - 'generic "Connection status: live" [ref=e2265]'
+                  - generic [ref=e2266]: LIVE
+              - generic [ref=e2267]: Position opens ≥ $1,000
+              - generic "Live whale trade stream" [ref=e2268]:
+                - generic [ref=e2269]:
+                  - generic [ref=e2270]: 263h
+                  - generic [ref=e2271]:
+                    - link "View profile for wallet DYEnz3zX...A6U9" [ref=e2272] [cursor=pointer]:
+                      - /url: /admin/data-hub?tab=users&wallet=DYEnz3zX2kwGpQss92dKmKQ3FJTGhn2mbRsXehb9A6U9
+                      - text: DYEnz3zX...A6U9
+                    - generic [ref=e2273]: direct · TSL2L
+                  - generic [ref=e2274]:
+                    - generic [ref=e2275]: $1.2K
+                    - generic [ref=e2276]: OPEN
+                - generic [ref=e2277]:
+                  - generic [ref=e2278]: 196h
+                  - generic [ref=e2279]:
+                    - link "View profile for wallet CTpQGUTh...uFE2" [ref=e2280] [cursor=pointer]:
+                      - /url: /admin/data-hub?tab=users&wallet=CTpQGUThFvWPvBp7d9uSufZBp2dFGCmWhfPzLWuYuFE2
+                      - text: CTpQGUTh...uFE2
+                    - generic [ref=e2281]: direct · TSL1S
+                  - generic [ref=e2282]:
+                    - generic [ref=e2283]: $1.5K
+                    - generic [ref=e2284]: OPEN
+  - alert [ref=e85]

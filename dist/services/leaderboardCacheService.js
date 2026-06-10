@@ -86,11 +86,11 @@ class LeaderboardCacheService {
         const results = await pool_1.pool.query(`WITH ranked AS (
          SELECT
            wallet,
-           (total_xp * 0.8 * 2.0) +
-           (total_xp * 0.2 * 1.0) +
-           (COALESCE(referral_commission_sp, 0) * 0.5) as final_points
+           (COALESCE(total_xp, 0) * 2.0) +
+           (COALESCE(snag_points, 0) * 1.0) +
+           (COALESCE(referral_position_sp, 0) * 1.0) as final_points
          FROM users
-         WHERE total_xp > 0 OR referral_commission_sp > 0
+         WHERE total_xp > 0 OR snag_points > 0 OR referral_position_sp > 0
        )
        SELECT wallet, final_points FROM ranked ORDER BY final_points DESC`);
         const pipeline = this.redis.pipeline();

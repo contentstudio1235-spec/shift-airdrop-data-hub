@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "jetro": {
+      "command": "C:\\Users\\Axel\\.jetro\\runtime\\node-win32-x64.exe",
+      "args": [
+        "C:\\Users\\Axel\\.jetro\\mcp-server\\index.js"
+      ],
+      "env": {
+        "JET_WORKSPACE": "c:\\Users\\Axel\\Shift_Backend_Logic",
+        "JET_API_URL": "https://api.jetro.ai",
+        "PATH": "C:\\Users\\Axel\\.jetro\\runtime;C:\\Python314\\Scripts\\;C:\\Python314\\;C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\java8path;C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\javapath;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common;C:\\Program Files\\NVIDIA Corporation\\NVIDIA app\\NvDLISR;C:\\Program Files\\dotnet\\;C:\\WINDOWS\\system32;C:\\WINDOWS;C:\\WINDOWS\\System32\\Wbem;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\;C:\\WINDOWS\\System32\\OpenSSH\\;C:\\ProgramData\\chocolatey\\bin;C:\\Program Files\\Git\\cmd;C:\\Program Files\\PuTTY\\;C:\\Program Files\\nodejs\\;C:\\Users\\Axel\\.local\\bin;C:\\ytdl;C:\\Users\\Axel\\.cargo\\bin;C:\\Users\\Axel\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\;C:\\Users\\Axel\\AppData\\Local\\Programs\\Python\\Python312\\;C:\\Users\\Axel\\AppData\\Local\\Microsoft\\WindowsApps;C:\\Program Files\\JetBrains\\PyCharm Community Edition 2024.1.3\\bin;;C:\\Users\\Axel\\AppData\\Local\\Programs\\Microsoft VS Code\\bin;C:\\Users\\Axel\\AppData\\Roaming\\npm;C:\\Users\\Axel\\AppData\\Local\\Programs\\Antigravity\\bin;C:\\Users\\Axel\\AppData\\Local\\Programs\\Ollama;C:\\Users\\Axel\\AppData\\Local\\Programs\\Windsurf\\bin"
+      }
+    }
+  }
+}
