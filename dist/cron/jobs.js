@@ -11,9 +11,11 @@ exports.runManualSync = runManualSync;
 const node_cron_1 = __importDefault(require("node-cron"));
 const snagSyncService_1 = require("../services/snagSyncService");
 const positionPriceService_1 = require("../services/positionPriceService");
+const referralCommissionService_1 = require("../services/referralCommissionService");
 let isRunning = false;
 let isQueueRunning = false;
 let isPriceRunning = false;
+let isCommissionRunning = false;
 /**
  * Initialize all cron jobs.
  */
@@ -78,7 +80,27 @@ function initCronJobs() {
             isPriceRunning = false;
         }
     });
-    console.log('[Cron] ✅ Scheduled: full sync every 5 min, price update every 5 min, queue retry every 2 min');
+    // ── Referral commission calculation every 30 minutes ──
+    // Diffs current total_xp vs last_commission_xp for all referred wallets,
+    // awards 10-15% commission to referrer (500 SP/month cap per pair).
+    node_cron_1.default.schedule('*/30 * * * *', async () => {
+        if (isCommissionRunning)
+            return;
+        isCommissionRunning = true;
+        try {
+            const result = await referralCommissionService_1.referralCommissionService.processAllPendingCommissions();
+            if (result.position > 0) {
+                console.log(`[Cron] ✅ Referral commissions: ${result.position} wallets processed`);
+            }
+        }
+        catch (err) {
+            console.error('[Cron] ❌ Commission calculation failed:', err);
+        }
+        finally {
+            isCommissionRunning = false;
+        }
+    });
+    console.log('[Cron] ✅ Scheduled: full sync every 5 min, price update every 5 min, queue retry every 2 min, commissions every 30 min');
 }
 /**
  * Run a manual sync (for testing / admin endpoint).

@@ -45,7 +45,8 @@ router.get('/:wallet', async (req, res) => {
     const lastSyncedXp = Number(syncLog?.last_synced_xp || 0);
     // Social & referral SP = anything in SNAG beyond what we pushed from positions
     const socialSp = Math.max(0, snagTotal - lastSyncedXp);
-    const totalSp = positionSp + socialSp;
+    // Weighted final SP: (Position × 2.0) + (Social × 1.0) — matches leaderboard formula
+    const totalSp = Math.round(positionSp * 2 + socialSp);
 
     // Cache snag_points in DB so leaderboard can use it without per-request SNAG calls
     if (snagTotal > 0) {
@@ -57,11 +58,11 @@ router.get('/:wallet', async (req, res) => {
 
     const hasSnagAccount = !!(user.snag_user_id || snagTotal > 0);
 
-    // 2. Get combined rank (position SP + social SP) — must match leaderboard scoring
+    // 2. Get combined rank by weighted SP (position SP + social SP) — must match leaderboard scoring
     const rankResult = await queryOne(
       `SELECT COUNT(*) + 1 as rank FROM users u
        LEFT JOIN xp_sync_log s ON u.wallet = s.wallet
-       WHERE (u.total_xp + GREATEST(0, COALESCE(u.snag_points, 0) - COALESCE(s.last_synced_xp, 0))) > $1`,
+       WHERE (u.total_xp * 2.0 + GREATEST(0, COALESCE(u.snag_points, 0) - COALESCE(s.last_synced_xp, 0))) > $1`,
       [totalSp]
     );
 

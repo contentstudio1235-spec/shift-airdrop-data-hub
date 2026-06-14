@@ -18,8 +18,10 @@ interface AirdropUser {
   wallet: string;
   queuePosition: number;
   totalMembers: number;
-  totalXp: number;
-  loyaltyPoints: number;
+  totalSp: number;           // Weighted final SP: (Position×2) + (Social×1)
+  positionSp: number;        // Position SP from holdings
+  socialSp: number;          // Net social SP (after deducting synced position XP)
+  loyaltyPoints: number;     // Gross SNAG points (for reference)
   permanentMultiplier: number;
   dynamicMultiplier: number;
   referralLink: string;
@@ -215,11 +217,11 @@ export default function RegisterContent() {
     window.open(`https://twitter.com/intent/tweet?text=${t}&url=${encodeURIComponent(userData.referralLink)}`, '_blank');
   }, [userData]);
 
-  // Computed
-  const positionSp    = userData?.totalXp        ?? 0;
-  const socialSp      = userData?.loyaltyPoints   ?? 0;
+  // Computed — use weighted totalSp from API (already applies Position×2 + Social×1 formula)
+  const positionSp    = userData?.positionSp     ?? 0;
+  const socialSp      = userData?.socialSp       ?? 0;
   const referralSp    = referralXpEarned;
-  const finalSp       = Math.round(positionSp * 2 + socialSp + referralSp * 1.0);
+  const finalSp       = (userData?.totalSp ?? 0) + referralSp;  // API returns weighted base, add referral
   const claimMult     = (userData?.permanentMultiplier ?? 1) * (userData?.dynamicMultiplier ?? 1);
   const commRate      = positionSp >= 10000 ? 15 : positionSp >= 1000 ? 12 : positionSp > 0 ? 10 : 0;
   const rank          = userData?.rank ?? userData?.queuePosition ?? 0;

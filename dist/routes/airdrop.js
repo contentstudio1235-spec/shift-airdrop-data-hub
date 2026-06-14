@@ -14,7 +14,7 @@ const referralService_1 = require("../services/referralService");
 const walletSyncService_1 = require("../services/walletSyncService");
 const router = express_1.default.Router();
 // ── GET /api/airdrop/user/:wallet ─────────────────────────────────────────
-// Full airdrop profile: queue position, XP, multipliers, referral info
+// Full airdrop profile: queue position, SP (weighted), multipliers, referral info
 router.get('/user/:wallet', async (req, res) => {
     try {
         const { wallet } = req.params;
@@ -37,8 +37,15 @@ router.get('/user/:wallet', async (req, res) => {
         // Total members
         const totalQuery = await pool_1.pool.query('SELECT COUNT(*) as count FROM users');
         const totalMembers = parseInt(totalQuery.rows[0].count);
-        // Loyalty points from SNAG
+        // Loyalty points from SNAG + sync log for net social SP calculation
         const loyaltyPoints = await snagSyncService_1.snagSyncService.getUserPoints(wallet).catch(() => 0);
+        const syncLog = await pool_1.pool.query('SELECT last_synced_xp FROM xp_sync_log WHERE wallet = $1', [wallet]);
+        const lastSyncedXp = syncLog.rows.length > 0 ? parseFloat(syncLog.rows[0].last_synced_xp || '0') : 0;
+        // Position SP and net Social SP (matches dashboard calculation)
+        const positionSp = parseFloat(user.total_xp || 0);
+        const socialSp = Math.max(0, loyaltyPoints - lastSyncedXp);
+        // Weighted final SP: (Position × 2.0) + (Social × 1.0)
+        const totalSp = Math.round(positionSp * 2 + socialSp);
         // Referral count
         const refCount = await pool_1.pool.query('SELECT COUNT(*) as count FROM referrals WHERE referrer_wallet = $1', [wallet]);
         const referralCode = user.referral_code || wallet.slice(0, 6).toUpperCase();
@@ -47,8 +54,11 @@ router.get('/user/:wallet', async (req, res) => {
             wallet,
             queuePosition: parseInt(user.queue_position),
             totalMembers,
-            totalXp: parseFloat(user.total_xp || 0),
-            loyaltyPoints: loyaltyPoints || 0,
+            // Weighted SP values (matches leaderboard calculation)
+            totalSp, // Final SP weighted: (Position×2) + (Social×1)
+            positionSp, // Position SP (driver × 2.0 in final calculation)
+            socialSp, // Net Social SP (after deducting synced position XP)
+            loyaltyPoints: loyaltyPoints || 0, // Gross SNAG points (for reference/UI)
             permanentMultiplier: parseFloat(user.permanent_multiplier || '1.0'),
             dynamicMultiplier: parseFloat(user.dynamic_multiplier || '1.0'),
             referralCode,
