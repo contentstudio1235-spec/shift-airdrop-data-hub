@@ -22,6 +22,10 @@ export const RWA_TOKEN_MINTS: Record<string, string> = {
   '7GoxZQ7gCh1mg1b3AUqd7cyPqiUp4y2NRxM9A5zSHFT': 'SOX3S',
   '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT': 'SPX3L',
   '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT': 'SPX3S',
+  // SpaceX series
+  'BcVDiSc5DTp8imZE4Nx2abUhhgA3KCxJ4M5g7aHLSHFT': 'SPCX2L',
+  'FtBpBcLU4Epjm2nnuQNRYGkFM6jfsXrcGKJSiKCtSHFT': 'SPCX2S',
+  'HMtfKJDqiAbY6damtfGisodK4sotG4Vc3wiLmTXmSHFT': 'SPCX1L',
 };
 
 interface OpenPosition {

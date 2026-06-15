@@ -64,7 +64,34 @@ export const TRACKED_TOKENS: Record<string, TokenInfo> = {
     mint: '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT',
     symbol: 'SPX3L',
     name: 'Shift S&P500 3x Long',
-    baseMultiplier: 1.25, // 25% base bonus (upgraded from 15% to match semiconductor tier)
+    baseMultiplier: 1.25,
+  },
+
+  // ── SpaceX Series (launch week 2026-06) ──────────────────────────────────
+  // Higher base multiplier during SpaceX launch week to reward early adopters.
+
+  // SpaceX 2x Long (Direxion Daily SpaceX Bull 2X ETF — ticker LOFF)
+  SPCX2L: {
+    mint: 'BcVDiSc5DTp8imZE4Nx2abUhhgA3KCxJ4M5g7aHLSHFT',
+    symbol: 'SPCX2L',
+    name: 'Shift SpaceX 2x Long',
+    baseMultiplier: 1.35, // 35% launch bonus — pioneer multiplier
+  },
+
+  // SpaceX 2x Short (Direxion Daily SpaceX Bear 2X ETF)
+  SPCX2S: {
+    mint: 'FtBpBcLU4Epjm2nnuQNRYGkFM6jfsXrcGKJSiKCtSHFT',
+    symbol: 'SPCX2S',
+    name: 'Shift SpaceX 2x Short',
+    baseMultiplier: 1.35,
+  },
+
+  // SpaceX 1x (direct SpaceX stock tracking — ISIN US84615Q1031)
+  SPCX1L: {
+    mint: 'HMtfKJDqiAbY6damtfGisodK4sotG4Vc3wiLmTXmSHFT',
+    symbol: 'SPCX1L',
+    name: 'Shift SpaceX',
+    baseMultiplier: 1.30, // 30% bonus for SpaceX stock exposure
   },
 };
 

@@ -16,6 +16,7 @@ export const config = {
 
   // Jupiter
   jupiterPriceApi: process.env.JUPITER_PRICE_API || 'https://api.jup.ag/price/v2',
+  jupiterApiKey: process.env.JUPITER_API_KEY || '',
 
   // SNAG
   snagApiKey: process.env.SNAG_API_KEY || '',

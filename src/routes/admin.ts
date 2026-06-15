@@ -2679,12 +2679,15 @@ router.post('/rwa-prices', verifyAdminSecret, async (req, res) => {
  */
 router.get('/rwa-prices', verifyAdminSecret, async (_req, res) => {
   const hardcoded: Record<string, number> = {
-    '6afjZE5Qv9WF5K1adBgTxtWyenJ7ZerH6BVAzmoSHFT': 22.07,
-    'bNPXng6hSVas7LWiNQyvpGcPYtY1ZmFY6WP49ymSHFT': 50.03,
-    'Hyhxfb6riaqCV333GynmnCXCEQK3goTznFj7k4dSHFT': 216.39,
-    '7GoxZQ7gCh1mg1b3AUqd7cyPqiUp4y2NRxM9A5zSHFT': 10.26,
-    '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT': 420.18,
-    '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT': 25.29,
+    '6afjZE5Qv9WF5K1adBgTxtWyenJ7ZerH6BVAzmoSHFT': 13.87,
+    'bNPXng6hSVas7LWiNQyvpGcPYtY1ZmFY6WP49ymSHFT': 53.17,
+    'Hyhxfb6riaqCV333GynmnCXCEQK3goTznFj7k4dSHFT': 270.85,
+    '7GoxZQ7gCh1mg1b3AUqd7cyPqiUp4y2NRxM9A5zSHFT': 3.98,
+    '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT': 281.42,
+    '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT': 25.87,
+    'BcVDiSc5DTp8imZE4Nx2abUhhgA3KCxJ4M5g7aHLSHFT': 31.89,
+    'FtBpBcLU4Epjm2nnuQNRYGkFM6jfsXrcGKJSiKCtSHFT': 28.50,
+    'HMtfKJDqiAbY6damtfGisodK4sotG4Vc3wiLmTXmSHFT': 183.08,
   };
   const symbols: Record<string, string> = {
     '6afjZE5Qv9WF5K1adBgTxtWyenJ7ZerH6BVAzmoSHFT': 'TSL2L',
@@ -2693,6 +2696,9 @@ router.get('/rwa-prices', verifyAdminSecret, async (_req, res) => {
     '7GoxZQ7gCh1mg1b3AUqd7cyPqiUp4y2NRxM9A5zSHFT': 'SOX3S',
     '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT': 'SPX3L',
     '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT': 'SPX3S',
+    'BcVDiSc5DTp8imZE4Nx2abUhhgA3KCxJ4M5g7aHLSHFT': 'SPCX2L',
+    'FtBpBcLU4Epjm2nnuQNRYGkFM6jfsXrcGKJSiKCtSHFT': 'SPCX2S',
+    'HMtfKJDqiAbY6damtfGisodK4sotG4Vc3wiLmTXmSHFT': 'SPCX1L',
   };
 
   const result = Object.entries(hardcoded).map(([mint, fallback]) => ({
