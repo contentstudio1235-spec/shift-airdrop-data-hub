@@ -11,6 +11,8 @@ let isRunning = false;
 let isQueueRunning = false;
 let isPriceRunning = false;
 let isCommissionRunning = false;
+let isReferralSyncRunning = false;
+let lastReferralSyncAt: Date | null = null;
 
 /**
  * Initialize all cron jobs.
@@ -93,7 +95,24 @@ export function initCronJobs(): void {
     }
   });
 
-  console.log('[Cron] ✅ Scheduled: full sync every 15 min, price update every 30 min, queue retry every 5 min, commissions every 30 min');
+  // ── SNAG referral pull once per hour ──
+  // Downloads new referral events from SNAG and upserts them locally.
+  // Runs separately from fullSync to avoid paginating all referrals on every cycle.
+  cron.schedule('0 * * * *', async () => {
+    if (isReferralSyncRunning) return;
+    isReferralSyncRunning = true;
+    try {
+      const since = lastReferralSyncAt ?? undefined;
+      await snagSyncService.syncReferralsFromSnag(since);
+      lastReferralSyncAt = new Date();
+    } catch (err) {
+      console.error('[Cron] ❌ Referral sync failed:', err);
+    } finally {
+      isReferralSyncRunning = false;
+    }
+  });
+
+  console.log('[Cron] ✅ Scheduled: full sync every 15 min, price update every 30 min, queue retry every 5 min, commissions every 30 min, referral pull every 60 min');
 }
 
 /**

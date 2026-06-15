@@ -127,11 +127,9 @@ export class SnagSyncService {
       // 6. Sync multiplier changes to SNAG
       await this.syncMultipliers();
 
-      // 7. Pull Snag-sourced referrals and upsert into referrals table
-      await this.syncReferralsFromSnag();
-
-      // 8. Refresh is_active status for all referrals
+      // 7. Refresh is_active status for all referrals (pure DB, no SNAG call)
       await this.refreshReferralActiveStatus();
+      // NOTE: syncReferralsFromSnag() runs on its own hourly cron — not every fullSync
 
       console.log('[SnagSync] ✅ Full sync complete');
     } catch (error) {
@@ -720,7 +718,7 @@ export class SnagSyncService {
    * Snag referral events live in /api/loyalty/referrals (pagination via cursor).
    * We upsert by (referrer_wallet, referred_wallet) so the method is idempotent.
    */
-  async syncReferralsFromSnag(): Promise<{ inserted: number; updated: number }> {
+  async syncReferralsFromSnag(since?: Date): Promise<{ inserted: number; updated: number }> {
     if (!config.snagApiKey || !config.snagWebsiteId) {
       console.log('[SnagSync] Referral sync skipped: SNAG not configured');
       return { inserted: 0, updated: 0 };
@@ -737,6 +735,8 @@ export class SnagSyncService {
           limit: 100,
         };
         if (cursor) params.cursor = cursor;
+        // Only fetch referrals newer than last sync — avoids paginating entire history every hour
+        if (since) params.createdAfter = since.toISOString();
 
         const response = await this.client.get('/api/loyalty/referrals', { params });
         const items: any[] = response.data?.data ?? [];
