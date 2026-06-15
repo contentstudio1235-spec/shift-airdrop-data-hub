@@ -28,16 +28,21 @@ const TOKEN_SYMBOLS: Record<string, string> = {
   '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT': 'SPX3S',
 };
 
-// RWA Fallback Prices (from blockchain analysis)
-// Used when Jupiter API cannot price proprietary SHIFT tokens
+// RWA Fallback Prices — used when Jupiter API cannot price proprietary SHIFT tokens.
+// These are snapshot prices; update via POST /api/admin/rwa-prices or redeploy when stale.
+// Last updated: 2026-06-15
 const RWA_FALLBACK_PRICES: Record<string, number> = {
-  '6afjZE5Qv9WF5K1adBgTxtWyenJ7ZerH6BVAzmoSHFT': 22.07,  // TSL2L
-  'bNPXng6hSVas7LWiNQyvpGcPYtY1ZmFY6WP49ymSHFT': 50.03,  // TSL1S
-  'Hyhxfb6riaqCV333GynmnCXCEQK3goTznFj7k4dSHFT': 216.39, // SOX3L
-  '7GoxZQ7gCh1mg1b3AUqd7cyPqiUp4y2NRxM9A5zSHFT': 10.26,  // SOX3S
-  '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT': 420.18, // SPX3L
-  '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT': 5.12,   // SPX3S
+  '6afjZE5Qv9WF5K1adBgTxtWyenJ7ZerH6BVAzmoSHFT': 22.07,  // TSL2L  — needs update
+  'bNPXng6hSVas7LWiNQyvpGcPYtY1ZmFY6WP49ymSHFT': 50.03,  // TSL1S  — needs update
+  'Hyhxfb6riaqCV333GynmnCXCEQK3goTznFj7k4dSHFT': 216.39, // SOX3L  — needs update
+  '7GoxZQ7gCh1mg1b3AUqd7cyPqiUp4y2NRxM9A5zSHFT': 10.26,  // SOX3S  — needs update
+  '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT': 420.18, // SPX3L  — needs update
+  '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT': 25.29,  // SPX3S  — updated 2026-06-15
 };
+
+// Runtime override — updated via POST /api/admin/rwa-prices without a redeploy.
+// Keys are mint addresses; values override RWA_FALLBACK_PRICES until server restarts.
+export const rwaRuntimePrices: Record<string, number> = {};
 
 interface CachedPrice {
   price: number;
@@ -101,11 +106,12 @@ export class JupiterPriceService {
       console.warn(`[JupiterPrice] API error for ${mint.slice(0, 12)}...:`, (error as any).message);
     }
 
-    // 3. Try RWA fallback price
-    const fallbackPrice = RWA_FALLBACK_PRICES[mint];
+    // 3. Try runtime override first, then hardcoded RWA fallback
+    const runtimePrice = rwaRuntimePrices[mint];
+    const fallbackPrice = runtimePrice ?? RWA_FALLBACK_PRICES[mint];
     if (fallbackPrice) {
       this.priceCache.set(mint, { price: fallbackPrice, cachedAt: new Date() });
-      console.log(`[JupiterPrice] Using RWA fallback: ${TOKEN_SYMBOLS[mint]} = $${fallbackPrice}`);
+      console.log(`[JupiterPrice] Using ${runtimePrice ? 'runtime' : 'fallback'} price: ${TOKEN_SYMBOLS[mint]} = $${fallbackPrice}`);
       return fallbackPrice;
     }
 
@@ -167,10 +173,11 @@ export class JupiterPriceService {
       }
     }
 
-    // 4. Apply RWA/fallback prices for anything still missing
+    // 4. Apply runtime override or hardcoded RWA fallback for anything still missing
     for (const mint of toFetch) {
       if (!prices[mint]) {
-        const fallbackPrice = RWA_FALLBACK_PRICES[mint];
+        const runtimePrice = rwaRuntimePrices[mint];
+        const fallbackPrice = runtimePrice ?? RWA_FALLBACK_PRICES[mint];
         if (fallbackPrice) {
           prices[mint] = fallbackPrice;
           this.priceCache.set(mint, { price: fallbackPrice, cachedAt: new Date() });

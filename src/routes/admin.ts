@@ -9,7 +9,8 @@ import { snagSyncService } from '../services/snagSyncService';
 import { referralService } from '../services/referralService';
 import { holdingService } from '../services/holdingService';
 import { positionService } from '../services/positionService';
-import { jupiterPriceService } from '../services/jupiterPriceService';
+import { jupiterPriceService, rwaRuntimePrices } from '../services/jupiterPriceService';
+import { positionPriceService } from '../services/positionPriceService';
 import { launchConfigService } from '../services/launchConfigService';
 import { adminAuditService } from '../services/adminAuditService';
 import { badgeTemplateService } from '../services/badgeTemplateService';
@@ -2622,6 +2623,87 @@ router.post('/sync-all-wallets', verifyAdminSecret, async (req, res) => {
     console.error('[Admin] Force-sync failed:', error);
     res.status(500).json({ error: 'Force-sync failed', message: error?.message });
   }
+});
+
+/**
+ * POST /api/admin/force-reprice
+ * Immediately re-fetches live prices and updates all open positions.
+ * Returns a summary of what was updated.
+ */
+router.post('/force-reprice', verifyAdminSecret, async (_req, res) => {
+  try {
+    console.log('[Admin] Force reprice triggered');
+    const result = await positionPriceService.updateAllOpenPositionPrices();
+    res.json({
+      success: true,
+      updated: result.updated,
+      skipped: result.skipped,
+      errors: result.errors,
+      durationMs: result.durationMs,
+      pricesFetched: result.pricesFetched,
+    });
+  } catch (error: any) {
+    console.error('[Admin] Force reprice failed:', error);
+    res.status(500).json({ error: 'Force reprice failed', message: error?.message });
+  }
+});
+
+/**
+ * POST /api/admin/rwa-prices
+ * Update in-memory RWA token fallback prices without a redeploy.
+ * Prices persist until the server restarts; use force-reprice after to apply immediately.
+ *
+ * Body: { prices: { "<mint>": <usdPrice>, ... } }
+ * Example: { "prices": { "67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT": 25.29 } }
+ */
+router.post('/rwa-prices', verifyAdminSecret, async (req, res) => {
+  const { prices } = req.body as { prices?: Record<string, number> };
+  if (!prices || typeof prices !== 'object') {
+    return res.status(400).json({ error: 'Body must be { prices: { "<mint>": <price> } }' });
+  }
+
+  const updated: Record<string, number> = {};
+  for (const [mint, price] of Object.entries(prices)) {
+    if (typeof price !== 'number' || price <= 0) continue;
+    rwaRuntimePrices[mint] = price;
+    updated[mint] = price;
+  }
+
+  console.log('[Admin] RWA runtime prices updated:', updated);
+  res.json({ success: true, updated, note: 'Prices are in-memory only — will reset on server restart. Call /force-reprice to apply immediately.' });
+});
+
+/**
+ * GET /api/admin/rwa-prices
+ * View current RWA token prices (hardcoded fallbacks + runtime overrides).
+ */
+router.get('/rwa-prices', verifyAdminSecret, async (_req, res) => {
+  const hardcoded: Record<string, number> = {
+    '6afjZE5Qv9WF5K1adBgTxtWyenJ7ZerH6BVAzmoSHFT': 22.07,
+    'bNPXng6hSVas7LWiNQyvpGcPYtY1ZmFY6WP49ymSHFT': 50.03,
+    'Hyhxfb6riaqCV333GynmnCXCEQK3goTznFj7k4dSHFT': 216.39,
+    '7GoxZQ7gCh1mg1b3AUqd7cyPqiUp4y2NRxM9A5zSHFT': 10.26,
+    '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT': 420.18,
+    '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT': 25.29,
+  };
+  const symbols: Record<string, string> = {
+    '6afjZE5Qv9WF5K1adBgTxtWyenJ7ZerH6BVAzmoSHFT': 'TSL2L',
+    'bNPXng6hSVas7LWiNQyvpGcPYtY1ZmFY6WP49ymSHFT': 'TSL1S',
+    'Hyhxfb6riaqCV333GynmnCXCEQK3goTznFj7k4dSHFT': 'SOX3L',
+    '7GoxZQ7gCh1mg1b3AUqd7cyPqiUp4y2NRxM9A5zSHFT': 'SOX3S',
+    '12y35E6btjazuaSjjwq99MobbycbkFsFvm8s5QpaSHFT': 'SPX3L',
+    '67ik3PpEXBJA1km29rZMMKwhgvvjrKpNMoaZyTsSHFT': 'SPX3S',
+  };
+
+  const result = Object.entries(hardcoded).map(([mint, fallback]) => ({
+    mint,
+    symbol: symbols[mint],
+    hardcoded: fallback,
+    runtimeOverride: rwaRuntimePrices[mint] ?? null,
+    effective: rwaRuntimePrices[mint] ?? fallback,
+  }));
+
+  res.json({ prices: result });
 });
 
 export default router;

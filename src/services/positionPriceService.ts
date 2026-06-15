@@ -173,7 +173,8 @@ export class PositionPriceService {
             `UPDATE positions
              SET current_price     = $1,
                  position_size_usd = $2,
-                 entry_price       = COALESCE(entry_price, $3)
+                 entry_price       = COALESCE(entry_price, $3),
+                 last_price_update = NOW()
              WHERE id = $4`,
             [price, newSizeUsd, entryPrice, pos.id]
           );
