@@ -2,6 +2,7 @@ import type { Position } from '@/lib/types';
 import ProgressBar from './ProgressBar';
 import { PnLBadge } from './PnLBadge';
 import { PnLInfoTooltip } from './PnLInfoTooltip';
+import { TokenLogo } from './TokenLogo';
 
 interface PositionRowProps {
   position: Position;
@@ -11,14 +12,13 @@ export default function PositionRow({ position }: PositionRowProps) {
   const mult = position.currentMultiplier ?? 1.0;
   const progressPct = Math.min(100, ((mult - 1.0) / 2.0) * 100);
   const ticker = position.asset;
-  const initials = ticker.slice(0, 3).toUpperCase();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       <div className="position-row fade-in">
       {/* Asset */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-        <div className="asset-logo">{initials}</div>
+        <TokenLogo symbol={ticker} size={28} />
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-space)' }}>{ticker}</div>
           <div style={{ fontSize: 11, color: 'var(--text-mute)', fontFamily: 'var(--font-mono)' }}>

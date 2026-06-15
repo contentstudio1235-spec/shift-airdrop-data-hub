@@ -13,6 +13,7 @@ import ConnectWalletModal from '@/components/ConnectWalletModal';
 import { PnLBadge } from '@/components/PnLBadge';
 import { PnLInfoTooltip } from '@/components/PnLInfoTooltip';
 import { useWallet } from '@/components/WalletContext';
+import { TokenLogo } from '@/components/TokenLogo';
 import { useToast } from '@/components/ToastContext';
 import { useLaunchConfig } from '@/hooks/useLaunchConfig';
 import { fetchDashboard, fetchPositions, fetchPositionHistory, fetchBadges, fetchEvents, fetchReferralLinks, setCustomReferralCode } from '@/lib/api';
@@ -451,6 +452,7 @@ export default function AirdropPage() {
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                <TokenLogo symbol={p.asset} size={24} />
                                 <span style={{ fontSize: 14, fontWeight: 700 }}>{p.asset}</span>
                                 <span style={{
                                   padding: '2px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700,
@@ -494,6 +496,7 @@ export default function AirdropPage() {
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                <TokenLogo symbol={p.asset} size={24} />
                                 <span style={{ fontSize: 14, fontWeight: 700 }}>{p.asset}</span>
                                 <span style={{
                                   padding: '2px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700,
