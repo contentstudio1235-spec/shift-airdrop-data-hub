@@ -1,5 +1,5 @@
 // ============================================================
-// Cron Jobs — Full sync every 5 min + queue retry every 2 min
+// Cron Jobs — Full sync every 15 min + queue retry every 5 min
 // ============================================================
 
 import cron from 'node-cron';
@@ -16,10 +16,9 @@ let isCommissionRunning = false;
  * Initialize all cron jobs.
  */
 export function initCronJobs(): void {
-  // ── Full sync every 5 minutes ──
-  // Recalculates all XP/badges/multipliers with near-real-time updates.
-  // (Keeps Render free-tier container active as bonus side effect)
-  cron.schedule('*/5 * * * *', async () => {
+  // ── Full sync every 15 minutes ──
+  // Recalculates all XP/badges/multipliers for all users.
+  cron.schedule('*/15 * * * *', async () => {
     if (isRunning) {
       console.log('[Cron] Previous sync job still running, skipping...');
       return;
@@ -40,9 +39,9 @@ export function initCronJobs(): void {
     }
   });
 
-  // ── SNAG retry queue worker every 2 minutes ──
+  // ── SNAG retry queue worker every 5 minutes ──
   // Retries failed SNAG push attempts with exponential backoff
-  cron.schedule('*/2 * * * *', async () => {
+  cron.schedule('*/5 * * * *', async () => {
     if (isQueueRunning) return;
 
     isQueueRunning = true;
@@ -55,12 +54,12 @@ export function initCronJobs(): void {
     }
   });
 
-  // ── Live price update every 5 minutes ──
+  // ── Live price update every 30 minutes ──
   // Fetches current market prices for all open positions and updates:
   //   • current_price
   //   • position_size_usd = token_amount × current_price
   // This ensures XP is calculated on LIVE holding value, not stale entry price.
-  cron.schedule('*/5 * * * *', async () => {
+  cron.schedule('*/30 * * * *', async () => {
     if (isPriceRunning) {
       console.log('[Cron] Previous price update still running, skipping…');
       return;
@@ -94,7 +93,7 @@ export function initCronJobs(): void {
     }
   });
 
-  console.log('[Cron] ✅ Scheduled: full sync every 5 min, price update every 5 min, queue retry every 2 min, commissions every 30 min');
+  console.log('[Cron] ✅ Scheduled: full sync every 15 min, price update every 30 min, queue retry every 5 min, commissions every 30 min');
 }
 
 /**
